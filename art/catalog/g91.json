@@ -1,0 +1,54 @@
+{
+  "id": "g91",
+  "name": "Fiat G.91R/1",
+  "origin": "意大利",
+  "era": "cold",
+  "role": "轻型攻击／侦察机",
+  "length": 10.3,
+  "span": 8.56,
+  "cockpit": "metric-original",
+  "trim": 171,
+  "maxSpeed": 285,
+  "stall": 53,
+  "roll": 2.07,
+  "pitch": 1.67,
+  "yaw": 0.7,
+  "boost": 0,
+  "ammo": 585,
+  "missiles": 0,
+  "bombs": 4,
+  "support": false,
+  "service": "意大利",
+  "feature": "紧凑后掠翼攻击机，圆鼻进气，可搭载游戏中的常规炸弹。",
+  "guns": [
+    [
+      -0.47,
+      0.12,
+      -4.22
+    ],
+    [
+      0.47,
+      0.12,
+      -4.22
+    ]
+  ],
+  "rails": [],
+  "props": [],
+  "engine": [
+    [
+      0,
+      0,
+      5.12,
+      0.48
+    ]
+  ],
+  "gearClearance": 1.191,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 5.768000000000001,
+  "eye": [
+    0,
+    1.109,
+    -1.66
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "b2",
+  "name": "B-2A Spirit",
+  "origin": "美国",
+  "era": "support",
+  "role": "隐身轰炸机",
+  "length": 21,
+  "span": 52.4,
+  "cockpit": "crew",
+  "trim": 189,
+  "maxSpeed": 270,
+  "stall": 75,
+  "roll": 0.65,
+  "pitch": 1.0,
+  "yaw": 0.37,
+  "boost": 0,
+  "ammo": 0,
+  "missiles": 0,
+  "bombs": 8,
+  "support": true,
+  "service": "美国",
+  "feature": "无尾飞翼衔接锯齿尾缘。在设施防卫演习中尝试从空中攻击训练靶区。",
+  "guns": [],
+  "rails": [],
+  "props": [],
+  "engine": [
+    [
+      -4.92,
+      0.21,
+      6.25,
+      0.53
+    ],
+    [
+      -3.31,
+      0.28,
+      7.27,
+      0.53
+    ],
+    [
+      3.31,
+      0.28,
+      7.27,
+      0.53
+    ],
+    [
+      4.92,
+      0.21,
+      6.25,
+      0.53
+    ]
+  ],
+  "gearClearance": 1.576,
+  "gearFixed": false,
+  "tailMissing": true,
+  "visualRadius": 29.344,
+  "eye": [
+    0,
+    2.096,
+    -3.95
+  ]
+}

@@ -1,0 +1,38 @@
+
+> cangqiong-frontline@15.0.0 test
+> node --test --test-isolation=none tests/*.test.mjs
+
+✔ distinct structure from 2000, real armor, invulnerable pilots and different acceleration (10.151219ms)
+✔ continuous climb, inverted segment and full roll without teleport (2.339484ms)
+✔ physical tracer strikes the moving sea and an aircraft collides with water (2.502931ms)
+✔ infrared flare and radar chaff branch guidance, ECM can break early lock, counter can fail (6.09754ms)
+{"seconds":20.04,"wave":3,"kills":6,"guns":170,"missiles":6,"missileHits":4,"enemyLaunches":2,"remaining":3200}
+✔ three real combat waves, guidance, ammunition, damage and victory (189.256373ms)
+✔ A–F: combat result, claim, stock, guided loadout, engine, hardware, livery and recovery (178.902834ms)
+✔ bulk reward receipts report only the committed grants and cannot pay twice (3.892007ms)
+✔ the same lattice crosses chunk borders and guards the actual aircraft hangar (1.214624ms)
+✔ fast opposing flight paths detect a real body contact between simulation samples (0.239309ms)
+climb [{"peak":17.389,"rate":18.451,"reacted":0.122,"climb":37.512,"vertical":48.718,"speed":216.688},{"peak":65.6,"rate":69.277,"reacted":0.056,"climb":84.986,"vertical":108.715,"speed":156.835},{"peak":74.638,"rate":116.68,"reacted":0.044,"climb":68.524,"vertical":75.171,"speed":146.952},{"peak":74.638,"rate":116.68,"reacted":0.044,"climb":90.871,"vertical":114.625,"speed":172.749}]
+✔ graded pitch, real position change and interpolated renderer pose (6.705834ms)
+✔ daily rewards reset by local date and use the committed sortie ledger (0.372159ms)
+✔ radar uses real bearing in the ownship coordinate system (0.105419ms)
+✔ swept shots resolve the first target along the flight path, independent of slot order (0.189865ms)
+✔ projectile surface contact prevents detecting an airframe behind the waterline (0.158148ms)
+✔ regional damage, a single breakup signal and continuous wreck descent (0.362855ms)
+✔ resetting a flight body leaves the caller input snapshot intact (0.107882ms)
+✔ J-20 purchases two-bomb payload, persists station selection and wins s03 by dropping over both groups (14.256447ms)
+✔ late air-to-ground guidance consumes only its own station and physically reaches an aimed target (11.758464ms)
+✔ all 60 ordered campaigns are launchable with starter airframes when their gates are met (6.714556ms)
+✔ XP awards and threshold rewards persist once through reload, and ignore a failed save (2.083119ms)
+campaign balance {"id":"s01","initial":{"hp":104,"handling":0.95,"thrust":0.94,"magazines":[2,2]},"outcome":"空域已肃清","finished":true,"seconds":21.26,"kills":6,"gunRate":null,"missileRate":100,"missiles":6,"events":{"gun":13,"missile":2,"counter":0,"evades":420}}
+campaign balance {"id":"s21","initial":{"hp":119,"handling":1.04,"thrust":1.01,"magazines":[3,3,3]},"outcome":"空域已肃清","finished":true,"seconds":28.84,"kills":6,"gunRate":null,"missileRate":73,"missiles":11,"events":{"gun":42,"missile":3,"counter":6,"evades":1238}}
+campaign balance {"id":"s60","initial":{"hp":158,"handling":1.26,"thrust":1.18,"magazines":[5,5,5,5]},"outcome":"空域已肃清","finished":true,"seconds":69.21,"kills":12,"gunRate":8,"missileRate":0,"missiles":12,"events":{"gun":173,"missile":8,"counter":10,"evades":1554}}
+✔ representative chapter 1, 3 and 6 sorties exercise the escalation with finite ammunition (442.400989ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1352.564511

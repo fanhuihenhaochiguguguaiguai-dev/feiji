@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 132">
+    <defs><linearGradient id="field" x2="0.8" y2="1"><stop stop-color="#29495f"/><stop offset=".56" stop-color="#122a40"/><stop offset="1" stop-color="#091922"/></linearGradient>
+    <pattern id="grid" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#75a1b6" stroke-opacity=".16"/></pattern>
+    <radialGradient id="metal"><stop stop-color="#dfca94" stop-opacity=".48"/><stop offset="1" stop-color="#dfca94" stop-opacity=".045"/></radialGradient></defs>
+    <path d="M14 4h162l12 14v96l-12 14H14L4 115V18z" fill="url(#field)" stroke="#7697ae" stroke-width="1.2"/>
+    <path d="M14 4h162l12 14v96l-12 14H14L4 115V18z" fill="url(#grid)"/>
+    <path d="M15 18v-6h17m127 0h17v6m0 96v6h-17m-127 0H15v-6" fill="none" stroke="#dfca94" stroke-opacity=".75"/>
+    <g fill="url(#metal)" stroke="#dfca94" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M25 36h142l9 12-10 9H26L16 48zM52 56v20l28 18h25l31-18V56m-66 7 8 12h31l11-12m-35 30 8 23 9-22M39 39v14m116-14v14M66 38v15m59-15v15"/><path d="M59 84l-7 11m81-12 8 10"/></g></svg>

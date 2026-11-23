@@ -1,0 +1,55 @@
+{
+  "id": "spitfire",
+  "name": "Spitfire Mk IX",
+  "origin": "英国",
+  "era": "ww2",
+  "role": "空优战斗机",
+  "length": 9.46,
+  "span": 11.23,
+  "cockpit": "metric-original",
+  "trim": 119,
+  "maxSpeed": 178,
+  "stall": 34,
+  "roll": 2.22,
+  "pitch": 1.95,
+  "yaw": 0.74,
+  "boost": 0,
+  "ammo": 640,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "英国",
+  "feature": "椭圆翼、四叶桨与机械式仪表，擅长连续转弯。",
+  "guns": [
+    [
+      -1.65,
+      0.04,
+      -1.65
+    ],
+    [
+      1.65,
+      0.04,
+      -1.65
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0,
+      -4.79,
+      1.64,
+      4
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.161,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 6.288800000000001,
+  "eye": [
+    0,
+    1.043,
+    -0.84
+  ]
+}

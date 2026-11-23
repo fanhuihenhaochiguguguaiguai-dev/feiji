@@ -1,0 +1,7 @@
+.world-lab{position:absolute;z-index:6;left:var(--edge);top:23%;max-width:min(410px,62vw);color:#edf7f6;background:#091826ec;
+  border:1px solid #8cb9be;padding:7px 10px;box-shadow:0 5px 16px #071521;touch-action:manipulation;font-size:.8rem}
+.world-lab summary{cursor:pointer;font-weight:720}
+.lab-controls{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:6px}
+.lab-controls output{flex-basis:100%;color:#b3e4de;font:700 .72rem monospace}
+.lab-controls label{white-space:nowrap}
+.lab-controls button{min-height:35px}

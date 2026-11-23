@@ -1,0 +1,906 @@
+{
+  "01": {
+    "view": "upgrade",
+    "source": "01_战机改装主页面.webp",
+    "regions": {
+      "airframe": {
+        "region": [
+          0.18,
+          0.16,
+          0.68,
+          0.9
+        ],
+        "meanAbsoluteRGB": 55.8
+      },
+      "parts": {
+        "region": [
+          0.72,
+          0.11,
+          1,
+          0.92
+        ],
+        "meanAbsoluteRGB": 41.93
+      }
+    }
+  },
+  "02": {
+    "view": "home-1280",
+    "source": "02_中文空战大厅.webp",
+    "regions": {
+      "profile": {
+        "region": [
+          0,
+          0,
+          0.45,
+          0.13
+        ],
+        "meanAbsoluteRGB": 41.7
+      },
+      "navigation": {
+        "region": [
+          0,
+          0.88,
+          1,
+          1
+        ],
+        "meanAbsoluteRGB": 40.97
+      },
+      "modes": {
+        "region": [
+          0.75,
+          0.28,
+          1,
+          0.83
+        ],
+        "meanAbsoluteRGB": 59.81
+      },
+      "stage": {
+        "region": [
+          0.22,
+          0.17,
+          0.73,
+          0.82
+        ],
+        "meanAbsoluteRGB": 60.83
+      }
+    }
+  },
+  "04": {
+    "view": "season",
+    "source": "04_赛季活动界面.webp",
+    "regions": {
+      "main-art": {
+        "region": [
+          0.15,
+          0.1,
+          0.82,
+          0.64
+        ],
+        "meanAbsoluteRGB": 59.68
+      },
+      "reward-track": {
+        "region": [
+          0,
+          0.65,
+          1,
+          0.93
+        ],
+        "meanAbsoluteRGB": 49.48
+      }
+    }
+  },
+  "11-battle": {
+    "view": "b-dogfight",
+    "source": "11_多页面风格总览.webp",
+    "regions": {
+      "reticle": {
+        "region": [
+          0.32,
+          0.29,
+          0.68,
+          0.63
+        ],
+        "meanAbsoluteRGB": 49.88
+      },
+      "flight-data": {
+        "region": [
+          0.01,
+          0.09,
+          0.3,
+          0.49
+        ],
+        "meanAbsoluteRGB": 78.93
+      },
+      "radar": {
+        "region": [
+          0.81,
+          0.0,
+          1,
+          0.37
+        ],
+        "meanAbsoluteRGB": 71.91
+      },
+      "weapons": {
+        "region": [
+          0.73,
+          0.4,
+          1,
+          1
+        ],
+        "meanAbsoluteRGB": 58.42
+      }
+    }
+  },
+  "06": {
+    "view": "quests",
+    "source": "06_任务中心独立页面.webp",
+    "regions": {
+      "title": {
+        "region": [
+          0,
+          0,
+          1,
+          0.19
+        ],
+        "meanAbsoluteRGB": 58.22
+      },
+      "rewards": {
+        "region": [
+          0,
+          0.34,
+          1,
+          0.91
+        ],
+        "meanAbsoluteRGB": 39.36
+      }
+    }
+  },
+  "07": {
+    "view": "result",
+    "source": "07_任务完成结算界面.webp",
+    "regions": {
+      "outcome": {
+        "region": [
+          0.2,
+          0.02,
+          0.8,
+          0.39
+        ],
+        "meanAbsoluteRGB": 63.19
+      },
+      "detailed-stats": {
+        "region": [
+          0.08,
+          0.35,
+          0.92,
+          0.9
+        ],
+        "meanAbsoluteRGB": 47.15
+      }
+    }
+  },
+  "09": {
+    "view": "hangar",
+    "source": "09_歼20机库改装页面.webp",
+    "regions": {
+      "list": {
+        "region": [
+          0,
+          0.19,
+          0.2,
+          0.87
+        ],
+        "meanAbsoluteRGB": 47.04
+      },
+      "airframe": {
+        "region": [
+          0.2,
+          0.15,
+          0.73,
+          0.91
+        ],
+        "meanAbsoluteRGB": 56.62
+      },
+      "details": {
+        "region": [
+          0.74,
+          0.16,
+          1,
+          0.92
+        ],
+        "meanAbsoluteRGB": 39.82
+      }
+    }
+  },
+  "10": {
+    "view": "sortieprep",
+    "source": "10_出击准备与战术雷达.webp",
+    "regions": {
+      "preparation": {
+        "region": [
+          0,
+          0.05,
+          1,
+          0.88
+        ],
+        "meanAbsoluteRGB": 54.61
+      }
+    }
+  },
+  "11-research": {
+    "view": "tree",
+    "source": "11_多页面风格总览.webp",
+    "regions": {
+      "branch-graph": {
+        "region": [
+          0,
+          0.1,
+          1,
+          0.94
+        ],
+        "meanAbsoluteRGB": 29.54
+      }
+    }
+  },
+  "12-tactical": {
+    "view": "tactical",
+    "source": "12_游戏系统总览与未解锁状态.webp",
+    "regions": {
+      "radar-contacts": {
+        "region": [
+          0,
+          0.08,
+          1,
+          0.96
+        ],
+        "meanAbsoluteRGB": 27.24
+      }
+    }
+  },
+  "cloud-deck": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 8.17
+    }
+  },
+  "snow-range": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 5.74
+    }
+  },
+  "island-chain": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 5.45
+    }
+  },
+  "sea-level": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 4.98
+    }
+  },
+  "sunset": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 13.17
+    }
+  },
+  "storm-coast": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 2.89
+    }
+  },
+  "game-home-1280": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 13.35
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 17.15
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 7.77
+    }
+  },
+  "game-hangar": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 18.33
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 15.11
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 3.76
+    }
+  },
+  "game-upgrade": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 17.8
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 14.41
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 3.54
+    }
+  },
+  "game-weapons": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 19.11
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 19.09
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 3.73
+    }
+  },
+  "game-tree": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 7.88
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 0.56
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 1.68
+    }
+  },
+  "game-quests": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 9.53
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 2.52
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-missions": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 8.16
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 0.35
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 4.54
+    }
+  },
+  "game-training": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 8.96
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 3.19
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-freeprep": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 24.99
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 35.66
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 4.8
+    }
+  },
+  "game-inventory": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 9.28
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 2.34
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.9
+    }
+  },
+  "game-records": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 8.93
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 1.3
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-base": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 9.82
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 0.92
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-settings": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 9.92
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 3.47
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-activity": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 8.92
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 1.76
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-season": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 8.89
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 3.73
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 0.0
+    }
+  },
+  "game-sortieprep": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 16.66
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 45.14
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 22.48
+    }
+  },
+  "game-b-dogfight": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 18.5
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 18.69
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 3.86
+    }
+  },
+  "game-b-cockpit": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 16.96
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 24.9
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 14.26
+    }
+  },
+  "game-tactical": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 12.4
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 4.87
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 7.82
+    }
+  },
+  "game-result": {
+    "header": {
+      "region": [
+        0,
+        0,
+        1,
+        0.17
+      ],
+      "meanAbsoluteRGB": 11.07
+    },
+    "surfaces": {
+      "region": [
+        0,
+        0.17,
+        1,
+        0.9
+      ],
+      "meanAbsoluteRGB": 11.2
+    },
+    "controls": {
+      "region": [
+        0,
+        0.9,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 2.47
+    }
+  }
+}

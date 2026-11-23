@@ -1,0 +1,24 @@
+{
+  "routes": [
+    "home",
+    "hangar",
+    "upgrade",
+    "weapons",
+    "tree",
+    "quests",
+    "missions",
+    "training",
+    "activity",
+    "season",
+    "freeprep",
+    "inventory",
+    "records",
+    "base",
+    "settings",
+    "sortieprep",
+    "flight",
+    "tactical",
+    "pause"
+  ],
+  "pausedTime": 0.7555555555555549
+}

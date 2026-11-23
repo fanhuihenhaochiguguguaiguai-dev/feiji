@@ -1,0 +1,238 @@
+{
+  "V7.1 单任务 WebGL2": {
+    "a-lobby": {
+      "renderer": "webgl2",
+      "frames": 8,
+      "peakParticles": 0,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.7132227927654096,
+      "onePercentLow": 0.5818350905611174,
+      "target": 60,
+      "firstLoadMs": 1150,
+      "cpuFrameMs": 1.6000000014901161,
+      "gpuFrameMs": 545.529014,
+      "triangles": 106356,
+      "drawCalls": 157,
+      "videoMemory": 28434172,
+      "observedFPS": 1.66
+    },
+    "b-dogfight": {
+      "renderer": "webgl2",
+      "frames": 108,
+      "peakParticles": 70,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.554680221312369,
+      "onePercentLow": 0.5577711410393792,
+      "target": 60,
+      "firstLoadMs": 1150,
+      "cpuFrameMs": 3.100000001490116,
+      "gpuFrameMs": 476.455675,
+      "triangles": 175792,
+      "drawCalls": 155,
+      "videoMemory": 36055100,
+      "observedFPS": 1.98
+    },
+    "b-cockpit": {
+      "renderer": "webgl2",
+      "frames": 141,
+      "peakParticles": 110,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.6041353181331692,
+      "onePercentLow": 0.5577711410393792,
+      "target": 60,
+      "firstLoadMs": 1150,
+      "cpuFrameMs": 2.300000000745058,
+      "gpuFrameMs": 433.32327699999996,
+      "triangles": 152568,
+      "drawCalls": 82,
+      "videoMemory": 36211004,
+      "observedFPS": 2.64
+    }
+  },
+  "V7.2 初轮 WebGL2": {
+    "a-lobby": {
+      "renderer": "webgl2",
+      "frames": 7,
+      "peakParticles": 0,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.4709607973965289,
+      "onePercentLow": 0.5673437144928634,
+      "target": 60,
+      "firstLoadMs": 1224,
+      "cpuFrameMs": 1.199999999254942,
+      "gpuFrameMs": 576.542972,
+      "triangles": 106356,
+      "drawCalls": 157,
+      "videoMemory": 28508388,
+      "observedFPS": 1.65
+    },
+    "b-dogfight": {
+      "renderer": "webgl2",
+      "frames": 120,
+      "peakParticles": 63,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.3682977156233995,
+      "onePercentLow": 0.5025125604058627,
+      "target": 60,
+      "firstLoadMs": 1224,
+      "cpuFrameMs": 2.399999998509884,
+      "gpuFrameMs": 522.105633,
+      "triangles": 176358,
+      "drawCalls": 158,
+      "videoMemory": 37210660,
+      "observedFPS": 1.66
+    },
+    "b-cockpit": {
+      "renderer": "webgl2",
+      "frames": 152,
+      "peakParticles": 103,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.456674973098028,
+      "onePercentLow": 0.5025125604058627,
+      "target": 60,
+      "firstLoadMs": 1224,
+      "cpuFrameMs": 1.800000000745058,
+      "gpuFrameMs": 479.336236,
+      "triangles": 152648,
+      "drawCalls": 84,
+      "videoMemory": 37366564,
+      "observedFPS": 2.33
+    }
+  },
+  "V7.2 并行 WebGL2": {
+    "a-lobby": {
+      "renderer": "webgl2",
+      "frames": 3,
+      "peakParticles": 0,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 0,
+      "onePercentLow": 0,
+      "target": 60,
+      "firstLoadMs": 2205,
+      "cpuFrameMs": 1.800000000745058,
+      "gpuFrameMs": null,
+      "triangles": 106356,
+      "drawCalls": 157,
+      "videoMemory": 28508388,
+      "observedFPS": 0.0
+    },
+    "b-dogfight": {
+      "renderer": "webgl2",
+      "frames": 115,
+      "peakParticles": 15,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.544945795077299,
+      "onePercentLow": 0.5088540742863396,
+      "target": 60,
+      "firstLoadMs": 2205,
+      "cpuFrameMs": 10,
+      "gpuFrameMs": 1264.344032,
+      "triangles": 179506,
+      "drawCalls": 162,
+      "videoMemory": 36879620,
+      "observedFPS": 0.33
+    },
+    "b-cockpit": {
+      "renderer": "webgl2",
+      "frames": 140,
+      "peakParticles": 102,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 1.2993061245003477,
+      "onePercentLow": 0.5088540742863396,
+      "target": 60,
+      "firstLoadMs": 2205,
+      "cpuFrameMs": 3312.300000000745,
+      "gpuFrameMs": 1383.8431659999999,
+      "triangles": 170884,
+      "drawCalls": 120,
+      "videoMemory": 37604644,
+      "observedFPS": 0.2
+    }
+  },
+  "V7.2 并行 WebGPU": {
+    "a-lobby": {
+      "renderer": "webgpu",
+      "frames": 3,
+      "peakParticles": 0,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 0,
+      "onePercentLow": 0,
+      "target": 60,
+      "firstLoadMs": 2710,
+      "cpuFrameMs": 1.199999999254942,
+      "gpuFrameMs": null,
+      "triangles": 106356,
+      "drawCalls": 157,
+      "videoMemory": 28508392,
+      "observedFPS": 0.0
+    },
+    "b-dogfight": {
+      "renderer": "webgpu",
+      "frames": 29,
+      "peakParticles": 17,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 0.87213738620986,
+      "onePercentLow": 0.5046172621937927,
+      "target": 60,
+      "firstLoadMs": 2710,
+      "cpuFrameMs": 1,
+      "gpuFrameMs": 1713.3445709999999,
+      "triangles": 179518,
+      "drawCalls": 183,
+      "videoMemory": 36879624,
+      "observedFPS": 0.98
+    },
+    "b-cockpit": {
+      "renderer": "webgpu",
+      "frames": 58,
+      "peakParticles": 103,
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 0.8887857429104475,
+      "onePercentLow": 0.5046172621937927,
+      "target": 60,
+      "firstLoadMs": 2710,
+      "cpuFrameMs": 90.79999999701977,
+      "gpuFrameMs": 1152.430784,
+      "triangles": 160812,
+      "drawCalls": 119,
+      "videoMemory": 37366568,
+      "observedFPS": 0.1
+    }
+  }
+}

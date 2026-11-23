@@ -1,0 +1,65 @@
+{
+  "id": "c130",
+  "name": "C-130H Hercules",
+  "origin": "美国",
+  "era": "support",
+  "role": "战术运输机",
+  "length": 29.8,
+  "span": 40.4,
+  "cockpit": "crew",
+  "trim": 131,
+  "maxSpeed": 177,
+  "stall": 53,
+  "roll": 0.67,
+  "pitch": 0.79,
+  "yaw": 0.4,
+  "boost": 0,
+  "ammo": 0,
+  "missiles": 0,
+  "bombs": 0,
+  "support": true,
+  "service": "美国",
+  "feature": "高翼四发运输机。按航线飞行，玩家可护送。",
+  "guns": [],
+  "rails": [],
+  "props": [
+    [
+      -5.4,
+      1.33,
+      -5.74,
+      2.05,
+      4
+    ],
+    [
+      -10.8,
+      1.33,
+      -4.47,
+      2.05,
+      4
+    ],
+    [
+      5.4,
+      1.33,
+      -5.74,
+      2.05,
+      4
+    ],
+    [
+      10.8,
+      1.33,
+      -4.47,
+      2.05,
+      4
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.85,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 22.624000000000002,
+  "eye": [
+    0,
+    2.526,
+    -9.1
+  ]
+}

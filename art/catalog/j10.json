@@ -1,0 +1,60 @@
+{
+  "id": "j10",
+  "name": "歼-10C",
+  "origin": "中国",
+  "era": "modern",
+  "role": "多用途战斗机",
+  "length": 16.43,
+  "span": 9.75,
+  "cockpit": "glass",
+  "trim": 202,
+  "maxSpeed": 359,
+  "stall": 57,
+  "roll": 2.62,
+  "pitch": 2.08,
+  "yaw": 0.78,
+  "boost": 33,
+  "ammo": 470,
+  "missiles": 7,
+  "bombs": 0,
+  "support": false,
+  "service": "中国",
+  "feature": "单发鸭翼三角翼，宽幅腹部进气。近距机动和航向稳定性均衡。",
+  "guns": [
+    [
+      -0.45,
+      -0.54,
+      -3.86
+    ]
+  ],
+  "rails": [
+    [
+      -2.85,
+      -0.37,
+      3.52
+    ],
+    [
+      2.85,
+      -0.37,
+      3.52
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      0,
+      -0.05,
+      8.17,
+      0.71
+    ]
+  ],
+  "gearClearance": 1.411,
+  "gearFixed": false,
+  "tailMissing": true,
+  "visualRadius": 9.200800000000001,
+  "eye": [
+    0,
+    1.154,
+    -3.42
+  ]
+}

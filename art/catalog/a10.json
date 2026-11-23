@@ -1,0 +1,66 @@
+{
+  "id": "a10",
+  "name": "A-10A Thunderbolt II",
+  "origin": "美国",
+  "era": "modern",
+  "role": "近距支援攻击机",
+  "length": 16.26,
+  "span": 17.53,
+  "cockpit": "attack",
+  "trim": 133,
+  "maxSpeed": 215,
+  "stall": 48,
+  "roll": 1.67,
+  "pitch": 1.52,
+  "yaw": 0.73,
+  "boost": 0,
+  "ammo": 850,
+  "missiles": 4,
+  "bombs": 6,
+  "support": false,
+  "service": "美国",
+  "feature": "直机翼、高置双发与双垂尾。航炮备弹充足，可执行对地训练。",
+  "guns": [
+    [
+      0,
+      -0.17,
+      -8.16
+    ]
+  ],
+  "rails": [
+    [
+      -5.38,
+      -0.56,
+      1.04
+    ],
+    [
+      5.38,
+      -0.56,
+      1.04
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      -1.25,
+      0.58,
+      5.62,
+      0.65
+    ],
+    [
+      1.25,
+      0.58,
+      5.62,
+      0.65
+    ]
+  ],
+  "gearClearance": 1.405,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 9.816800000000002,
+  "eye": [
+    0,
+    1.187,
+    -3.71
+  ]
+}

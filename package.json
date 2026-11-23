@@ -1,0 +1,25 @@
+{
+  "name": "cangqiong-frontline",
+  "version": "16.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build && node tools/package.mjs",
+    "check": "tsc --noEmit",
+    "test": "node --test --test-isolation=none tests/*.test.mjs",
+    "preview": "vite preview",
+    "test:assets": "node tools/check-assets.mjs"
+  },
+  "dependencies": {
+    "@babylonjs/core": "8.56.2",
+    "meshoptimizer": "0.25.0",
+    "playcanvas": "2.24.2"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
+    "typescript": "5.9.3",
+    "vite": "6.4.1"
+  }
+}

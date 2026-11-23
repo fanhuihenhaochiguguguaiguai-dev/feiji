@@ -1,0 +1,65 @@
+{
+  "id": "mirage",
+  "name": "Mirage 2000C",
+  "origin": "法国",
+  "era": "modern",
+  "role": "截击机",
+  "length": 14.36,
+  "span": 9.13,
+  "cockpit": "hybrid",
+  "trim": 208,
+  "maxSpeed": 363,
+  "stall": 60,
+  "roll": 2.48,
+  "pitch": 1.96,
+  "yaw": 0.71,
+  "boost": 29,
+  "ammo": 390,
+  "missiles": 6,
+  "bombs": 0,
+  "support": false,
+  "service": "法国",
+  "feature": "无水平尾翼的纯三角翼，使用升降副翼，快速响应俯仰。",
+  "guns": [
+    [
+      -0.39,
+      -0.66,
+      -2.67
+    ],
+    [
+      0.39,
+      -0.66,
+      -2.67
+    ]
+  ],
+  "rails": [
+    [
+      -2.62,
+      -0.35,
+      2.95
+    ],
+    [
+      2.62,
+      -0.35,
+      2.95
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      0,
+      -0.05,
+      7.15,
+      0.69
+    ]
+  ],
+  "gearClearance": 1.337,
+  "gearFixed": false,
+  "tailMissing": true,
+  "visualRadius": 8.0416,
+  "eye": [
+    0,
+    1.12,
+    -2.78
+  ]
+}

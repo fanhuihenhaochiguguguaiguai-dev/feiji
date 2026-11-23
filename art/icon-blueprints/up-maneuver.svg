@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 132">
+    <defs><linearGradient id="field" x2="0.8" y2="1"><stop stop-color="#29495f"/><stop offset=".56" stop-color="#122a40"/><stop offset="1" stop-color="#091922"/></linearGradient>
+    <pattern id="grid" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#75a1b6" stroke-opacity=".16"/></pattern>
+    <radialGradient id="metal"><stop stop-color="#aeceff" stop-opacity=".48"/><stop offset="1" stop-color="#aeceff" stop-opacity=".045"/></radialGradient></defs>
+    <path d="M14 4h162l12 14v96l-12 14H14L4 115V18z" fill="url(#field)" stroke="#7697ae" stroke-width="1.2"/>
+    <path d="M14 4h162l12 14v96l-12 14H14L4 115V18z" fill="url(#grid)"/>
+    <path d="M15 18v-6h17m127 0h17v6m0 96v6h-17m-127 0H15v-6" fill="none" stroke="#aeceff" stroke-opacity=".75"/>
+    <g fill="url(#metal)" stroke="#aeceff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M30 88l58-53 68-11-41 49-54 32z M81 40l22 26-42 39m70-51 24 17-39 34-24-14m37-64 10 11-21 16"/><path d="M23 48a50 50 0 0 1 43-27l-8-8m9 8-6 9m94 69 11-10-1 17"/></g></svg>

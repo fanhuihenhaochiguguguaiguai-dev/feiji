@@ -1,0 +1,60 @@
+{
+  "id": "gripen",
+  "name": "JAS 39C Gripen",
+  "origin": "瑞典",
+  "era": "modern",
+  "role": "多用途战斗机",
+  "length": 14.1,
+  "span": 8.4,
+  "cockpit": "glass",
+  "trim": 194,
+  "maxSpeed": 337,
+  "stall": 54,
+  "roll": 2.66,
+  "pitch": 1.99,
+  "yaw": 0.8,
+  "boost": 29,
+  "ammo": 385,
+  "missiles": 6,
+  "bombs": 0,
+  "support": false,
+  "service": "瑞典",
+  "feature": "近距鸭翼、小型三角主翼与玻璃座舱，拥有灵活滚转。",
+  "guns": [
+    [
+      -0.39,
+      -0.5,
+      -3.16
+    ]
+  ],
+  "rails": [
+    [
+      -3.31,
+      -0.3,
+      3.37
+    ],
+    [
+      3.31,
+      -0.3,
+      3.37
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      0,
+      -0.03,
+      7.01,
+      0.6
+    ]
+  ],
+  "gearClearance": 1.328,
+  "gearFixed": false,
+  "tailMissing": true,
+  "visualRadius": 7.896000000000001,
+  "eye": [
+    0,
+    1.005,
+    -2.99
+  ]
+}

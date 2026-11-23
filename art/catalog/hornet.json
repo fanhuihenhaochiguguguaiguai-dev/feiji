@@ -1,0 +1,66 @@
+{
+  "id": "hornet",
+  "name": "F/A-18C Hornet",
+  "origin": "美国",
+  "era": "modern",
+  "role": "舰载多用途战斗机",
+  "length": 17.07,
+  "span": 12.31,
+  "cockpit": "naval",
+  "trim": 193,
+  "maxSpeed": 331,
+  "stall": 53,
+  "roll": 2.44,
+  "pitch": 2.06,
+  "yaw": 0.8,
+  "boost": 29,
+  "ammo": 450,
+  "missiles": 7,
+  "bombs": 0,
+  "support": false,
+  "service": "美国",
+  "feature": "外倾双垂尾、双发和前缘延伸面，低速操控稳定。",
+  "guns": [
+    [
+      0,
+      0.12,
+      -7.05
+    ]
+  ],
+  "rails": [
+    [
+      -4.3,
+      -0.58,
+      3.27
+    ],
+    [
+      4.3,
+      -0.58,
+      3.27
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      -0.78,
+      -0.29,
+      8.3,
+      0.57
+    ],
+    [
+      0.78,
+      -0.29,
+      8.3,
+      0.57
+    ]
+  ],
+  "gearClearance": 1.435,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 9.5592,
+  "eye": [
+    0,
+    1.242,
+    -3.3
+  ]
+}

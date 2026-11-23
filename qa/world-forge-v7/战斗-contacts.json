@@ -1,0 +1,281 @@
+{
+  "events": [
+    {
+      "kind": "lock",
+      "weapon": null,
+      "id": null,
+      "track": null,
+      "terminal": false,
+      "at": [
+        20.249631494113846,
+        390.069204805782,
+        2460.0358081931677
+      ],
+      "time": 0.6999999999999995,
+      "frame": 39,
+      "cue": "lock"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 1,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0956322963823,
+        2693.658920996039
+      ],
+      "time": 1.7444444444444402,
+      "frame": 44,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 1,
+      "terminal": false,
+      "at": [
+        34.39018165888363,
+        1450.1305547110635,
+        2633.1032571310034
+      ],
+      "time": 1.7888888888888845,
+      "frame": 44,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 2,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0956322963823,
+        2693.658920996039
+      ],
+      "time": 1.7999999999999956,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 2,
+      "terminal": false,
+      "at": [
+        34.43613471860312,
+        1450.0241765611152,
+        2633.129226310636
+      ],
+      "time": 1.84444444444444,
+      "frame": 50,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 3,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0864132304628,
+        2681.666692630863
+      ],
+      "time": 1.866666666666662,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 3,
+      "terminal": false,
+      "at": [
+        34.48263579867041,
+        1450.1452835060654,
+        2620.97960846648
+      ],
+      "time": 1.9111111111111063,
+      "frame": 50,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 4,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.066945540527,
+        2669.5966896314994
+      ],
+      "time": 1.9333333333333285,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 5,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0956322963823,
+        2693.658920996039
+      ],
+      "time": 1.9777777777777727,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 5,
+      "terminal": false,
+      "at": [
+        34.530152685273826,
+        1450.0303702470133,
+        2633.1554987336813
+      ],
+      "time": 2.0222222222222173,
+      "frame": 50,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 6,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0864132304628,
+        2681.666692630863
+      ],
+      "time": 2.0444444444444394,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 6,
+      "terminal": false,
+      "at": [
+        34.3949149444143,
+        1450.2071457325876,
+        2620.9899344984465
+      ],
+      "time": 2.0888888888888837,
+      "frame": 50,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 7,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.066945540527,
+        2669.5966896314994
+      ],
+      "time": 2.111111111111106,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 8,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0956322963823,
+        2693.658920996039
+      ],
+      "time": 2.15555555555555,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 8,
+      "terminal": false,
+      "at": [
+        34.48069126014163,
+        1450.1125912157709,
+        2633.142208204519
+      ],
+      "time": 2.1999999999999944,
+      "frame": 50,
+      "cue": "scrape"
+    },
+    {
+      "kind": "gun",
+      "weapon": null,
+      "id": null,
+      "track": 9,
+      "terminal": false,
+      "at": [
+        34.43,
+        1450.0864132304628,
+        2681.666692630863
+      ],
+      "time": 2.2222222222222165,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "hit",
+      "weapon": "gun",
+      "id": 1,
+      "track": 9,
+      "terminal": true,
+      "at": [
+        34.365116216152494,
+        1450.1034257032577,
+        2621.061419716549
+      ],
+      "time": 2.266666666666661,
+      "frame": 50,
+      "cue": "gun"
+    },
+    {
+      "kind": "breakup",
+      "weapon": "crash",
+      "id": 1,
+      "track": null,
+      "terminal": false,
+      "at": [
+        36.04031569239167,
+        1450.0509192989725,
+        2606.072052464612
+      ],
+      "time": 2.266666666666661,
+      "frame": 50,
+      "cue": "fracture"
+    }
+  ],
+  "activeParticles": 48,
+  "audio": {
+    "context": "running",
+    "cues": 17,
+    "voices": 15,
+    "last": "fracture"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "id": "me262",
+  "name": "Me 262 A-1a",
+  "origin": "德国",
+  "era": "early",
+  "role": "早期喷气战斗机",
+  "length": 10.6,
+  "span": 12.65,
+  "cockpit": "metric-original",
+  "trim": 157,
+  "maxSpeed": 235,
+  "stall": 53,
+  "roll": 1.66,
+  "pitch": 1.4,
+  "yaw": 0.65,
+  "boost": 0,
+  "ammo": 430,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "德国",
+  "feature": "两具翼下喷气发动机，火力集中在机头，无导弹和加力。",
+  "guns": [
+    [
+      -0.29,
+      0.1,
+      -4.9
+    ],
+    [
+      0.29,
+      0.1,
+      -4.9
+    ]
+  ],
+  "rails": [],
+  "props": [],
+  "engine": [
+    [
+      -2.34,
+      -0.42,
+      1.35,
+      0.47
+    ],
+    [
+      2.34,
+      -0.42,
+      1.35,
+      0.47
+    ]
+  ],
+  "gearClearance": 1.202,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 7.0840000000000005,
+  "eye": [
+    0,
+    1.032,
+    -1.25
+  ]
+}

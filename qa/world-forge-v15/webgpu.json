@@ -1,0 +1,21 @@
+{
+  "a-lobby": {
+    "renderer": "webgpu",
+    "frames": 2,
+    "peakParticles": 0,
+    "resolution": [
+      800,
+      360
+    ],
+    "fps": 0,
+    "onePercentLow": 0,
+    "target": 60,
+    "firstLoadMs": 2490,
+    "cpuFrameMs": 43.30000000447035,
+    "gpuFrameMs": null,
+    "triangles": 114670,
+    "drawCalls": 162,
+    "videoMemory": 35870896,
+    "observedFPS": 0.0
+  }
+}

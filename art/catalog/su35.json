@@ -1,0 +1,66 @@
+{
+  "id": "su35",
+  "name": "Su-35S",
+  "origin": "俄罗斯",
+  "era": "modern",
+  "role": "空优战斗机",
+  "length": 21.9,
+  "span": 15.3,
+  "cockpit": "soviet-glass",
+  "trim": 224,
+  "maxSpeed": 395,
+  "stall": 65,
+  "roll": 2.25,
+  "pitch": 2.17,
+  "yaw": 0.84,
+  "boost": 36,
+  "ammo": 456,
+  "missiles": 8,
+  "bombs": 0,
+  "support": false,
+  "service": "俄罗斯",
+  "feature": "翼身融合、外展双发与成对尾翼，厚重惯性换取高过载转弯。",
+  "guns": [
+    [
+      0.65,
+      0.02,
+      -2.42
+    ]
+  ],
+  "rails": [
+    [
+      -4.6,
+      -0.57,
+      3.1
+    ],
+    [
+      4.6,
+      -0.57,
+      3.1
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      -1.37,
+      -0.42,
+      9.97,
+      0.82
+    ],
+    [
+      1.37,
+      -0.42,
+      9.97,
+      0.82
+    ]
+  ],
+  "gearClearance": 1.608,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 12.264000000000001,
+  "eye": [
+    0,
+    1.185,
+    -4.82
+  ]
+}

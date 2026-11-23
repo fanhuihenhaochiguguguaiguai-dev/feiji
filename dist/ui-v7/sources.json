@@ -1,0 +1,233 @@
+{
+  "hangar": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      65,
+      152,
+      169,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "tools": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      201,
+      152,
+      305,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "tree": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      338,
+      152,
+      442,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "missions": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      474,
+      152,
+      578,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "activity": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      611,
+      152,
+      715,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "settings": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      1525,
+      152,
+      1629,
+      234
+    ],
+    "size": [
+      104,
+      82
+    ],
+    "alpha": true,
+    "use": "独立功能图案",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "crest": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      63,
+      317,
+      305,
+      418
+    ],
+    "size": [
+      242,
+      101
+    ],
+    "alpha": true,
+    "use": "指挥中心翼徽",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "frame-command": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      732,
+      328,
+      898,
+      391
+    ],
+    "size": [
+      166,
+      63
+    ],
+    "alpha": true,
+    "use": "可伸缩香槟金指挥框",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "frame-instrument": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      918,
+      328,
+      1069,
+      391
+    ],
+    "size": [
+      151,
+      63
+    ],
+    "alpha": true,
+    "use": "可伸缩战术仪表框",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "frame-steel": {
+    "source": "03_UI图标图案风格板.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      734,
+      398,
+      898,
+      458
+    ],
+    "size": [
+      164,
+      60
+    ],
+    "alpha": true,
+    "use": "可伸缩冷银机务框",
+    "format": "WebP",
+    "states": "CSS focus, hover, pressed, selected and disabled"
+  },
+  "season": {
+    "source": "04_赛季活动界面.webp",
+    "sourceSize": [
+      1672,
+      941
+    ],
+    "box": [
+      268,
+      180,
+      1184,
+      486
+    ],
+    "size": [
+      916,
+      306
+    ],
+    "alpha": false,
+    "use": "赛季宣传插画",
+    "format": "WebP",
+    "states": "static illustration"
+  }
+}

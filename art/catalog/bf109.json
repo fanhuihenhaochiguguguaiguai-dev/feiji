@@ -1,0 +1,60 @@
+{
+  "id": "bf109",
+  "name": "Bf 109 G-6",
+  "origin": "德国",
+  "era": "ww2",
+  "role": "截击战斗机",
+  "length": 8.95,
+  "span": 9.92,
+  "cockpit": "metric-original",
+  "trim": 124,
+  "maxSpeed": 184,
+  "stall": 38,
+  "roll": 2.13,
+  "pitch": 1.72,
+  "yaw": 0.68,
+  "boost": 0,
+  "ammo": 590,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "德国",
+  "feature": "短直收尖翼、窄轮距和三叶桨。全速爬升较快，低速更需要配平。",
+  "guns": [
+    [
+      0,
+      0.015,
+      -4.64
+    ],
+    [
+      -0.24,
+      0.53,
+      -2.7
+    ],
+    [
+      0.24,
+      0.53,
+      -2.7
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0.03,
+      -4.63,
+      1.57,
+      3
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.142,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 5.5552,
+  "eye": [
+    0,
+    0.983,
+    -0.87
+  ]
+}

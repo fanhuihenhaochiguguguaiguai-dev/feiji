@@ -1,0 +1,86 @@
+{
+  "before": [
+    {
+      "pull": 0.14,
+      "boost": false,
+      "angle": 13.673,
+      "peakRate": 17.186,
+      "response": 0.122,
+      "deltaAltitude": 30.988,
+      "speed": 218.529,
+      "vertical": 36.656
+    },
+    {
+      "pull": 0.43,
+      "boost": false,
+      "angle": 58.816,
+      "peakRate": 62.621,
+      "response": 0.067,
+      "deltaAltitude": 85.138,
+      "speed": 168.126,
+      "vertical": 114.007
+    },
+    {
+      "pull": 0.86,
+      "boost": false,
+      "angle": 89.916,
+      "peakRate": 125.241,
+      "response": 0.044,
+      "deltaAltitude": 56.734,
+      "speed": 113.914,
+      "vertical": 42.564
+    },
+    {
+      "pull": 0.86,
+      "boost": true,
+      "angle": 89.916,
+      "peakRate": 125.241,
+      "response": 0.044,
+      "deltaAltitude": 76.416,
+      "speed": 123.869,
+      "vertical": 71.563
+    }
+  ],
+  "after": [
+    {
+      "pull": 0.14,
+      "boost": false,
+      "angle": 17.389,
+      "peakRate": 18.451,
+      "response": 0.122,
+      "deltaAltitude": 37.512,
+      "speed": 216.688,
+      "vertical": 48.718
+    },
+    {
+      "pull": 0.43,
+      "boost": false,
+      "angle": 65.6,
+      "peakRate": 69.277,
+      "response": 0.056,
+      "deltaAltitude": 84.986,
+      "speed": 156.835,
+      "vertical": 108.715
+    },
+    {
+      "pull": 0.86,
+      "boost": false,
+      "angle": 74.638,
+      "peakRate": 116.68,
+      "response": 0.044,
+      "deltaAltitude": 68.524,
+      "speed": 146.952,
+      "vertical": 75.171
+    },
+    {
+      "pull": 0.86,
+      "boost": true,
+      "angle": 74.638,
+      "peakRate": 116.68,
+      "response": 0.044,
+      "deltaAltitude": 90.871,
+      "speed": 172.749,
+      "vertical": 114.625
+    }
+  ]
+}

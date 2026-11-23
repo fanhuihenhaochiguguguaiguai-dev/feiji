@@ -1,0 +1,55 @@
+{
+  "id": "dr1",
+  "name": "Fokker Dr.I",
+  "origin": "德国",
+  "era": "ww1",
+  "role": "战斗机",
+  "length": 5.77,
+  "span": 7.19,
+  "cockpit": "open",
+  "trim": 42,
+  "maxSpeed": 57,
+  "stall": 22,
+  "roll": 1.84,
+  "pitch": 1.5,
+  "yaw": 0.91,
+  "boost": 0,
+  "ammo": 740,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "德国",
+  "feature": "三翼、固定双轮起落架、开放式座舱与同步机枪。",
+  "guns": [
+    [
+      -0.16,
+      0.55,
+      -1.46
+    ],
+    [
+      0.16,
+      0.55,
+      -1.46
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0,
+      -2.85,
+      1.29,
+      2
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 0.95,
+  "gearFixed": true,
+  "tailMissing": false,
+  "visualRadius": 4.026400000000001,
+  "eye": [
+    0,
+    0.607,
+    -0.57
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "id": "p51",
+  "name": "P-51D Mustang",
+  "origin": "美国",
+  "era": "ww2",
+  "role": "远程战斗机",
+  "length": 9.83,
+  "span": 11.28,
+  "cockpit": "imperial",
+  "trim": 127,
+  "maxSpeed": 191,
+  "stall": 39,
+  "roll": 2.09,
+  "pitch": 1.68,
+  "yaw": 0.66,
+  "boost": 0,
+  "ammo": 780,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "美国",
+  "feature": "水滴座舱、腹部进气道与低阻机翼，适合快速通场。",
+  "guns": [
+    [
+      -2.04,
+      0.03,
+      -1.39
+    ],
+    [
+      2.04,
+      0.03,
+      -1.39
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0,
+      -4.99,
+      1.72,
+      4
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.174,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 6.316800000000001,
+  "eye": [
+    0,
+    1.043,
+    -0.77
+  ]
+}

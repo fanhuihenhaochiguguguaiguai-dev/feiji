@@ -1,0 +1,55 @@
+{
+  "id": "zero",
+  "name": "A6M2 零式",
+  "origin": "日本",
+  "era": "ww2",
+  "role": "舰载战斗机",
+  "length": 9.06,
+  "span": 12,
+  "cockpit": "metric-original",
+  "trim": 110,
+  "maxSpeed": 153,
+  "stall": 30,
+  "roll": 1.67,
+  "pitch": 2.1,
+  "yaw": 0.89,
+  "boost": 0,
+  "ammo": 565,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "日本",
+  "feature": "大展弦比机翼、轻质结构和三叶螺旋桨，低速转弯灵活。",
+  "guns": [
+    [
+      -2.43,
+      0.08,
+      -1.36
+    ],
+    [
+      2.43,
+      0.08,
+      -1.36
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0,
+      -4.6,
+      1.5,
+      3
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.146,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 6.720000000000001,
+  "eye": [
+    0,
+    0.936,
+    -0.75
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "id": "alphajet",
+  "name": "Alpha Jet A",
+  "origin": "法国／德国",
+  "era": "cold",
+  "role": "教练／轻型攻击机",
+  "length": 13.23,
+  "span": 9.11,
+  "cockpit": "hybrid",
+  "trim": 154,
+  "maxSpeed": 254,
+  "stall": 54,
+  "roll": 1.94,
+  "pitch": 1.52,
+  "yaw": 0.71,
+  "boost": 0,
+  "ammo": 400,
+  "missiles": 0,
+  "bombs": 4,
+  "support": false,
+  "service": "德国等",
+  "feature": "法德联合研制。双发高肩翼、串列座舱，德军 A 型可执行轻型攻击。",
+  "guns": [
+    [
+      0,
+      -0.59,
+      -1.8
+    ]
+  ],
+  "rails": [],
+  "props": [],
+  "engine": [
+    [
+      -0.57,
+      -0.19,
+      5.61,
+      0.41
+    ],
+    [
+      0.57,
+      -0.19,
+      5.61,
+      0.41
+    ]
+  ],
+  "gearClearance": 1.296,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 7.408800000000001,
+  "eye": [
+    0,
+    1.117,
+    -2.03
+  ]
+}

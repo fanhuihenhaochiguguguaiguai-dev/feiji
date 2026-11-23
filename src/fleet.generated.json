@@ -1,0 +1,1306 @@
+[
+  {
+    "id": "a10",
+    "name": "A-10A Thunderbolt II",
+    "origin": "美国",
+    "era": "modern",
+    "role": "近距支援攻击机",
+    "length": 16.26,
+    "span": 17.53,
+    "cockpit": "attack",
+    "trim": 133,
+    "maxSpeed": 215,
+    "stall": 48,
+    "roll": 1.67,
+    "pitch": 1.52,
+    "yaw": 0.73,
+    "boost": 0,
+    "ammo": 850,
+    "missiles": 4,
+    "bombs": 6,
+    "support": false,
+    "service": "美国",
+    "feature": "直机翼、高置双发与双垂尾。航炮备弹充足，可执行对地训练。",
+    "guns": [
+      [
+        0,
+        -0.17,
+        -8.16
+      ]
+    ],
+    "rails": [
+      [
+        -5.38,
+        -0.56,
+        1.04
+      ],
+      [
+        5.38,
+        -0.56,
+        1.04
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        -1.25,
+        0.58,
+        5.62,
+        0.65
+      ],
+      [
+        1.25,
+        0.58,
+        5.62,
+        0.65
+      ]
+    ],
+    "gearClearance": 1.405,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 9.816800000000002,
+    "eye": [
+      0,
+      1.187,
+      -3.71
+    ]
+  },
+  {
+    "id": "alphajet",
+    "name": "Alpha Jet A",
+    "origin": "法国／德国",
+    "era": "cold",
+    "role": "教练／轻型攻击机",
+    "length": 13.23,
+    "span": 9.11,
+    "cockpit": "hybrid",
+    "trim": 154,
+    "maxSpeed": 254,
+    "stall": 54,
+    "roll": 1.94,
+    "pitch": 1.52,
+    "yaw": 0.71,
+    "boost": 0,
+    "ammo": 400,
+    "missiles": 0,
+    "bombs": 4,
+    "support": false,
+    "service": "德国等",
+    "feature": "法德联合研制。双发高肩翼、串列座舱，德军 A 型可执行轻型攻击。",
+    "guns": [
+      [
+        0,
+        -0.59,
+        -1.8
+      ]
+    ],
+    "rails": [],
+    "props": [],
+    "engine": [
+      [
+        -0.57,
+        -0.19,
+        5.61,
+        0.41
+      ],
+      [
+        0.57,
+        -0.19,
+        5.61,
+        0.41
+      ]
+    ],
+    "gearClearance": 1.296,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 7.408800000000001,
+    "eye": [
+      0,
+      1.117,
+      -2.03
+    ]
+  },
+  {
+    "id": "b2",
+    "name": "B-2A Spirit",
+    "origin": "美国",
+    "era": "support",
+    "role": "隐身轰炸机",
+    "length": 21,
+    "span": 52.4,
+    "cockpit": "crew",
+    "trim": 189,
+    "maxSpeed": 270,
+    "stall": 75,
+    "roll": 0.65,
+    "pitch": 1,
+    "yaw": 0.37,
+    "boost": 0,
+    "ammo": 0,
+    "missiles": 0,
+    "bombs": 8,
+    "support": true,
+    "service": "美国",
+    "feature": "无尾飞翼衔接锯齿尾缘。在设施防卫演习中尝试从空中攻击训练靶区。",
+    "guns": [],
+    "rails": [],
+    "props": [],
+    "engine": [
+      [
+        -4.92,
+        0.21,
+        6.25,
+        0.53
+      ],
+      [
+        -3.31,
+        0.28,
+        7.27,
+        0.53
+      ],
+      [
+        3.31,
+        0.28,
+        7.27,
+        0.53
+      ],
+      [
+        4.92,
+        0.21,
+        6.25,
+        0.53
+      ]
+    ],
+    "gearClearance": 1.576,
+    "gearFixed": false,
+    "tailMissing": true,
+    "visualRadius": 29.344,
+    "eye": [
+      0,
+      2.096,
+      -3.95
+    ]
+  },
+  {
+    "id": "bf109",
+    "name": "Bf 109 G-6",
+    "origin": "德国",
+    "era": "ww2",
+    "role": "截击战斗机",
+    "length": 8.95,
+    "span": 9.92,
+    "cockpit": "metric-original",
+    "trim": 124,
+    "maxSpeed": 184,
+    "stall": 38,
+    "roll": 2.13,
+    "pitch": 1.72,
+    "yaw": 0.68,
+    "boost": 0,
+    "ammo": 590,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "德国",
+    "feature": "短直收尖翼、窄轮距和三叶桨。全速爬升较快，低速更需要配平。",
+    "guns": [
+      [
+        0,
+        0.015,
+        -4.64
+      ],
+      [
+        -0.24,
+        0.53,
+        -2.7
+      ],
+      [
+        0.24,
+        0.53,
+        -2.7
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0.03,
+        -4.63,
+        1.57,
+        3
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.142,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 5.5552,
+    "eye": [
+      0,
+      0.983,
+      -0.87
+    ]
+  },
+  {
+    "id": "c130",
+    "name": "C-130H Hercules",
+    "origin": "美国",
+    "era": "support",
+    "role": "战术运输机",
+    "length": 29.8,
+    "span": 40.4,
+    "cockpit": "crew",
+    "trim": 131,
+    "maxSpeed": 177,
+    "stall": 53,
+    "roll": 0.67,
+    "pitch": 0.79,
+    "yaw": 0.4,
+    "boost": 0,
+    "ammo": 0,
+    "missiles": 0,
+    "bombs": 0,
+    "support": true,
+    "service": "美国",
+    "feature": "高翼四发运输机。按航线飞行，玩家可护送。",
+    "guns": [],
+    "rails": [],
+    "props": [
+      [
+        -5.4,
+        1.33,
+        -5.74,
+        2.05,
+        4
+      ],
+      [
+        -10.8,
+        1.33,
+        -4.47,
+        2.05,
+        4
+      ],
+      [
+        5.4,
+        1.33,
+        -5.74,
+        2.05,
+        4
+      ],
+      [
+        10.8,
+        1.33,
+        -4.47,
+        2.05,
+        4
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.85,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 22.624000000000002,
+    "eye": [
+      0,
+      2.526,
+      -9.1
+    ]
+  },
+  {
+    "id": "camel",
+    "name": "Sopwith Camel",
+    "origin": "英国",
+    "era": "ww1",
+    "role": "战斗机",
+    "length": 5.71,
+    "span": 8.53,
+    "cockpit": "open",
+    "trim": 45,
+    "maxSpeed": 60,
+    "stall": 24,
+    "roll": 2.03,
+    "pitch": 1.54,
+    "yaw": 0.79,
+    "boost": 0,
+    "ammo": 760,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "英国",
+    "feature": "上翼前移、下翼带上反角。轻巧但低速更敏感。",
+    "guns": [
+      [
+        -0.14,
+        0.48,
+        -1.42
+      ],
+      [
+        0.14,
+        0.48,
+        -1.42
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0,
+        -2.94,
+        1.32,
+        2
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 0.95,
+    "gearFixed": true,
+    "tailMissing": false,
+    "visualRadius": 4.7768,
+    "eye": [
+      0,
+      0.579,
+      -0.38
+    ]
+  },
+  {
+    "id": "dr1",
+    "name": "Fokker Dr.I",
+    "origin": "德国",
+    "era": "ww1",
+    "role": "战斗机",
+    "length": 5.77,
+    "span": 7.19,
+    "cockpit": "open",
+    "trim": 42,
+    "maxSpeed": 57,
+    "stall": 22,
+    "roll": 1.84,
+    "pitch": 1.5,
+    "yaw": 0.91,
+    "boost": 0,
+    "ammo": 740,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "德国",
+    "feature": "三翼、固定双轮起落架、开放式座舱与同步机枪。",
+    "guns": [
+      [
+        -0.16,
+        0.55,
+        -1.46
+      ],
+      [
+        0.16,
+        0.55,
+        -1.46
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0,
+        -2.85,
+        1.29,
+        2
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 0.95,
+    "gearFixed": true,
+    "tailMissing": false,
+    "visualRadius": 4.026400000000001,
+    "eye": [
+      0,
+      0.607,
+      -0.57
+    ]
+  },
+  {
+    "id": "e2",
+    "name": "E-2C Hawkeye",
+    "origin": "美国",
+    "era": "support",
+    "role": "舰载预警机",
+    "length": 17.54,
+    "span": 24.56,
+    "cockpit": "crew",
+    "trim": 117,
+    "maxSpeed": 165,
+    "stall": 47,
+    "roll": 0.89,
+    "pitch": 0.91,
+    "yaw": 0.47,
+    "boost": 0,
+    "ammo": 0,
+    "missiles": 0,
+    "bombs": 0,
+    "support": true,
+    "service": "美国",
+    "feature": "双涡桨与旋转圆盘雷达。存活时扩展友方战术显示的探测范围。",
+    "guns": [],
+    "rails": [],
+    "props": [
+      [
+        -4.02,
+        0.66,
+        -3.24,
+        1.85,
+        4
+      ],
+      [
+        4.02,
+        0.66,
+        -3.24,
+        1.85,
+        4
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.451,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 13.7536,
+    "eye": [
+      0,
+      1.726,
+      -5.46
+    ]
+  },
+  {
+    "id": "ea6b",
+    "name": "EA-6B Prowler",
+    "origin": "美国",
+    "era": "support",
+    "role": "舰载电子战机",
+    "length": 18.24,
+    "span": 16.15,
+    "cockpit": "crew",
+    "trim": 151,
+    "maxSpeed": 236,
+    "stall": 58,
+    "roll": 1.09,
+    "pitch": 1.14,
+    "yaw": 0.46,
+    "boost": 0,
+    "ammo": 0,
+    "missiles": 0,
+    "bombs": 0,
+    "support": true,
+    "service": "美国",
+    "feature": "四座舰载支援机。接近交战区时干扰游戏中的敌方锁定。",
+    "guns": [],
+    "rails": [],
+    "props": [],
+    "engine": [
+      [
+        -0.98,
+        -0.6,
+        4.75,
+        0.42
+      ],
+      [
+        0.98,
+        -0.6,
+        4.75,
+        0.42
+      ]
+    ],
+    "gearClearance": 1.477,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 10.2144,
+    "eye": [
+      0,
+      1.354,
+      -4.38
+    ]
+  },
+  {
+    "id": "f16",
+    "name": "F-16C Fighting Falcon",
+    "origin": "美国",
+    "era": "modern",
+    "role": "多用途战斗机",
+    "length": 15.06,
+    "span": 9.96,
+    "cockpit": "glass",
+    "trim": 210,
+    "maxSpeed": 376,
+    "stall": 62,
+    "roll": 2.81,
+    "pitch": 2.05,
+    "yaw": 0.72,
+    "boost": 33,
+    "ammo": 510,
+    "missiles": 7,
+    "bombs": 0,
+    "support": false,
+    "service": "美国",
+    "feature": "单座气泡座舱、融合式翼身、腹部进气道与单喷口。展示模型带有舵面、腹鳍和喷口结构。",
+    "guns": [
+      [
+        -0.57,
+        0.096,
+        -4.35
+      ]
+    ],
+    "rails": [
+      [
+        -3.44,
+        -0.25,
+        2.79
+      ],
+      [
+        3.44,
+        -0.25,
+        2.79
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        0,
+        -0.095,
+        7.29,
+        0.685
+      ]
+    ],
+    "gearClearance": 1.362,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 8.4336,
+    "eye": [
+      0,
+      0.967,
+      -3.02
+    ]
+  },
+  {
+    "id": "g91",
+    "name": "Fiat G.91R/1",
+    "origin": "意大利",
+    "era": "cold",
+    "role": "轻型攻击／侦察机",
+    "length": 10.3,
+    "span": 8.56,
+    "cockpit": "metric-original",
+    "trim": 171,
+    "maxSpeed": 285,
+    "stall": 53,
+    "roll": 2.07,
+    "pitch": 1.67,
+    "yaw": 0.7,
+    "boost": 0,
+    "ammo": 585,
+    "missiles": 0,
+    "bombs": 4,
+    "support": false,
+    "service": "意大利",
+    "feature": "紧凑后掠翼攻击机，圆鼻进气，可搭载游戏中的常规炸弹。",
+    "guns": [
+      [
+        -0.47,
+        0.12,
+        -4.22
+      ],
+      [
+        0.47,
+        0.12,
+        -4.22
+      ]
+    ],
+    "rails": [],
+    "props": [],
+    "engine": [
+      [
+        0,
+        0,
+        5.12,
+        0.48
+      ]
+    ],
+    "gearClearance": 1.191,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 5.768000000000001,
+    "eye": [
+      0,
+      1.109,
+      -1.66
+    ]
+  },
+  {
+    "id": "gripen",
+    "name": "JAS 39C Gripen",
+    "origin": "瑞典",
+    "era": "modern",
+    "role": "多用途战斗机",
+    "length": 14.1,
+    "span": 8.4,
+    "cockpit": "glass",
+    "trim": 194,
+    "maxSpeed": 337,
+    "stall": 54,
+    "roll": 2.66,
+    "pitch": 1.99,
+    "yaw": 0.8,
+    "boost": 29,
+    "ammo": 385,
+    "missiles": 6,
+    "bombs": 0,
+    "support": false,
+    "service": "瑞典",
+    "feature": "近距鸭翼、小型三角主翼与玻璃座舱，拥有灵活滚转。",
+    "guns": [
+      [
+        -0.39,
+        -0.5,
+        -3.16
+      ]
+    ],
+    "rails": [
+      [
+        -3.31,
+        -0.3,
+        3.37
+      ],
+      [
+        3.31,
+        -0.3,
+        3.37
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        0,
+        -0.03,
+        7.01,
+        0.6
+      ]
+    ],
+    "gearClearance": 1.328,
+    "gearFixed": false,
+    "tailMissing": true,
+    "visualRadius": 7.896000000000001,
+    "eye": [
+      0,
+      1.005,
+      -2.99
+    ]
+  },
+  {
+    "id": "hornet",
+    "name": "F/A-18C Hornet",
+    "origin": "美国",
+    "era": "modern",
+    "role": "舰载多用途战斗机",
+    "length": 17.07,
+    "span": 12.31,
+    "cockpit": "naval",
+    "trim": 193,
+    "maxSpeed": 331,
+    "stall": 53,
+    "roll": 2.44,
+    "pitch": 2.06,
+    "yaw": 0.8,
+    "boost": 29,
+    "ammo": 450,
+    "missiles": 7,
+    "bombs": 0,
+    "support": false,
+    "service": "美国",
+    "feature": "外倾双垂尾、双发和前缘延伸面，低速操控稳定。",
+    "guns": [
+      [
+        0,
+        0.12,
+        -7.05
+      ]
+    ],
+    "rails": [
+      [
+        -4.3,
+        -0.58,
+        3.27
+      ],
+      [
+        4.3,
+        -0.58,
+        3.27
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        -0.78,
+        -0.29,
+        8.3,
+        0.57
+      ],
+      [
+        0.78,
+        -0.29,
+        8.3,
+        0.57
+      ]
+    ],
+    "gearClearance": 1.435,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 9.5592,
+    "eye": [
+      0,
+      1.242,
+      -3.3
+    ]
+  },
+  {
+    "id": "j10",
+    "name": "歼-10C",
+    "origin": "中国",
+    "era": "modern",
+    "role": "多用途战斗机",
+    "length": 16.43,
+    "span": 9.75,
+    "cockpit": "glass",
+    "trim": 202,
+    "maxSpeed": 359,
+    "stall": 57,
+    "roll": 2.62,
+    "pitch": 2.08,
+    "yaw": 0.78,
+    "boost": 33,
+    "ammo": 470,
+    "missiles": 7,
+    "bombs": 0,
+    "support": false,
+    "service": "中国",
+    "feature": "单发鸭翼三角翼，宽幅腹部进气。近距机动和航向稳定性均衡。",
+    "guns": [
+      [
+        -0.45,
+        -0.54,
+        -3.86
+      ]
+    ],
+    "rails": [
+      [
+        -2.85,
+        -0.37,
+        3.52
+      ],
+      [
+        2.85,
+        -0.37,
+        3.52
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        0,
+        -0.05,
+        8.17,
+        0.71
+      ]
+    ],
+    "gearClearance": 1.411,
+    "gearFixed": false,
+    "tailMissing": true,
+    "visualRadius": 9.200800000000001,
+    "eye": [
+      0,
+      1.154,
+      -3.42
+    ]
+  },
+  {
+    "id": "j20",
+    "name": "歼-20",
+    "origin": "中国",
+    "era": "stealth",
+    "role": "隐身战斗机",
+    "length": 20.4,
+    "span": 13.4,
+    "cockpit": "glass-wide",
+    "trim": 232,
+    "maxSpeed": 398,
+    "stall": 67,
+    "roll": 2.31,
+    "pitch": 2,
+    "yaw": 0.75,
+    "boost": 36,
+    "ammo": 340,
+    "missiles": 10,
+    "bombs": 0,
+    "support": false,
+    "service": "中国",
+    "feature": "长机身、全动鸭翼、双发及外倾双垂尾。游戏配置内置导弹和固定航炮。",
+    "guns": [
+      [
+        0.85,
+        0.32,
+        -5.24
+      ]
+    ],
+    "rails": [
+      [
+        -0.57,
+        -0.74,
+        0.93
+      ],
+      [
+        0.57,
+        -0.74,
+        0.93
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        -0.92,
+        -0.16,
+        9.22,
+        0.71
+      ],
+      [
+        0.92,
+        -0.16,
+        9.22,
+        0.71
+      ]
+    ],
+    "gearClearance": 1.554,
+    "gearFixed": false,
+    "tailMissing": true,
+    "visualRadius": 11.424,
+    "eye": [
+      0,
+      1.253,
+      -4.52
+    ]
+  },
+  {
+    "id": "me262",
+    "name": "Me 262 A-1a",
+    "origin": "德国",
+    "era": "early",
+    "role": "早期喷气战斗机",
+    "length": 10.6,
+    "span": 12.65,
+    "cockpit": "metric-original",
+    "trim": 157,
+    "maxSpeed": 235,
+    "stall": 53,
+    "roll": 1.66,
+    "pitch": 1.4,
+    "yaw": 0.65,
+    "boost": 0,
+    "ammo": 430,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "德国",
+    "feature": "两具翼下喷气发动机，火力集中在机头，无导弹和加力。",
+    "guns": [
+      [
+        -0.29,
+        0.1,
+        -4.9
+      ],
+      [
+        0.29,
+        0.1,
+        -4.9
+      ]
+    ],
+    "rails": [],
+    "props": [],
+    "engine": [
+      [
+        -2.34,
+        -0.42,
+        1.35,
+        0.47
+      ],
+      [
+        2.34,
+        -0.42,
+        1.35,
+        0.47
+      ]
+    ],
+    "gearClearance": 1.202,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 7.0840000000000005,
+    "eye": [
+      0,
+      1.032,
+      -1.25
+    ]
+  },
+  {
+    "id": "mig21",
+    "name": "MiG-21bis",
+    "origin": "苏联",
+    "era": "cold",
+    "role": "截击机",
+    "length": 14.7,
+    "span": 7.15,
+    "cockpit": "soviet",
+    "trim": 212,
+    "maxSpeed": 371,
+    "stall": 69,
+    "roll": 2.41,
+    "pitch": 1.62,
+    "yaw": 0.67,
+    "boost": 28,
+    "ammo": 320,
+    "missiles": 5,
+    "bombs": 0,
+    "support": false,
+    "service": "苏联",
+    "feature": "环形进气与中央锥、窄距三角翼，极速高而低速操纵余量较小。",
+    "guns": [
+      [
+        -0.25,
+        -0.78,
+        -2.25
+      ],
+      [
+        0.25,
+        -0.78,
+        -2.25
+      ]
+    ],
+    "rails": [
+      [
+        -2.18,
+        -0.49,
+        2.1
+      ],
+      [
+        2.18,
+        -0.49,
+        2.1
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        0,
+        -0.06,
+        7.31,
+        0.66
+      ]
+    ],
+    "gearClearance": 1.349,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 8.232000000000001,
+    "eye": [
+      0,
+      1.142,
+      -3.07
+    ]
+  },
+  {
+    "id": "mirage",
+    "name": "Mirage 2000C",
+    "origin": "法国",
+    "era": "modern",
+    "role": "截击机",
+    "length": 14.36,
+    "span": 9.13,
+    "cockpit": "hybrid",
+    "trim": 208,
+    "maxSpeed": 363,
+    "stall": 60,
+    "roll": 2.48,
+    "pitch": 1.96,
+    "yaw": 0.71,
+    "boost": 29,
+    "ammo": 390,
+    "missiles": 6,
+    "bombs": 0,
+    "support": false,
+    "service": "法国",
+    "feature": "无水平尾翼的纯三角翼，使用升降副翼，快速响应俯仰。",
+    "guns": [
+      [
+        -0.39,
+        -0.66,
+        -2.67
+      ],
+      [
+        0.39,
+        -0.66,
+        -2.67
+      ]
+    ],
+    "rails": [
+      [
+        -2.62,
+        -0.35,
+        2.95
+      ],
+      [
+        2.62,
+        -0.35,
+        2.95
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        0,
+        -0.05,
+        7.15,
+        0.69
+      ]
+    ],
+    "gearClearance": 1.337,
+    "gearFixed": false,
+    "tailMissing": true,
+    "visualRadius": 8.0416,
+    "eye": [
+      0,
+      1.12,
+      -2.78
+    ]
+  },
+  {
+    "id": "p51",
+    "name": "P-51D Mustang",
+    "origin": "美国",
+    "era": "ww2",
+    "role": "远程战斗机",
+    "length": 9.83,
+    "span": 11.28,
+    "cockpit": "imperial",
+    "trim": 127,
+    "maxSpeed": 191,
+    "stall": 39,
+    "roll": 2.09,
+    "pitch": 1.68,
+    "yaw": 0.66,
+    "boost": 0,
+    "ammo": 780,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "美国",
+    "feature": "水滴座舱、腹部进气道与低阻机翼，适合快速通场。",
+    "guns": [
+      [
+        -2.04,
+        0.03,
+        -1.39
+      ],
+      [
+        2.04,
+        0.03,
+        -1.39
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0,
+        -4.99,
+        1.72,
+        4
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.174,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 6.316800000000001,
+    "eye": [
+      0,
+      1.043,
+      -0.77
+    ]
+  },
+  {
+    "id": "spitfire",
+    "name": "Spitfire Mk IX",
+    "origin": "英国",
+    "era": "ww2",
+    "role": "空优战斗机",
+    "length": 9.46,
+    "span": 11.23,
+    "cockpit": "metric-original",
+    "trim": 119,
+    "maxSpeed": 178,
+    "stall": 34,
+    "roll": 2.22,
+    "pitch": 1.95,
+    "yaw": 0.74,
+    "boost": 0,
+    "ammo": 640,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "英国",
+    "feature": "椭圆翼、四叶桨与机械式仪表，擅长连续转弯。",
+    "guns": [
+      [
+        -1.65,
+        0.04,
+        -1.65
+      ],
+      [
+        1.65,
+        0.04,
+        -1.65
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0,
+        -4.79,
+        1.64,
+        4
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.161,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 6.288800000000001,
+    "eye": [
+      0,
+      1.043,
+      -0.84
+    ]
+  },
+  {
+    "id": "su35",
+    "name": "Su-35S",
+    "origin": "俄罗斯",
+    "era": "modern",
+    "role": "空优战斗机",
+    "length": 21.9,
+    "span": 15.3,
+    "cockpit": "soviet-glass",
+    "trim": 224,
+    "maxSpeed": 395,
+    "stall": 65,
+    "roll": 2.25,
+    "pitch": 2.17,
+    "yaw": 0.84,
+    "boost": 36,
+    "ammo": 456,
+    "missiles": 8,
+    "bombs": 0,
+    "support": false,
+    "service": "俄罗斯",
+    "feature": "翼身融合、外展双发与成对尾翼，厚重惯性换取高过载转弯。",
+    "guns": [
+      [
+        0.65,
+        0.02,
+        -2.42
+      ]
+    ],
+    "rails": [
+      [
+        -4.6,
+        -0.57,
+        3.1
+      ],
+      [
+        4.6,
+        -0.57,
+        3.1
+      ]
+    ],
+    "props": [],
+    "engine": [
+      [
+        -1.37,
+        -0.42,
+        9.97,
+        0.82
+      ],
+      [
+        1.37,
+        -0.42,
+        9.97,
+        0.82
+      ]
+    ],
+    "gearClearance": 1.608,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 12.264000000000001,
+    "eye": [
+      0,
+      1.185,
+      -4.82
+    ]
+  },
+  {
+    "id": "zero",
+    "name": "A6M2 零式",
+    "origin": "日本",
+    "era": "ww2",
+    "role": "舰载战斗机",
+    "length": 9.06,
+    "span": 12,
+    "cockpit": "metric-original",
+    "trim": 110,
+    "maxSpeed": 153,
+    "stall": 30,
+    "roll": 1.67,
+    "pitch": 2.1,
+    "yaw": 0.89,
+    "boost": 0,
+    "ammo": 565,
+    "missiles": 0,
+    "bombs": 0,
+    "support": false,
+    "service": "日本",
+    "feature": "大展弦比机翼、轻质结构和三叶螺旋桨，低速转弯灵活。",
+    "guns": [
+      [
+        -2.43,
+        0.08,
+        -1.36
+      ],
+      [
+        2.43,
+        0.08,
+        -1.36
+      ]
+    ],
+    "rails": [],
+    "props": [
+      [
+        0,
+        0,
+        -4.6,
+        1.5,
+        3
+      ]
+    ],
+    "engine": [],
+    "gearClearance": 1.146,
+    "gearFixed": false,
+    "tailMissing": false,
+    "visualRadius": 6.720000000000001,
+    "eye": [
+      0,
+      0.936,
+      -0.75
+    ]
+  }
+]

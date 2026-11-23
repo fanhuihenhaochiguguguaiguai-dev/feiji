@@ -1,0 +1,51 @@
+{
+  "id": "e2",
+  "name": "E-2C Hawkeye",
+  "origin": "美国",
+  "era": "support",
+  "role": "舰载预警机",
+  "length": 17.54,
+  "span": 24.56,
+  "cockpit": "crew",
+  "trim": 117,
+  "maxSpeed": 165,
+  "stall": 47,
+  "roll": 0.89,
+  "pitch": 0.91,
+  "yaw": 0.47,
+  "boost": 0,
+  "ammo": 0,
+  "missiles": 0,
+  "bombs": 0,
+  "support": true,
+  "service": "美国",
+  "feature": "双涡桨与旋转圆盘雷达。存活时扩展友方战术显示的探测范围。",
+  "guns": [],
+  "rails": [],
+  "props": [
+    [
+      -4.02,
+      0.66,
+      -3.24,
+      1.85,
+      4
+    ],
+    [
+      4.02,
+      0.66,
+      -3.24,
+      1.85,
+      4
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 1.451,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 13.7536,
+  "eye": [
+    0,
+    1.726,
+    -5.46
+  ]
+}

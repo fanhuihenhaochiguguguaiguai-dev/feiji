@@ -1,0 +1,12 @@
+{
+  "name": "苍穹锋刃",
+  "short_name": "苍穹锋刃",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "theme_color": "#0a1220",
+  "background_color": "#101b2b",
+  "icons":[{"src":"./icon.svg","type":"image/svg+xml","sizes":"any","purpose":"any"}]
+}

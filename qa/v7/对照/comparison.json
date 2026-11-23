@@ -1,0 +1,350 @@
+{
+  "01": {
+    "view": "upgrade",
+    "source": "01_战机改装主页面.webp",
+    "regions": {
+      "airframe": {
+        "region": [
+          0.18,
+          0.16,
+          0.68,
+          0.9
+        ],
+        "meanAbsoluteRGB": 61.72
+      },
+      "parts": {
+        "region": [
+          0.72,
+          0.11,
+          1,
+          0.92
+        ],
+        "meanAbsoluteRGB": 42.28
+      }
+    }
+  },
+  "02": {
+    "view": "home-1280",
+    "source": "02_中文空战大厅.webp",
+    "regions": {
+      "profile": {
+        "region": [
+          0,
+          0,
+          0.45,
+          0.13
+        ],
+        "meanAbsoluteRGB": 42.15
+      },
+      "navigation": {
+        "region": [
+          0,
+          0.88,
+          1,
+          1
+        ],
+        "meanAbsoluteRGB": 40.89
+      },
+      "modes": {
+        "region": [
+          0.75,
+          0.28,
+          1,
+          0.83
+        ],
+        "meanAbsoluteRGB": 55.64
+      },
+      "stage": {
+        "region": [
+          0.22,
+          0.17,
+          0.73,
+          0.82
+        ],
+        "meanAbsoluteRGB": 63.63
+      }
+    }
+  },
+  "04": {
+    "view": "season",
+    "source": "04_赛季活动界面.webp",
+    "regions": {
+      "main-art": {
+        "region": [
+          0.15,
+          0.1,
+          0.82,
+          0.64
+        ],
+        "meanAbsoluteRGB": 59.87
+      },
+      "reward-track": {
+        "region": [
+          0,
+          0.65,
+          1,
+          0.93
+        ],
+        "meanAbsoluteRGB": 49.97
+      }
+    }
+  },
+  "11-battle": {
+    "view": "b-dogfight",
+    "source": "11_多页面风格总览.webp",
+    "regions": {
+      "reticle": {
+        "region": [
+          0.32,
+          0.29,
+          0.68,
+          0.63
+        ],
+        "meanAbsoluteRGB": 55.32
+      },
+      "flight-data": {
+        "region": [
+          0.01,
+          0.09,
+          0.3,
+          0.49
+        ],
+        "meanAbsoluteRGB": 74.86
+      },
+      "radar": {
+        "region": [
+          0.81,
+          0.0,
+          1,
+          0.37
+        ],
+        "meanAbsoluteRGB": 75.67
+      },
+      "weapons": {
+        "region": [
+          0.73,
+          0.4,
+          1,
+          1
+        ],
+        "meanAbsoluteRGB": 57.22
+      }
+    }
+  },
+  "06": {
+    "view": "quests",
+    "source": "06_任务中心独立页面.webp",
+    "regions": {
+      "title": {
+        "region": [
+          0,
+          0,
+          1,
+          0.19
+        ],
+        "meanAbsoluteRGB": 61.48
+      },
+      "rewards": {
+        "region": [
+          0,
+          0.34,
+          1,
+          0.91
+        ],
+        "meanAbsoluteRGB": 39.41
+      }
+    }
+  },
+  "07": {
+    "view": "result",
+    "source": "07_任务完成结算界面.webp",
+    "regions": {
+      "outcome": {
+        "region": [
+          0.2,
+          0.02,
+          0.8,
+          0.39
+        ],
+        "meanAbsoluteRGB": 60.24
+      },
+      "detailed-stats": {
+        "region": [
+          0.08,
+          0.35,
+          0.92,
+          0.9
+        ],
+        "meanAbsoluteRGB": 48.02
+      }
+    }
+  },
+  "08": {
+    "view": "home-393",
+    "source": "08_竖版大厅概念.webp",
+    "regions": {
+      "profile": {
+        "region": [
+          0,
+          0,
+          1,
+          0.12
+        ],
+        "meanAbsoluteRGB": 40.17
+      },
+      "navigation": {
+        "region": [
+          0,
+          0.81,
+          1,
+          1
+        ],
+        "meanAbsoluteRGB": 47.21
+      }
+    }
+  },
+  "09": {
+    "view": "hangar",
+    "source": "09_歼20机库改装页面.webp",
+    "regions": {
+      "list": {
+        "region": [
+          0,
+          0.19,
+          0.2,
+          0.87
+        ],
+        "meanAbsoluteRGB": 48.11
+      },
+      "airframe": {
+        "region": [
+          0.2,
+          0.15,
+          0.73,
+          0.91
+        ],
+        "meanAbsoluteRGB": 60.18
+      },
+      "details": {
+        "region": [
+          0.74,
+          0.16,
+          1,
+          0.92
+        ],
+        "meanAbsoluteRGB": 40.02
+      }
+    }
+  },
+  "10": {
+    "view": "sortieprep",
+    "source": "10_出击准备与战术雷达.webp",
+    "regions": {
+      "preparation": {
+        "region": [
+          0,
+          0.05,
+          1,
+          0.88
+        ],
+        "meanAbsoluteRGB": 55.55
+      }
+    }
+  },
+  "11-research": {
+    "view": "tree",
+    "source": "11_多页面风格总览.webp",
+    "regions": {
+      "branch-graph": {
+        "region": [
+          0,
+          0.1,
+          1,
+          0.94
+        ],
+        "meanAbsoluteRGB": 29.46
+      }
+    }
+  },
+  "12-tactical": {
+    "view": "tactical",
+    "source": "12_游戏系统总览与未解锁状态.webp",
+    "regions": {
+      "radar-contacts": {
+        "region": [
+          0,
+          0.08,
+          1,
+          0.96
+        ],
+        "meanAbsoluteRGB": 27.64
+      }
+    }
+  },
+  "cloud-deck": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 16.44
+    }
+  },
+  "snow-range": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 21.45
+    }
+  },
+  "island-chain": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 16.91
+    }
+  },
+  "sea-level": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 17.19
+    }
+  },
+  "sunset": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 12.42
+    }
+  },
+  "storm-coast": {
+    "world": {
+      "region": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meanAbsoluteRGB": 11.06
+    }
+  }
+}

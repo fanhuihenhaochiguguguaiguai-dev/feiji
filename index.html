@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1220">
+<meta name="description" content="苍穹锋刃的单机空战。驾驶战机，从落日机库进入海域、雪山和雷云。">
+<title>苍穹锋刃 · PIXEL SKY AFTERBURNER</title>
+<link rel="icon" href="./icon.svg">
+<link rel="manifest" href="./manifest.webmanifest">
+</head>
+<body>
+<main id="application" data-screen="loading">
+  <section id="orientation-gate" aria-labelledby="orientation-title">
+    <span class="crest reference-crest" aria-hidden="true"></span>
+    <h2 id="orientation-title">请旋转设备</h2>
+    <p>横屏后进入游戏。</p>
+    <button id="orientation-fullscreen" class="gold" type="button" hidden>尝试横屏全屏</button>
+  </section>
+  <canvas id="scene" aria-label="实时三维战场"></canvas>
+  <div class="lens" aria-hidden="true"></div>
+  <div id="menu" hidden>
+    <header class="mast">
+      <button class="identity" data-nav="home"><span class="crest reference-crest" aria-hidden="true"></span><span><strong>苍穹锋刃</strong><small>飞行指挥中心</small></span></button>
+      <div class="wallet"><span><img src="./items/credits-wallet.webp" class="wallet-art" alt=""><b id="credits">2600</b> 信用点</span><span class="pilot-meter"><i data-icon="star"></i><b id="rank">Lv.1</b><small id="xp-text"></small><progress id="pilot-xp" aria-label="等级经验"></progress></span></div>
+      <button class="square" id="fullscreen" type="button" aria-label="进入全屏" title="全屏" data-icon="fullscreen" hidden></button>
+    </header>
+    <div id="front" hidden>
+      <aside class="brief">
+        <h1>南海前哨</h1>
+        <div class="brief-lines">
+          <button data-nav="quests"><i data-icon="gift"></i><span>任务与成就</span><em id="ready-count"></em></button>
+          <button data-nav="activity"><i data-icon="star"></i><span>活动中心</span></button>
+          <button data-nav="season"><i data-icon="wing"></i><span>赛季通行证</span></button>
+          <button data-nav="base"><i data-icon="base"></i><span>空军基地</span></button>
+          <button data-nav="records"><i data-icon="record"></i><span>飞行员资料</span></button>
+        </div>
+      </aside>
+      <aside class="quick">
+        <button class="launch-card" data-nav="missions" data-briefing="coast"><strong>战役司令部</strong><span>战役与独立任务</span><i data-icon="target"></i></button>
+        <button data-nav="training" data-briefing="training"><strong>训练模式</strong><span>航线与操纵</span><i data-icon="wing"></i></button>
+        <button data-nav="freeprep" data-briefing="hangar"><strong>自由飞行</strong><span>海面与机场</span><i data-icon="plane"></i></button>
+      </aside>
+      <div class="selected-ship"><button id="prev-plane" aria-label="上一架战机" data-icon="left"></button><span id="deck-name"></span><button id="next-plane" aria-label="下一架战机" data-icon="right"></button></div>
+    </div>
+    <section id="section" aria-live="off" hidden></section>
+    <nav id="navigation" aria-label="主要界面">
+      <button data-nav="hangar"><i class="nav-art nav-hangar"></i>机库</button>
+      <button data-nav="upgrade"><i class="nav-art nav-tools"></i>改装</button>
+      <button data-nav="tree"><i class="nav-art nav-tree"></i>研发</button>
+      <button data-sortie class="sortie-action" data-icon-label="plane">出击</button>
+      <button data-nav="weapons"><i data-icon="missile"></i>武器</button>
+      <button data-nav="inventory"><i data-icon="tools"></i>仓库</button>
+      <button data-nav="settings"><i class="nav-art nav-settings"></i>设置</button>
+    </nav>
+  </div>
+  <section id="hud" aria-label="飞行仪表" hidden>
+    <div class="hud-left">
+      <div class="armor"><span data-icon="plane"></span><span>机体 <b id="hp"></b></span><i><em id="hp-bar"></em></i></div>
+      <div class="telemetry"><span>空速 <b id="speed"></b> <small>公里/时</small></span><span>高度 <b id="alt"></b> <small>米</small></span><span>航向 <b id="heading"></b></span></div>
+      <div id="hud-goal" class="hud-extra"></div>
+    </div>
+    <div class="hud-middle"><b id="enemy-counter"></b><span id="flight-time"></span><output id="alerts" role="status"></output></div>
+    <div class="hud-right">
+      <button id="pause" class="square" data-icon="pause" aria-label="暂停"></button>
+      <button id="gear" class="square small-label" aria-label="起落架">起落架</button>
+      <button id="radar-open" aria-label="打开战术雷达"><canvas id="radar" width="180" height="180"></canvas></button>
+    </div>
+    <div id="pins" aria-hidden="true"></div>
+    <output id="hit-confirm" aria-live="off" hidden></output>
+    <output id="kill-notice" aria-live="polite" hidden></output>
+    <svg id="aim" aria-hidden="true" viewBox="0 0 64 64" hidden>
+      <path class="sight-ring" d="M18 14a22 22 0 0 1 28 0M50 18a22 22 0 0 1 0 28M46 50a22 22 0 0 1-28 0M14 46a22 22 0 0 1 0-28"/>
+      <path class="sight-index" d="M32 5v10m0 34v10M5 32h10m34 0h10m-34 0h4m6 0h4m-7-7v4m0 6v4"/>
+      <circle cx="32" cy="32" r="1.3" fill="currentColor"/>
+    </svg>
+    <svg id="ground-aim" aria-hidden="true" viewBox="0 0 36 36" hidden>
+      <path d="M18 4 32 18 18 32 4 18Z M18 13v10m-5-5h10"/>
+    </svg>
+    <div id="incoming" aria-hidden="true"></div>
+    <div id="damage-bearing" aria-hidden="true" hidden></div>
+    <div id="touch-guide">滑动空白区域控制飞行</div>
+    <div class="flight-controls">
+      <div class="defense-controls">
+        <button id="counter" data-icon-label="deflect" aria-label="一键反导弹"><span>反制</span><b id="counter-count"></b></button>
+        <div><span id="counter-state"></span><button id="assist" aria-label="飞行辅助开关">飞行辅助</button><button id="spares" hidden>补给 <b id="spare-count"></b></button></div>
+      </div>
+      <div class="power-control"><label for="power">油门 <b id="throttle"></b><em id="burn"></em></label><input type="range" id="power" min="12" max="100" value="74"></div>
+    </div>
+    <div class="combat-controls">
+      <button id="view" data-icon-label="view">视角</button>
+      <button id="boost" data-icon-label="boost">加力</button>
+      <button id="next-target" data-icon-label="lock">锁定</button>
+      <button id="weapon-mode" data-icon-label="switch"><small>切换</small><b id="weapon-display"></b></button>
+      <button id="bomb" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b></button>
+      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b></button>
+      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b></button>
+    </div>
+  </section>
+  <dialog id="tactical" class="tactical" aria-labelledby="tactical-name">
+    <header><div><h2 id="tactical-name">战术雷达</h2><p id="tactical-status"></p></div><form method="dialog"><button>返回战斗</button></form></header>
+    <div class="tactical-body"><canvas aria-label="实时雷达航迹" width="440" height="440"></canvas><ol aria-label="探测目标"></ol></div>
+  </dialog>
+  <div id="overlay" class="veil" hidden></div>
+  <aside id="receipt" class="receipt" aria-live="polite" hidden></aside>
+  <dialog id="purchase-confirm" aria-labelledby="purchase-title" class="acquisition"></dialog>
+  <dialog id="acquisition" aria-labelledby="acquisition-title" class="acquisition"></dialog>
+  <div id="status-toast" role="status" hidden></div>
+  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><div id="boot-error" hidden></div></div></section>
+  <noscript>请启用 JavaScript 后启动游戏。</noscript>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

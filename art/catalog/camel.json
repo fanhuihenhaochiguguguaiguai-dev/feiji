@@ -1,0 +1,55 @@
+{
+  "id": "camel",
+  "name": "Sopwith Camel",
+  "origin": "英国",
+  "era": "ww1",
+  "role": "战斗机",
+  "length": 5.71,
+  "span": 8.53,
+  "cockpit": "open",
+  "trim": 45,
+  "maxSpeed": 60,
+  "stall": 24,
+  "roll": 2.03,
+  "pitch": 1.54,
+  "yaw": 0.79,
+  "boost": 0,
+  "ammo": 760,
+  "missiles": 0,
+  "bombs": 0,
+  "support": false,
+  "service": "英国",
+  "feature": "上翼前移、下翼带上反角。轻巧但低速更敏感。",
+  "guns": [
+    [
+      -0.14,
+      0.48,
+      -1.42
+    ],
+    [
+      0.14,
+      0.48,
+      -1.42
+    ]
+  ],
+  "rails": [],
+  "props": [
+    [
+      0,
+      0,
+      -2.94,
+      1.32,
+      2
+    ]
+  ],
+  "engine": [],
+  "gearClearance": 0.95,
+  "gearFixed": true,
+  "tailMissing": false,
+  "visualRadius": 4.7768,
+  "eye": [
+    0,
+    0.579,
+    -0.38
+  ]
+}

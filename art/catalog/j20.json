@@ -1,0 +1,66 @@
+{
+  "id": "j20",
+  "name": "歼-20",
+  "origin": "中国",
+  "era": "stealth",
+  "role": "隐身战斗机",
+  "length": 20.4,
+  "span": 13.4,
+  "cockpit": "glass-wide",
+  "trim": 232,
+  "maxSpeed": 398,
+  "stall": 67,
+  "roll": 2.31,
+  "pitch": 2.0,
+  "yaw": 0.75,
+  "boost": 36,
+  "ammo": 340,
+  "missiles": 10,
+  "bombs": 0,
+  "support": false,
+  "service": "中国",
+  "feature": "长机身、全动鸭翼、双发及外倾双垂尾。游戏配置内置导弹和固定航炮。",
+  "guns": [
+    [
+      0.85,
+      0.32,
+      -5.24
+    ]
+  ],
+  "rails": [
+    [
+      -0.57,
+      -0.74,
+      0.93
+    ],
+    [
+      0.57,
+      -0.74,
+      0.93
+    ]
+  ],
+  "props": [],
+  "engine": [
+    [
+      -0.92,
+      -0.16,
+      9.22,
+      0.71
+    ],
+    [
+      0.92,
+      -0.16,
+      9.22,
+      0.71
+    ]
+  ],
+  "gearClearance": 1.554,
+  "gearFixed": false,
+  "tailMissing": true,
+  "visualRadius": 11.424,
+  "eye": [
+    0,
+    1.253,
+    -4.52
+  ]
+}

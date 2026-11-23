@@ -1,0 +1,49 @@
+{
+  "id": "ea6b",
+  "name": "EA-6B Prowler",
+  "origin": "美国",
+  "era": "support",
+  "role": "舰载电子战机",
+  "length": 18.24,
+  "span": 16.15,
+  "cockpit": "crew",
+  "trim": 151,
+  "maxSpeed": 236,
+  "stall": 58,
+  "roll": 1.09,
+  "pitch": 1.14,
+  "yaw": 0.46,
+  "boost": 0,
+  "ammo": 0,
+  "missiles": 0,
+  "bombs": 0,
+  "support": true,
+  "service": "美国",
+  "feature": "四座舰载支援机。接近交战区时干扰游戏中的敌方锁定。",
+  "guns": [],
+  "rails": [],
+  "props": [],
+  "engine": [
+    [
+      -0.98,
+      -0.6,
+      4.75,
+      0.42
+    ],
+    [
+      0.98,
+      -0.6,
+      4.75,
+      0.42
+    ]
+  ],
+  "gearClearance": 1.477,
+  "gearFixed": false,
+  "tailMissing": false,
+  "visualRadius": 10.2144,
+  "eye": [
+    0,
+    1.354,
+    -4.38
+  ]
+}
