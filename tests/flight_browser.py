@@ -541,10 +541,31 @@ with sync_playwright() as p:
         page.locator('[data-task="t04"]').click()
         page.locator('[data-confirm-sortie]').click()
         ready(page,"flight")
-        page.wait_for_function("flightQA.sortie.lockProgress>=1",timeout=40000)
-        page.locator("#missile").tap()
+        # Repeat test approaches while preserving damage and the sortie ammunition ledger.
+        # The training enemy now follows the same durability floor as other opponents.
+        for _ in range(8):
+            if page.locator('.debrief-title').is_visible():
+                break
+            previous=page.evaluate("""()=>{
+                const g=flightQA,s=g.sortie,p=s.player,e=s.enemies.find(enemy=>enemy.alive);
+                if(!e||!s.active)return null;
+                const angle=Math.atan2(e.forward.x,-e.forward.z);
+                const stores={missiles:p.missiles,cannon:p.cannon,bombs:p.bombs,hp:p.hp,missileAt:p.missileAt};
+                p.reset(e.position.x-Math.sin(angle)*780,e.position.y,e.position.z+Math.cos(angle)*780,angle,p.type.trim);
+                Object.assign(p,stores);
+                g.world.cameraReset=true;
+                return s.stats.missile;
+            }""")
+            if previous is None:
+                break
+            page.wait_for_function("()=>{const s=flightQA.sortie;return s.lockProgress===1&&s.time>=s.player.missileAt}",timeout=40000)
+            page.locator("#missile").tap()
+            page.wait_for_function("prev=>flightQA.sortie.stats.missile>prev",arg=previous,timeout=30000)
+            page.wait_for_function("()=>!flightQA.sortie.groups.missile.some(q=>q.live&&q.owner===flightQA.sortie.player)",timeout=40000)
         ready(page,"result")
         assert "任务胜利" in page.locator(".debrief-title").inner_text()
+        hits=page.evaluate("flightQA.sortie.stats.missileHit")
+        assert hits>=3,hits
         assert page.evaluate("flightQA.p.completed.includes('t04') && flightQA.p.daily.sorties===1")
         page.screenshot(path=OUT/"result.png",timeout=70000)
         page.locator('[data-do="leave"]').click()
@@ -556,7 +577,7 @@ with sync_playwright() as p:
         page.wait_for_function("b=>flightQA.p.credits===b+150 && flightQA.p.daily.claimed.includes('daily-sortie')",arg=balance)
         assert page.locator('[data-claim="daily-sortie"]').is_disabled()
         page.screenshot(path=OUT/"daily-claim.png",timeout=70000)
-        print("training victory and persisted daily reward",flush=True)
+        print("training victory and persisted daily reward",{"missileHits":hits},flush=True)
         page.locator('[data-back]').click()
         ready(page,"home")
     if args.effects:
