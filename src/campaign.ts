@@ -4,7 +4,7 @@ export type Formation='line'|'pincer'|'stack'|'screen'|'ace';
 export type Objective='sweep'|'intercept'|'screen'|'pincer'|'low';
 export interface Engagement {
   objective:Objective;formation:Formation;tier:number;waves:readonly number[];roster:readonly string[];
-  altitude:number;spacing:number;distance:number;heading:number;groups:number;ace?:string;
+  altitude:number;spacing:number;distance:number;heading:number;groups:number;ace?:string;drones?:number;
 }
 type Chapter={name:string;level:number;roster:readonly string[];stages:readonly Stage[]};
 type Stage=[title:string,region:number,objective:Objective,formation:Formation,waves:number[],altitude:number,ace?:string];
@@ -36,12 +36,12 @@ export const chapters:Chapter[]=[
   {name:'冰脊对峙',level:6,roster:['f16','mirage','gripen','hornet'],stages:[
     ['冰墙折返',1,'intercept','pincer',[3,3],1820],
     ['两翼火网',1,'sweep','pincer',[3,3,3],1760],
-    ['雾谷破阵',1,'screen','screen',[2,4,3],950],
-    ['浅湾格斗',0,'low','screen',[3,3],205],
+    ['雾谷无人机群',1,'screen','screen',[3,4,3],950],
+    ['浅湾空战',0,'low','screen',[3,3],205],
     ['冷锋上缘',1,'pincer','stack',[3,4,2],2260],
     ['峡谷折光',1,'intercept','stack',[3,3,2],1380],
     ['风涌支线',2,'screen','pincer',[3,3,3],1070],
-    ['零下空战',1,'sweep','stack',[3,4,3],2570],
+    ['零下无人机群',1,'sweep','stack',[3,4,3],2570],
     ['雪线安全窗',1,'pincer','screen',[4,3],1970],
     ['白峰王牌',1,'sweep','ace',[3,4,3],2420,'gripen']
   ]},
@@ -93,9 +93,10 @@ const brief:Record<Objective,string>={
 export const campaignOperations:Operation[]=chapters.flatMap((chapter,i)=>chapter.stages.map((stage,j)=>{
   const [name,region,objective,formation,waves,altitude,ace]=stage;
   const n=i*10+j+1,tier=Math.min(3,Math.floor((n-1)/15));
+  const drones=i===2&&[2,3,6,7,9].includes(j)?2:undefined;
   return {id:'s'+String(n).padStart(2,'0'),name,region,kind:'air',
-    detail:brief[objective]+(ace?' 末波由王牌 '+(i+1)+' 号带队。':''),threat:tier,campaign:n,level:chapter.level,
-    engagement:{objective,formation,waves,altitude,ace,tier,groups:0,roster:chapter.roster,heading:n<5?0:(j%3-1)*.075,
+    detail:brief[objective]+(drones?' 本空域有影隼无人机群。':'')+(ace?' 末波由王牌 '+(i+1)+' 号带队。':''),threat:tier,campaign:n,level:chapter.level,
+    engagement:{objective,formation,waves,altitude,ace,tier,groups:0,drones,roster:chapter.roster,heading:n<5?0:(j%3-1)*.075,
       spacing:185+j*13+i*12,distance:n===1?1260:770+i*115+(j%3)*155}};
 }));
 export const chapterFor=(n:number)=>Math.min(chapters.length-1,Math.max(0,Math.floor((n-1)/10)));

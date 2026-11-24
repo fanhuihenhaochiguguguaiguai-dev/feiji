@@ -1,7 +1,8 @@
 import { byAircraft, fleet, startingFleet, upgrades, type Operation } from './data';
-import { gearSlot, gearSlots, stockHooks, compatible, itemById, missiles, missileDamage, rewards, technologies, type GearSlot, type MissileProfile, type RewardDefinition } from './items';
+import { gearSlot, gearSlots, compatible, itemById, missiles, missileDamage, minimumPlayerMissiles, rewards, stockHooks, technologies, type GearSlot, type MissileProfile, type RewardDefinition } from './items';
 import { roundCapacity } from './ordnance';
 import { airframeLevels, levelReward, pilotLevel } from './progression';
+import { persistSnapshot, readSnapshots, type PilotSnapshot } from './save-store';
 import type {Debrief} from './sortie';
 
 export type Backend='auto'|'gpu'|'gl';
@@ -15,7 +16,7 @@ const dayKey=()=>{const d=new Date();return [d.getFullYear(),d.getMonth()+1,d.ge
 const blankDay=(day=dayKey()):DailyState=>({day,sorties:0,kills:0,victories:0,claimed:[]});
 export interface Save {
   daily:DailyState;
-  version:number;credits:number;xp:number;rewardedLevel:number;selected:string;unlocked:string[];campaign:number;completed:string[];
+  version:number;savedAt:number;credits:number;xp:number;rewardedLevel:number;selected:string;unlocked:string[];campaign:number;completed:string[];
   improvements:Record<string,number>;bases:string[];claimed:string[];records:RecordRow[];
   inventory:InventoryState;loadouts:Record<string,AircraftLoadout>;technology:string[];
   sorties:number;kills:number;distance:number;victories:number;settings:Settings;
@@ -29,7 +30,7 @@ const key='pixel-sky-af-v4',backup=key+'-recovery';
 const retiredOperations=new Set(['armor','fleet','joint','铁幕突围','海门警戒','三军协同']);
 const defaults:InventoryState={alloy:6,circuit:3,reserve:1,interceptor:1,factory:1,navy:1,sand:1,night:1};
 export const freshProfile=():Save=>({
-  version:8,rewardedLevel:1,daily:blankDay(),credits:2600,xp:0,selected:'j20',unlocked:[...startingFleet],campaign:1,completed:[],improvements:{},
+  version:9,savedAt:0,rewardedLevel:1,daily:blankDay(),credits:2600,xp:0,selected:'j20',unlocked:[...startingFleet],campaign:1,completed:[],improvements:{},
   bases:[],claimed:[],records:[],inventory:{...defaults},loadouts:{},technology:[],
   sorties:0,kills:0,distance:0,victories:0,
   settings:{backend:'auto',quality:'auto',mute:false,assist:true,invert:false,sensitivity:1,hud:1,renderScale:1}
@@ -40,6 +41,7 @@ const number=(v:unknown,fallback:number,ceil=1e9)=>typeof v==='number'&&Number.i
 export function normalizeProfile(raw:unknown):Save{
   const input=object(raw),d=freshProfile();
   if(!Object.keys(input).length)return d;
+  d.savedAt=number(input.savedAt,0,Number.MAX_SAFE_INTEGER);
   for(const n of ['credits','xp','campaign','sorties','kills','distance','victories'] as const)d[n]=number(input[n],d[n]);
   d.rewardedLevel=Math.floor(Math.max(1,number(input.rewardedLevel,1,pilotLevel(d.xp))));
   const daily=object(input.daily);
@@ -82,23 +84,47 @@ export function normalizeProfile(raw:unknown):Save{
   }
   return d;
 }
-export function loadProfile():Save{
+function decodeProfile(raw:string|null):Save|null{
+  if(!raw)return null;
+  try{
+    const value=JSON.parse(raw);
+    return value&&typeof value==='object'&&Array.isArray(value.unlocked)?normalizeProfile(value):null;
+  }catch{return null;}
+}
+function journalProfile():Save|null{
   for(const name of [key,backup])try{
-    const raw=localStorage.getItem(name);
-    if(raw){const value=JSON.parse(raw);if(value&&typeof value==='object'&&Array.isArray(value.unlocked)){
-      const p=normalizeProfile(value);
-      const next=awardLevels(p);
-      if(next!==p&&saveProfile(next))return next;
-      return p;
-    }}
+    const p=decodeProfile(localStorage.getItem(name));
+    if(p)return p;
   }catch{/* Attempt the independent recovery copy. */}
-  return freshProfile();
+  return null;
+}
+export function loadProfile():Save{
+  const p=journalProfile()??freshProfile(),next=awardLevels(p);
+  return next!==p&&saveProfile(next)?next:p;
+}
+export async function loadPersistentProfile():Promise<Save>{
+  let timeout:ReturnType<typeof setTimeout>|undefined;
+  const snapshots=await Promise.race([readSnapshots(),new Promise<PilotSnapshot[]>(resolve=>{timeout=setTimeout(()=>resolve([]),650);})]);
+  clearTimeout(timeout);
+  const journal=journalProfile();
+  const stored=snapshots.map(row=>decodeProfile(row.data)).find(row=>row!==null);
+  const p=stored&&(!journal||stored.savedAt>journal.savedAt)?stored:journal??freshProfile();
+  const next=awardLevels(p);
+  if(next!==p&&saveProfile(next))return next;
+  if(!stored||stored.savedAt<p.savedAt){
+    if(!p.savedAt)p.savedAt=Date.now();
+    void persistSnapshot({savedAt:p.savedAt,data:JSON.stringify(p)});
+  }
+  return p;
 }
 export function saveProfile(p:Save){
   try{
-    const text=JSON.stringify(p);
+    const savedAt=Math.max(Date.now(),p.savedAt+1);
+    const text=JSON.stringify({...p,savedAt});
     localStorage.setItem(key,text);
     try{localStorage.setItem(backup,text);}catch{/* The primary write is already valid. */}
+    p.savedAt=savedAt;
+    void persistSnapshot({savedAt,data:text});
     return true;
   }catch{return false;}
 }
@@ -110,7 +136,7 @@ export const upgradeLevel=(p:Save,id:string,u:string)=>p.improvements[id+':'+u]?
 export function requirements(part:string,level:number):[string,number]{return [['radar','weapons','cadence','warhead'].includes(part)?'circuit':'alloy',1+level];}
 export const upgradeCompatible=(id:string,part:string)=>{
   const plane=byAircraft(id);
-  return !plane.support&&(part!=='warhead'||!!plane.missiles||stockHooks(plane)&&plane.era==='modern');
+  return !plane.support;
 };
 export function buyUpgrade(p:Save,id:string,u:string){
   if(!p.unlocked.includes(id)||!upgrades.some(value=>value.id===u))return '此战机或改装项目未解锁';
@@ -220,7 +246,7 @@ export function combatConfiguration(p:Save,id:string,groundEnabled=true):CombatC
   const warhead=level('warhead'),cadence=level('cadence');
   const payload=get('bomb');
   const groundStock=!groundEnabled||choices.bomb==='none'?0:payload?(plane.bombs||2):plane.bombs;
-  const airStock=Math.max(0,plane.missiles-(plane.id==='j20'&&groundStock?4:0));
+  const airStock=plane.support?0:Math.max(minimumPlayerMissiles,plane.missiles-(plane.id==='j20'&&groundStock?4:0));
   const missile=missiles[get('missile')?.id??'interceptor'];
   return {aircraft:plane.id,missile:{...missile,damage:missileDamage(plane,missile,warhead)},paint:get('skin')?.color??'',
     rounds:roundCapacity(plane,stores),

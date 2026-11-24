@@ -663,7 +663,7 @@ def run():
         scene=bpy.context.scene
         scene.render.fps=30
         scene.frame_start=1;scene.frame_end=31;scene.frame_set(1)
-        if d['id'] in ('j20','j10','f16','su35','a10','spitfire','dr1','hornet'):
+        if d['id'] in ('j20','j10','f16','su35','a10','spitfire','dr1','hornet','shade-drone'):
             bpy.ops.wm.save_as_mainfile(filepath=str(SOURCES/(d['id']+'.blend')), compress=True)
         bpy.ops.export_scene.gltf(filepath=str(OUTPUT/(d['id']+'.glb')),export_format='GLB',export_yup=True,
                                   export_cameras=False,export_lights=False,export_apply=True,export_extras=True,

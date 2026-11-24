@@ -1,6 +1,6 @@
-# 苍穹锋刃 · WORLD-FORGE V17
+# 苍穹锋刃 · WORLD-FORGE V18
 
-单机空战网页游戏。使用 PlayCanvas 2.24.2 和 TypeScript，优先启用 WebGPU，回退到 WebGL2。战役、每日任务、装备和战绩保存在当前浏览器中。
+单机空战网页游戏。使用 PlayCanvas 2.24.2 和 TypeScript，优先启用 WebGPU，回退到 WebGL2。战役、每日任务、装备和战绩保存在当前浏览器中，已兼容旧版存档并写入 IndexedDB。
 
 ## 操作
 
@@ -8,15 +8,16 @@
 
 电脑使用方向键或 W/A/S/D 飞行，Q/E 偏航，R/V 调油门，Shift 加力，空格发射航炮，F 发射导弹，B 投弹，T 锁定，Z 反制，C 切换座舱，G 收放起落架，Esc 暂停。
 
-进入战役司令部可查看全球地图和六章六十关。每章十关，第十关末波有王牌。击落全部敌机才会结算胜利并解锁下关。点「全球视图」返回全图。大厅右侧的「自由空战」从有敌机的空域开始，每次开局强度变化；清掉一波继续迎击，可在暂停时结算撤离。
+进入战役司令部可查看全球地图和六章六十关。每章十关，第十关末波有王牌。第三章部分空域有影隼无人机编队。击落全部敌机才会结算胜利并解锁下关。点「全球视图」返回全图。大厅右侧的「自由空战」从有敌机的空域开始，每次开局强度变化。清掉一波继续迎击，可在暂停时结算撤离。
 
 ## 配置与成长
 
-- 所有可驾驶战机自带固定航炮。按机型和升级等级自动配发弹药，战役中跨波次保留用量，自由空战在波次间补给。兼容战机自动配发原厂空空弹。购买其他导弹型号后，可以在兼容挂位换装，出击时按同一机型配额补给。
+- 所有可驾驶战机自带固定航炮，每次出击至少装填 10 枚空空导弹。战役中跨波次保留用量，自由空战在波次间补给。机型与升级决定弹种兼容性、弹量和伤害。早期机型的空空挂架属于游戏内改装。
 - 歼-20原厂备弹为 340 发航炮和 10 枚空空弹。原来的对地装备仍在军需仓库，正式空战的备弹按空空配置计算。
 - 机务工位可分别提高航炮伤害、航炮射速及导弹发射频率、导弹伤害和出击弹量。军需页显示当前机型的实际发射数据。早期机型拥有较强的近距航炮表现，先进机型擅长高速拦截和制导。
 - 圆形准星统一使用机头轴线，双视角共用；独立菱形显示炸弹落点或对地制导目标。
 - 战斗结算按命中战果、目标进度、胜负和难度结算经验。晋升奖励和首胜奖励随同一存档写入。
+- 玩家战机的耐久由机型决定，最低为 2000。护甲升级降低伤害，耐久耗尽会结束出击。
 - 战役按关卡顺序解锁。飞行经验保留并继续用于机型、升级和军需解锁。在「游戏设置」可以导出飞行员存档。
 
 ## 构建与部署
@@ -51,12 +52,12 @@ python art/impact_sprites.py
 
 ## 验证
 
-`qa/world-forge-v17/` 包含纯空战关卡、王牌、连续迎击和弹道的测试记录。此前的武器、准星和海岸飞行记录保留在 `qa/world-forge-v16/`。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
+`qa/world-forge-v18/` 包含低空尾流、第三章无人机群和存档迁移的截图及测试记录。此前的战役、武器、准星和海岸飞行记录保留在相应版本目录。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
 
 ```sh
 python -m pip install playwright
 VITE_GAME_QA=1 npx vite build --outDir /tmp/cangqiong-qa
-python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gl --backend gl --quick --all-air --airframe j20
-python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gpu --backend gpu --quick --all-air --airframe j20
+python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gl --backend gl --quick --water-drone --all-air --airframe j20
+python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gpu --backend gpu --quick --water-drone --all-air --airframe j20
 python tests/visual_reference.py qa/reference /tmp/cangqiong-gl /tmp/cangqiong-comparison
 ```

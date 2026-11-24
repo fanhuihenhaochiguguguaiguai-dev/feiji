@@ -16,6 +16,7 @@ import { combatConfiguration,consumeReserve,recordSortie,saveProfile,sortieBlock
 import { pilotLevel } from './progression';
 import { defenseNames } from './defense';
 import { missiles } from './items';
+import { openWreckPhysics,type WreckPhysics } from './wreck-physics';
 
 const small=()=>matchMedia('(any-pointer: coarse)').matches;
 const direction=new Vector3(),soundRight=new Vector3(),rightward=new Vector3(1,0,0);
@@ -180,26 +181,30 @@ export class Game {
     el('boot').hidden=false;el('boot-text').textContent='正在准备出击';
     const request=operation(id),op=lab?{...request,region:plan.region,name:'地貌验收空域'}:id==='free'?{...request,region:plan.region}:request;
     const configuration=combatConfiguration(this.p,type.id,lab||op.kind==='ground');
+    let rigid:WreckPhysics|null=null;
     try {
       const theatre=theatres[op.region];
       await loadTerrain(theatre.seed,asset('world/'+theatre.id+'.height'));
       await this.world.setTheme(op.region);
+      rigid=await openWreckPhysics(FLIGHT_STEP);
       const mission=new Sortie(op,type,{rank,runway,armor:configuration.armor,engine:0,
       stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
       seed:op.kind==='free'&&!lab?++this.freeSeed:undefined,diagnostics:lab
-    },e=>this.event(e),this.world.terrain);
+    },e=>this.event(e),this.world.terrain,rigid);
       await this.pilot.request(type);
       await Promise.all(mission.enemies.map((e,i)=>e.alive?this.foes[i].request(e.type):null));
       if(mission.enemies.some(e=>e.alive)){
         for(const id of mission.enemyKit)void this.world.assets.load('fleet/'+id+'.glb','container').catch(()=>{});
       }
       if(mission.ally.alive)await this.support.request(mission.ally.type);
-      this.labSortie=lab;this.notion={id,rank,runway,plan};this.sortie=mission;this.acc=0;
+      this.sortie?.releaseRigidBodies();
+      this.labSortie=lab;this.notion={id,rank,runway,plan};this.sortie=mission;rigid=null;this.acc=0;
       this.world.showDeck(false);this.world.resetMarkers();this.world.configureFlightWeather(plan.weather,plan.lighting);this.art.weather=plan.weather;this.world.view=0;
       this.input.reset(runway&&op.kind==='free'?.12:.74);this.input.on=true;
       this.art.clear();this.meshChange.clear();
       this.state='flight';this.ui.flight(mission);el('boot').hidden=true;
     }catch(e){
+      rigid?.dispose();
       this.state=old;el('boot').hidden=true;
       if(old==='flight')this.input.on=true;
       this.ui.toast('出击资源读取失败，请重试');console.error(e);
@@ -220,7 +225,7 @@ export class Game {
       active.end(active.cleared>0,'已撤离 · 击落 '+active.stats.kills+' 架 · 完成 '+active.cleared+' 波');
       this.finish(active);return;
     }
-    this.sortie=null;this.input.on=false;this.art.clear();this.state='home';this.world.showDeck(true);this.world.view=0;
+    active?.releaseRigidBodies();this.sortie=null;this.input.on=false;this.art.clear();this.state='home';this.world.showDeck(true);this.world.view=0;
     for(const other of [...this.foes,this.support])other.pivot.enabled=false;
     void this.previewAircraft(this.p.selected);this.ui.showHangar();
   }
@@ -277,6 +282,7 @@ export class Game {
     }
   }
   finish(s:Sortie){
+    s.releaseRigidBodies();
     this.state='result';this.input.on=false;this.input.reset(false);
     const previousXp=this.p.xp,report=s.report(),credits=this.labSortie||s.endless&&!report.kills?0:recordSortie(this.p,report,s.type.id);
     if(pilotLevel(this.p.xp)>pilotLevel(previousXp))this.audio.play('ceremony');
@@ -310,7 +316,8 @@ export class Game {
       }
     }else if(this.state==='settling'&&s){
       this.settleFor-=dt;
-      s.advanceWrecks(dt);
+      this.acc+=dt;
+      while(this.acc>=FLIGHT_STEP){s.advanceWrecks(FLIGHT_STEP);this.acc-=FLIGHT_STEP;}
       if(this.settleFor<=0)this.finish(s);
     }
     const result=this.state==='result';
@@ -354,6 +361,7 @@ export class Game {
       }
       const effectTime=this.state==='pause'?0:dt;
       if(this.state==='flight'){
+        this.world.updateWater(player,s.time);
         this.timeSinceImpact+=dt;
         if(this.timeSinceImpact>.097){
           this.timeSinceImpact=0;

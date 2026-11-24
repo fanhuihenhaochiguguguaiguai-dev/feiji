@@ -7,6 +7,8 @@ import { Airframe } from './flight';
 import { FlightCamera } from './flight-camera';
 import { bindRockSurface } from './terrain-material';
 import { environmentSource } from './shading';
+import { OceanRender } from './ocean-render';
+import { wakeCeiling } from './ocean-solver';
 import { Terrain, clamp, chunkCells, gridStep, noise, worldExtent } from './terrain';
 import type { Backend } from './profile';
 
@@ -43,10 +45,11 @@ export async function openEngine(canvas:HTMLCanvasElement,mode:Backend):Promise<
 
 export class Assets {
   private readonly pending=new Map<string,Promise<Asset>>();
+  private pinnedFleet:ReadonlySet<string>=new Set();
   constructor(readonly app:Application){}
   load(path:string,type:string):Promise<Asset>{
     const existing=this.pending.get(path);
-    if(existing)return existing;
+    if(existing){this.pending.delete(path);this.pending.set(path,existing);return existing;}
     const handle=new Asset(path,type,{url:asset(path)});
     const request=new Promise<Asset>((resolve,reject)=>{
       handle.once('load',resolve);
@@ -62,9 +65,12 @@ export class Assets {
   async model(path:string):Promise<Entity>{return ((await this.load(path,'container')).resource as ContainerResource).instantiateRenderEntity();}
   async texture(path:string):Promise<Texture>{return (await this.load(path,'texture')).resource as Texture;}
   trimFleet(keep:ReadonlySet<string>){
+    this.pinnedFleet=keep;
     const aircraft=[...this.pending.entries()].filter(([file])=>file.startsWith('fleet/'));
-    for(const [file,promise] of aircraft.slice(0,Math.max(0,aircraft.length-9))){
-      if(!keep.has(file.slice(6,-4)))void promise.then(a=>{if(!keep.has(file.slice(6,-4)))this.drop(file,a);}).catch(()=>{});
+    for(const [file,promise] of aircraft.filter(([file])=>!keep.has(file.slice(6,-4))).slice(0,Math.max(0,aircraft.length-9))){
+      void promise.then(a=>{
+        if(this.pending.get(file)===promise&&!this.pinnedFleet.has(file.slice(6,-4)))this.drop(file,a);
+      }).catch(()=>{});
     }
   }
 }
@@ -148,6 +154,7 @@ export class WorldView {
   readonly ready:Promise<void>;
   readonly skyMat:ShaderMaterial;
   readonly seaMat:ShaderMaterial;
+  readonly seaFields:OceanRender;
   terrain=new Terrain(theatres[0].seed);
   theme=theatres[0];
   level=.94;view=0;orbit=.72;tilt=.16;cameraReset=true;fixed=false;
@@ -205,6 +212,7 @@ export class WorldView {
     app.scene.ambientLight.set(.45,.49,.57);
     app.scene.fog.type=FOG_EXP2;
     this.skyMat=this.environment('sky');this.seaMat=this.environment('sea');
+    this.seaFields=new OceanRender(app.graphicsDevice,this.seaMat);
     this.sky=new Entity('分层大气');app.root.addChild(this.sky);
     this.sky.setLocalScale(155000,155000,155000);
     this.sky.addComponent('render',{type:'sphere',material:this.skyMat,castShadows:false});
@@ -314,7 +322,7 @@ export class WorldView {
     return m;
   }
   private buildSea(){
-    const splits=[[-60000,-18000,2250],[-18000,-2200,650],[-2200,-340,124],[-340,340,18],[340,2200,124],[2200,18000,650],[18000,60000,2250]];
+    const splits=[[-60000,-18000,2250],[-18000,-2200,650],[-2200,-340,124],[-340,-135,17],[-135,135,5],[135,340,17],[340,2200,124],[2200,18000,650],[18000,60000,2250]];
     const axis:number[]=[];
     for(const [a,b,size] of splits){const count=Math.ceil((b-a)/size);for(let i=0;i<count;i++)axis.push(a+(b-a)*i/count);}
     axis.push(60000);
@@ -380,8 +388,15 @@ export class WorldView {
   }
   showDeck(active:boolean){
     this.indoors=active;this.hangar.enabled=active;
+    this.seaFields.reset(active?null:this.terrain.bathymetry());
+    this.terrain.extraWater=active?null:(x,z,scale)=>this.seaFields.height(x,z,scale);
     for(const node of [this.field,this.terrainRoot,this.props,this.sea,this.effects])node.enabled=!active;
     this.configureFlightWeather(this.weather,this.lighting);this.cameraReset=true;
+  }
+  updateWater(plane:Airframe,time:number){
+    const {x,y,z}=plane.position;
+    const altitude=y-this.terrain.water(x,z,time);
+    this.seaFields.advance({time,x,z,altitude,speed:plane.speed,water:altitude<wakeCeiling&&this.terrain.classify(x,z)==='water'},plane.forward.x,plane.forward.z);
   }
   resetMarkers(){for(const m of [...this.targets,...this.rings])m.enabled=false;}
   setAwardLighting(on:boolean){this.rim.light!.intensity=on?1.55:1.22;}
@@ -410,12 +425,12 @@ export class WorldView {
     this.camera.upVector.copyFrom(this.pose.upVector);
     if(this.pose.rotationQuaternion)this.camera.rotationQuaternion.copyFrom(this.pose.rotationQuaternion);
     this.camera.fov=this.pose.fov;this.camera.minZ=this.pose.minZ;this.cameraReset=false;
-    this.followEnvironment(time);
+    this.followEnvironment(time,plane.velocity.x*3.5,plane.velocity.z*3.5);
   }
-  followEnvironment(time:number){
+  private followEnvironment(time:number,leadX:number,leadZ:number){
     const p=this.camera.position;
     this.sea.setPosition(Math.round(p.x/16)*16,0,Math.round(p.z/16)*16);
-    this.updateTiles(p.x,p.z,time);
+    this.updateTiles(p.x,p.z,time,leadX,leadZ);
   }
   private tile(x:number,z:number,step:number){
     const p:number[]=[],c:number[]=[],uv:number[]=[],idx:number[]=[],normals:number[]=[];
@@ -457,26 +472,29 @@ export class WorldView {
     border.forEach((a,i)=>{const j=(i+1)%border.length,b=border[j];idx.push(a,b,first+i,b,first+j,first+i);});
     return meshEntity(this.entry.app,this.terrainRoot,'高程块 '+x+' '+z,p,idx,this.terrainMaterial,normals,c,uv);
   }
-  private updateTiles(x:number,z:number,time:number){
+  private updateTiles(x:number,z:number,time:number,leadX:number,leadZ:number){
     if(time-this.tileClock<.38&&time>=this.tileClock)return;
     this.tileClock=time;
     let built=0;
-    const blocks=this.terrain.blocks.map(block=>({block,range:this.tileRange(block,x,z)})).sort((a,b)=>a.range-b.range);
-    for(const {block,range} of blocks){
+    const initial=this.terrainTiles.size===0;
+    const blocks=this.terrain.blocks.map(block=>{
+      const dx=(block.x+32)*gridStep-worldExtent/2-x,dz=(block.z+32)*gridStep-worldExtent/2-z;
+      const range=Math.hypot(dx,dz);
+      return {block,range,next:Math.min(range,Math.hypot(dx-leadX,dz-leadZ))};
+    }).sort((a,b)=>a.next-b.next);
+    for(const {block,range,next} of blocks){
       const key=block.z*1025+block.x,tile=this.terrainTiles.get(key);
+      if(tile&&range>55000&&next>51000){tile.entity.destroy();this.terrainTiles.delete(key);continue;}
+      if(!tile&&next>50000)continue;
       const detail=Math.max(.79,this.level);
       const near=(tile?.step===1?7600:6450)*detail;
       const mid=(tile?.step===2?10600:9000)*detail;
-      const step=range<near?1:range<mid?2:4;
+      const step=next<near?1:next<mid?2:4;
       if(tile?.step===step)continue;
-      if(built>=12&&tile)continue;
-      if(built>=24&&!tile)break;
+      if(built>=(initial?24:6))continue;
       tile?.entity.destroy();
       this.terrainTiles.set(key,{...block,step,entity:this.tile(block.x,block.z,step)});built++;
     }
-  }
-  private tileRange(block:{x:number;z:number},x:number,z:number){
-    return Math.hypot((block.x+32)*gridStep-worldExtent/2-x,(block.z+32)*gridStep-worldExtent/2-z);
   }
   inspectTerrain(mode:number){
     for(const material of [this.terrainMaterial,this.ridgeMaterial]){

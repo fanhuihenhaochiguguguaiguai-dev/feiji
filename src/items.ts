@@ -43,6 +43,13 @@ export function gearSlot(kind:ItemKind):GearSlot|undefined{
 export const gears=items.filter(i=>gearSlot(i.kind)!==undefined);
 export const stockHooks=(plane:PlaneSpec)=>plane.bombs>0||plane.id==='j20';
 export const groundMount=(plane:PlaneSpec)=>plane.id==='j20'?[0,-.57,.55]:[plane.span*.13,-.87,.48];
+export const minimumPlayerMissiles=10;
+export function missileRails(plane:PlaneSpec){
+  return plane.rails.length||plane.support?plane.rails:[
+    [-plane.span*.19,-.36,plane.length*.045],
+    [plane.span*.19,-.36,plane.length*.045]
+  ];
+}
 export const slotName=(slot:GearSlot,plane:PlaneSpec)=>({
   missile:plane.id==='j20'?'内置弹舱 · 空空组':'翼下 · 空空挂架',
   bomb:plane.id==='j20'?'内置弹舱 · 中央任务挂位':'翼下 · 对地挂架',
@@ -69,7 +76,7 @@ export function missileDamage(plane:PlaneSpec,profile:MissileProfile,level:numbe
   return profile.damage*airframe*(1+level*.12);
 }
 // Every stock enemy survives two impacts from any currently available upgraded air-to-air loadout.
-export const minimumEnemyDurability=1+Math.ceil(2*Math.max(...fleet.flatMap(plane=>
+export const minimumEnemyDurability=71+Math.ceil(2*Math.max(...fleet.flatMap(plane=>
   Object.values(missiles).filter(weapon=>!plane.support&&compatible(plane,itemById[weapon.id]!))
     .map(weapon=>missileDamage(plane,weapon,3)))));
 export function compatible(plane:PlaneSpec,entry:ItemDefinition){
@@ -78,7 +85,7 @@ export function compatible(plane:PlaneSpec,entry:ItemDefinition){
   if(entry.kind==='cannon')return plane.ammo>0&&plane.guns.length>0&&entry.id===cannonID(plane);
   if(entry.kind==='bomb')return stockHooks(plane);
   if(entry.kind==='strike')return stockHooks(plane)&&['a10','f16','hornet','j10','j20','su35','mirage','gripen'].includes(plane.id);
-  if(entry.kind==='missile')return plane.missiles>0&&plane.rails.length>0&&(entry.id!=='skylance'||plane.era==='modern'||plane.era==='stealth');
+  if(entry.kind==='missile')return entry.id!=='skylance'||plane.era==='modern'||plane.era==='stealth';
   return (entry.kind==='radar'||entry.kind==='engine'||entry.kind==='counter')&&!(plane.props.length||plane.era==='early');
 }
 export interface RewardDefinition { id:string;name:string;criteria:string;period?:'day';threshold:number; metric:'sorties'|'kills'|'distance'|'xp'|'victories'; prize:[string,number][]}

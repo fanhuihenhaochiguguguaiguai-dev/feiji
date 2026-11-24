@@ -9,14 +9,14 @@ async function scan(dir) {
 }
 const files=(await scan(root)).filter(f=>!f.endsWith('sw.js'));
 const sha=createHash('sha256');
-for(const file of files)sha.update(await readFile(file));
+for(const file of files)sha.update(file).update(await readFile(file));
 const name='px-sky-remake-'+sha.digest('hex').slice(0,12);
 const offline=files.filter(name=>!name.endsWith('.json')&&!name.endsWith('.md')).map(name=>'./'+name.slice(root.length+1));
 const source=`
 const key=${JSON.stringify(name)};
 const release=${JSON.stringify(offline)};
 self.addEventListener('install', event => event.waitUntil(
-  caches.open(key).then(cache => cache.addAll(['./', ...release])).then(() => self.skipWaiting())
+  caches.open(key).then(cache => cache.addAll(['./', ...release].map(url => new Request(url, {cache:'reload'})))).then(() => self.skipWaiting())
 ));
 self.addEventListener('activate', event => event.waitUntil(
   caches.keys().then(keys => Promise.all(keys.filter(old => old.indexOf('px-sky-remake-') === 0 && old !== key).map(old => caches.delete(old))))
@@ -26,7 +26,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.open(key).then(cache => cache.match('./'))));
+    event.respondWith(fetch(request, {cache:'no-store'}).catch(() => caches.open(key).then(cache => cache.match('./'))));
     return;
   }
   event.respondWith(caches.open(key).then(async cache => {

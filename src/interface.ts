@@ -404,7 +404,7 @@ export class Interface {
       '<div class="mount-station">'+icon(slot==='cannon'?'cannon':slot==='bomb'?'bomb':slot==='missile'?'missile':'tools')+'<div><strong>'+slotName(slot,a)+'</strong>'+
       '<p>'+(itemById[active]?.name??(weapon?'空挂位':'原厂组件'))+(weapon?' · '+quantity+(slot==='cannon'?' 发':' 枚'):'')+'</p></div></div>'+
       '<dl class="mount-counts">'+metric('空空弹',String(cfg.airMissiles))+metric('航炮',String(cfg.rounds))+metric('对地弹药',String(cfg.groundStores))+'</dl>'+
-      (a.id==='j20'&&slot==='bomb'?'<p>中央挂位装配对地弹药时，占用四枚空空弹的内部空间。固定航炮照常装填。</p>':'')+
+      (a.id==='j20'&&slot==='bomb'?'<p>中央挂位可用于实验空域。正式空战每次出击至少装填 10 枚空空导弹，固定航炮按机型补满。</p>':'')+
       (slot==='missile'&&quantity?'<p>出击时自动补到本机配额。购买的是型号使用权，可任意切回原厂弹。</p>':'')+
       (slot==='bomb'&&quantity?'<button data-unmount="bomb">拆卸对地武器</button>':'')+
       (fit[slot]?'<button data-reset-gear="'+slot+'">恢复原厂</button>':'')+
@@ -640,7 +640,7 @@ export class Interface {
       '<div class="debrief-main glass"><div class="score"><span>综合得分</span><b>'+money(r.score)+'</b><strong>'+r.grade+'</strong></div><dl>'+
       metric('击毁目标',String(r.kills))+metric('任务时长',clock(r.time))+metric('航炮命中',pct(r.accuracy))+metric('导弹命中',pct(r.missileAccuracy))+
       metric('炸弹命中',pct(r.bombAccuracy))+metric('航行里程',(r.distance/1000).toFixed(2)+' 公里')+metric('最高速度',Math.round(r.peak*3.6)+' 公里/时')+
-      metric('最高高度',Math.round(r.altitude)+' 米')+metric('机体状态',r.hp>0?'∞':'失事')+metric('成功反制',String(r.evaded))+'</dl>'+
+      metric('最高高度',Math.round(r.altitude)+' 米')+metric('机体状态',r.hp>0?money(Math.ceil(r.hp))+' 耐久':'失事')+metric('成功反制',String(r.evaded))+'</dl>'+
       '<div class="result-types">'+Object.entries(r.types).map(([n,v])=>n+' × '+v).join(' · ')+'</div><div class="awards">'+picture('credits')+'<span>+'+money(award)+' 信用点</span>'+picture('xp')+'<span>+'+money(earned)+' EXP</span></div>'+gain+'</div>'+
       '<div class="dialog-actions"><button data-do="leave">返回大厅</button><button class="gold" data-do="restart">'+(r.win?'再次挑战':'再次出击')+'</button></div></section>';
     const score=overlay.querySelector<HTMLElement>('.score b');
@@ -680,8 +680,9 @@ export class Interface {
       el('flight-time').textContent=clock(game.time);el('throttle').textContent=Math.round(player.throttle*100)+'%';
       el('burn').textContent=player.boost>.13?'加力中':'';
       el('boost').classList.toggle('on',player.boost>.13);
-      el('missile').dataset.lock=game.lockProgress>=1?'ready':game.lockProgress>.15?'tracking':'none';el('hp').textContent='∞';el('hp').title='基础结构 '+player.maxHp;
-      el('hp-bar').style.width='100%';el('spares').hidden=!game.spares;el('spare-count').textContent=String(game.spares);
+      el('missile').dataset.lock=game.lockProgress>=1?'ready':game.lockProgress>.15?'tracking':'none';
+      el('hp').textContent=String(Math.ceil(player.hp));el('hp').title='耐久上限 '+player.maxHp;
+      el('hp-bar').style.width=player.hp/player.maxHp*100+'%';el('spares').hidden=!game.spares;el('spare-count').textContent=String(game.spares);
       el('hp-bar').classList.toggle('impact',game.time-player.hitTime<.32);
       el('ammo').textContent=String(player.cannon);el('missiles').textContent=String(player.missiles);el('missile').title=itemById[game.missile.id]?.name??'';el('bombs').textContent=String(player.bombs);
       el('gear').classList.toggle('on',player.gearTarget>0);

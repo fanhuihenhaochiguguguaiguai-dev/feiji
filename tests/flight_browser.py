@@ -16,6 +16,7 @@ parser.add_argument("--armory",action="store_true")
 parser.add_argument("--coast",action="store_true")
 parser.add_argument("--sights",action="store_true")
 parser.add_argument("--all-air",action="store_true")
+parser.add_argument("--water-drone",action="store_true")
 parser.add_argument("--command-map",action="store_true")
 parser.add_argument("--lobby-baseline",action="store_true")
 parser.add_argument("--gallery",action="store_true")
@@ -70,9 +71,9 @@ with sync_playwright() as p:
     errors=[]
     page.on("pageerror",lambda e:(errors.append(str(e)),print("pageerror",str(e),flush=True)))
     page.on("console",lambda m:(errors.append(m.text),print("console",m.text[:3200],flush=True)) if m.type=="error" else None)
-    page.add_init_script("""if(!localStorage.getItem("pixel-sky-af-v4"))localStorage.setItem("pixel-sky-af-v4",JSON.stringify({
+    page.add_init_script("""if(!sessionStorage.getItem('qa-no-journal')&&!localStorage.getItem("pixel-sky-af-v4"))localStorage.setItem("pixel-sky-af-v4",JSON.stringify({
       credits:2600,unlocked:['j20','f16','hornet','dr1','a10','j10','spitfire'],records:[],campaign:%s,selected:%s,
-      settings:{backend:%s,quality:'medium',mute:true} }));""" % (10 if args.all_air else 3 if args.armory else 4,json.dumps(args.airframe or ("j20" if args.armory else "f16")),json.dumps(args.backend)))
+      settings:{backend:%s,quality:'medium',mute:true} }));""" % (30 if args.water_drone else 10 if args.all_air else 3 if args.armory else 4,json.dumps(args.airframe or ("j20" if args.armory else "f16")),json.dumps(args.backend)))
     page.goto(BASE,wait_until="domcontentloaded")
     ready(page,"home")
     assert page.locator("#application").get_attribute("data-backend")==args.backend
@@ -80,6 +81,84 @@ with sync_playwright() as p:
          platform:navigator.userAgent, adapter:flightQA.engine.graphicsDevice.adapterInfo})"""),flush=True)
     outcomes={}
     record(page,"a-lobby",outcomes)
+    if args.water_drone:
+        page.wait_for_function("""()=>new Promise(resolve=>{
+            const db=indexedDB.open('cangqiong-pilot',1);
+            db.onsuccess=()=>{
+                const get=db.result.transaction('snapshots').objectStore('snapshots').get('current');
+                get.onsuccess=()=>{resolve(get.result?.savedAt>0&&JSON.parse(get.result.data).campaign===30);db.result.close();};
+            };
+            db.onerror=()=>resolve(false);
+        })""")
+        page.evaluate("()=>{sessionStorage.setItem('qa-no-journal','1');localStorage.removeItem('pixel-sky-af-v4');localStorage.removeItem('pixel-sky-af-v4-recovery')}")
+        page.reload(wait_until='domcontentloaded')
+        ready(page,'home')
+        assert page.evaluate("flightQA.p.campaign===30 && flightQA.p.credits===2600 && flightQA.p.version===9")
+        page.locator('#front [data-nav="missions"]').tap()
+        ready(page,'missions')
+        page.locator('[data-chapter="2"]').tap()
+        page.locator('[data-stage-pick="s24"]').tap()
+        page.locator('#mission-launch').tap()
+        ready(page,'sortieprep')
+        page.locator('[data-confirm-sortie]').tap()
+        ready(page,'flight')
+        contact=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie;
+            return {kind:s.op.kind,ground:s.targetPoints.length,missiles:s.player.missiles,
+              enemies:s.enemies.flatMap((e,i)=>e.alive?[{type:e.type.id,hp:e.hp,model:g.foes[i].loaded}]:[])};
+        }""")
+        assert contact['kind']=='air' and contact['ground']==0 and contact['missiles']>=10,contact
+        assert any(e['type']==e['model']=='shade-drone' and e['hp']>=487 for e in contact['enemies']),contact
+        page.screenshot(path=OUT/'chapter-three-drones.png',timeout=70000)
+        wreck=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie,e=s.enemies.find(e=>e.alive&&e.type.id==='shade-drone');
+            g.state='pause';g.input.on=false;
+            e.velocity.y=0;
+            const y=e.position.y;const orientation=e.orientation.clone();
+            s.damage(e,e.hp,0);
+            for(let i=0;i<45;i++)s.advanceWrecks(1/90);
+            return {steps:s.wreckPhysics?.steps??0,drop:y-e.position.y,rotated:!orientation.equals(e.orientation)};
+        }""")
+        assert wreck['steps']>=45 and wreck['drop']>1 and wreck['rotated'],wreck
+        print('Havok rigid wreck',wreck,flush=True)
+        page.evaluate("()=>flightQA.leave()")
+        ready(page,'home')
+        page.evaluate("()=>flightQA.begin('free',0,false,{region:0,weather:1,lighting:1})")
+        ready(page,'flight')
+        before=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie,p=s.player,w=g.world;
+            let x=65,z=1890;
+            if(s.world.classify(x,z)!=='water'){x=5500;z=6200;}
+            p.reset(x,s.world.water(x,z,s.time)+10,z,0,p.type.trim);
+            p.gear=p.gearTarget=0;p.throttle=.74;
+            w.cameraReset=true;
+            return {time:s.time,surface:s.world.classify(x,z),foam:w.seaFields.details().foam};
+        }""")
+        assert before['surface']=='water' and before['foam']==0,before
+        page.wait_for_function("t=>flightQA.sortie.time>=t+1.1 && flightQA.world.seaFields.details().foam>100",arg=before['time'],timeout=45000)
+        page.evaluate("()=>{flightQA.state='pause';flightQA.input.on=false}")
+        wake=page.evaluate("""()=>{
+            const g=flightQA,p=g.sortie.player;
+            return {...g.world.seaFields.details(),altitude:p.position.y,speed:p.speed};
+        }""")
+        assert wake['worker'] and wake['altitude']>0,wake
+        page.screenshot(path=OUT/'sea-wake.png',timeout=70000)
+        (OUT/'water-drone.json').write_text(json.dumps({'before':before,'wake':wake,'chapter':contact,'wreck':wreck},ensure_ascii=False,indent=2))
+        print('sea wake and chapter three',wake,contact,flush=True)
+        loss=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie,p=s.player,e=s.enemies.find(e=>e.alive);
+            p.reset(0,2800,0,0,0);p.hp=1;e.reset(0,2800,120,0,0);e.gunsAt=0;
+            s.fire(e,'gun');
+            for(let i=0;i<45&&s.active;i++)s.project(1/90);
+            g.state='flight';
+            return {reason:s.reason,hp:p.hp};
+        }""")
+        assert loss=={'reason':'战机被击落','hp':0},loss
+        ready(page,'result')
+        assert '战机被击落' in page.locator('.debrief-title').inner_text()
+        print('enemy fire ended the sortie',loss,flush=True)
+        page.locator('[data-do="leave"]').tap()
+        ready(page,'home')
     if args.armory:
         page.locator('.sortie-action').tap()
         ready(page,'sortieprep')
@@ -226,7 +305,7 @@ with sync_playwright() as p:
         page.evaluate(clear_wave)
         ready(page,'result')
         assert '任务胜利' in page.locator('.debrief-title').inner_text()
-        assert page.evaluate("flightQA.p.campaign===11 && flightQA.p.completed.includes('s10')")
+        assert page.evaluate("n=>flightQA.p.campaign===n && flightQA.p.completed.includes('s10')",30 if args.water_drone else 11)
         page.locator('[data-do="leave"]').tap()
         ready(page,'home')
         def endless():

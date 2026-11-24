@@ -1,4 +1,5 @@
 import { waves } from './wave-field';
+import { heightPerByte, oceanSize, swellPeriod, wakeExtent } from './ocean-solver';
 
 const shared=['eye','sunDir','horizon','zenith','sunColor','sea','clock','cover','cloudBase','quality','clouds','exposure','waveHeight'] as const;
 const vectorNames=new Set(['eye','sunDir','horizon','zenith','sunColor','sea']);
@@ -17,6 +18,11 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     (level===undefined?'textureSample':'textureSampleLevel')+'('+name+','+name+'Sampler,'+uv+(level===undefined?'':','+level)+')':
     'texture2D('+name+','+uv+')';
   const num=(n:number)=>Number.isInteger(n)?n.toFixed(1):String(n);
+  const waterSamplers=['spectrumTex','pressureTex'];
+  const textures=(names:string[])=>names.map(n=>gpu?`var ${n}:texture_2d<f32>;\nvar ${n}Sampler:sampler;\n`:`uniform sampler2D ${n};`).join('');
+  const pressureCoords=(point:string,origin:string)=>`(${point}-${origin}.xy)/${num(wakeExtent)}+${v2}(.5/${num(oceanSize)})`;
+  const bandCoords=(point:string)=>`${point}/${num(swellPeriod)}+${v2}(.5/${num(oceanSize)})`;
+  const height=(channel:string)=>`(${channel}*255.-128.)*${heightPerByte}`;
   const waveCode=waves.map((w,i)=>{
     const mag=Math.hypot(w.x,w.z);
     return let_('w'+i,f,`dot(p,${v2}(${num(w.x)},${num(w.z)}))-${u('clock')}*${num(w.rate)}`)+
@@ -24,14 +30,17 @@ export function environmentSource(gpu:boolean,ocean:boolean){
       `point.z+=cos(w${i})*${num(w.height*w.steepness*w.z/mag)}*${u('waveHeight')};`;
   }).join('');
   const pos=gpu?'input.position':'position',world=u('matrix_model'),vp=u('matrix_viewProjection');
-  const vertexBody=let_('point',v3,pos,true)+(ocean?let_('p',v2,`(${world}*${v4}(point,1.)).xz`)+waveCode:'')+
+  const vertexBody=let_('point',v3,pos,true)+(ocean?let_('p',v2,`(${world}*${v4}(point,1.)).xz`)+waveCode+
+    let_('surface',v4,sample('spectrumTex',bandCoords('p'),'0.'))+
+    let_('localWave',v4,sample('pressureTex',pressureCoords('p',u('pressureOrigin')),'0.'))+
+    `point.y+=${height('surface.r')}*${u('waveHeight')}+${height('localWave.r')}*${u('pressureOrigin')}.z;`:'')+
     (gpu?'output.vWorld':'vWorld')+`=(${world}*${v4}(point,1.)).xyz;`+
     (gpu?'output.position':'gl_Position')+`=${vp}*${world}*${v4}(point,1.);`;
   const vertex=gpu?`
     attribute position:${v3};
     uniform matrix_model:${m4};
     uniform matrix_viewProjection:${m4};
-    ${ocean?'uniform clock:f32;\n    uniform waveHeight:f32;':''}
+    ${ocean?'uniform clock:f32;\n    uniform waveHeight:f32;\n    uniform pressureOrigin:vec3f;'+textures(waterSamplers):''}
     varying vWorld:${v3};
     @vertex fn vertexMain(input:VertexInput)->VertexOutput{
       var output:VertexOutput;
@@ -39,9 +48,10 @@ export function environmentSource(gpu:boolean,ocean:boolean){
       return output;
     }`:
     `precision highp float;attribute ${v3} position;uniform ${m4} matrix_model;uniform ${m4} matrix_viewProjection;
-    ${ocean?'uniform float clock;uniform float waveHeight;':''}varying ${v3} vWorld;void main(){${vertexBody}}`;
-  const samplers=ocean?['weatherTex','depthTex','waveTex']:['weatherTex','deckDome'];
-  const declarations=samplers.map(n=>gpu?`var ${n}:texture_2d<f32>;\nvar ${n}Sampler:sampler;\n`:`uniform sampler2D ${n};`).join('');
+    ${ocean?'uniform float clock;uniform float waveHeight;uniform vec3 pressureOrigin;'+textures(waterSamplers):''}varying ${v3} vWorld;void main(){${vertexBody}}`;
+  const samplers=ocean?['weatherTex','depthTex','waveTex',...waterSamplers]:['weatherTex','deckDome'];
+  const declarations=textures(samplers)+(ocean?(gpu?'uniform pressureOrigin:vec3f;\nuniform washCenter:vec4f;\nuniform washTrack:vec2f;':
+    'uniform vec3 pressureOrigin;uniform vec4 washCenter;uniform vec2 washTrack;'):'');
   const floatHead=shared.map(n=>gpu?'uniform '+n+':'+type(n)+';\n':'uniform '+type(n)+' '+n+';').join('');
   const sky=fn('airRadiance',[['dir',v3],['sun',v3],['low',v3],['high',v3],['solar',v3]],v3,`
     ${let_('angle',f,'clamp(dot(dir,sun),-1.,1.)')}
@@ -139,6 +149,10 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     ${let_('ripple',v2,sample('waveTex',`(p+${v2}(p.y*.31,-p.x*.17))/28.+${v2}(.014,-.019)*clock`)+`.rg-${v2}(.5)`)}
     ${let_('gradient',v2,'swell*(.057+.09*wind.b)+cap*.093*detail+ripple*.064*detail*detail',true)}
     ${slope}
+    ${let_('spectrum',v4,sample('spectrumTex',bandCoords('p')))}
+    ${let_('localWave',v4,sample('pressureTex',pressureCoords('p',u('pressureOrigin'))))}
+    ${let_('wakeMask',f,`${u('pressureOrigin')}.z*(1.-smoothstep(200.,980.,range))`)}
+    gradient+=(spectrum.ba*255.-${v2}(128.))*.0018*waveHeight+(localWave.ba*255.-${v2}(128.))*.0035*wakeMask;
     ${let_('norm',v3,`normalize(${v3}(-gradient.x,1.,-gradient.y))`)}
     ${let_('reflected',v3,'reflect(-view,norm)')}
     ${let_('fresnel',f,'.026+.866*pow(1.-clamp(dot(norm,view),.0,1.),5.)')}
@@ -155,8 +169,21 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     ${let_('foam',f,'(1.-smoothstep(3.,35.,depth))*(1.-smoothstep(8.,155.,abs(shore)))*smoothstep(.68,.96,wash)*smoothstep(.36,.72,wind.g+cap.r*.38)*(1.-smoothstep(580.,1550.,range)*.67)')}
     ${let_('breakers',f,'smoothstep(.071,.167,cap.r+swell.g*.32+ripple.g*.15)*smoothstep(.39,.67,wind.g)*detail*(1.-smoothstep(180.,1430.,range))*(.27+.36*waveHeight)')}
     ${let_('water',v3,`(seaBed+volume)*cloudShadow*(1.-fresnel)+returnSky*fresnel+.41*glint*sunColor*sunColor+${v3}(.48,.66,.76)*(foam*.57+breakers*.48)`)}
+    ${let_('wakeFoam',f,'wakeMask*smoothstep(.075,.78,localWave.g+.41*abs(localWave.r-.502))')}
+    ${let_('wakePosition',v2,`p-${u('washCenter')}.xy`)}
+    ${let_('along',f,`dot(wakePosition,${u('washCenter')}.zw)`)}
+    ${let_('crosswind',f,`dot(wakePosition,${v2}(${u('washCenter')}.w,-${u('washCenter')}.z))`)}
+    ${let_('across',f,'abs(crosswind)')}
+    ${let_('pulseRadius',f,`length(${v2}(crosswind*.83,along*.92-16.))+swell.r*7.2+cap.g*4.2+2.6*sin(crosswind*.077+along*.032)`)}
+    ${let_('edgeWidth',f,'abs(across-(13.+max(0.,-along)*.38+cap.r*4.2))')}
+    ${let_('rippleFade',f,'1.-smoothstep(1.4,6.4,footprint)')}
+    ${let_('pressureRings',f,'pow(.5+.5*sin(pulseRadius*.40-clock*5.8+wind.g*.42),3.)*smoothstep(18.,30.,pulseRadius)*(1.-smoothstep(48.,100.,pulseRadius))*smoothstep(-38.,14.,along)')}
+    ${let_('slipstream',f,'pow(.5+.5*cos(edgeWidth*.53),3.)*(1.-smoothstep(3.,12.,edgeWidth))*(1.-smoothstep(2.,16.,along))*smoothstep(-170.,-17.,along)')}
+    ${let_('brokenCrests',f,'mix(.43,1.,smoothstep(-.17,.18,cap.g+ripple.r*.58+.15*sin(pulseRadius*.18+crosswind*.15)))')}
+    ${let_('airWash',f,`${u('washTrack')}.x*exp(-max(0.,clock-${u('washTrack')}.y)*2.1)*smoothstep(.3,2.6,depth)*rippleFade*(pressureRings*.78*brokenCrests+slipstream*.73)`)}
+    ${let_('foamLit',v3,`water+${v3}(.48,.70,.84)*(wakeFoam*.88+airWash*.67)+${v3}(.30,.43,.50)*spectrum.g*detail*.24`)}
     ${let_('veil',f,'(1.-exp(-range*.000043))*(1.-smoothstep(400.,4900.,eye.y)*.38)')}
-    return ${v4}(film(mix(water,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil),exposure),1.);
+    return ${v4}(film(mix(foamLit,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil),exposure),1.);
   `;
   const args:[string,string][]=[['coords',v3],...shared.map(n=>[n,type(n)] as [string,string])];
   const shade=fn('renderWorld',args,v4,ocean?seaBody:skyBody);

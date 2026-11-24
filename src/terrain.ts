@@ -57,12 +57,14 @@ export class Terrain {
   private readonly source:TerrainSource;
   readonly blocks:TerrainSource['blocks'];
   wavesScale=1;
+  extraWater:((x:number,z:number,scale:number)=>number)|null=null;
   constructor(readonly seed:number){
     const source=sources.get(seed);
     if(!source)throw new Error('地貌未载入 · '+seed);
     this.source=source;this.blocks=source.blocks;
   }
   get flightCeiling(){return Math.max(this.source.max,120,this.wavesScale*2);}
+  bathymetry(){return this.source.heights;}
   node(i:number,j:number){return this.source.heights[j*gridSize+i]*.25;}
   elevation(x:number,z:number){
     const u=(x+worldExtent*.5)/gridStep,v=(z+worldExtent*.5)/gridStep;
@@ -97,9 +99,16 @@ export class Terrain {
     return false;
   }
   water(x:number,z:number,time:number){
+    // Invert the horizontal Gerstner displacement at the queried world point.
+    let ox=0,oz=0;
+    for(const w of waves){
+      const d=Math.cos(w.x*x+w.z*z-time*w.rate)*w.height*w.steepness/Math.hypot(w.x,w.z);
+      ox+=d*w.x;oz+=d*w.z;
+    }
+    x-=ox*this.wavesScale;z-=oz*this.wavesScale;
     let y=0;
     for(const wave of waves)y+=Math.sin(wave.x*x+wave.z*z-time*wave.rate)*wave.height;
-    return y*this.wavesScale;
+    return y*this.wavesScale+(this.extraWater?.(x,z,this.wavesScale)??0);
   }
   runway(x:number,z:number){return Math.abs(x-base.x)<base.half-3&&z>base.near&&z<base.far;}
   classify(x:number,z:number){

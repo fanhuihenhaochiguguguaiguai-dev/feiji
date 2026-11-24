@@ -3,7 +3,7 @@ import './v7-ui.css';
 declare const __FLAGSHIP_QA__:boolean;
 import { Game, openEngine } from './engine';
 import { el } from './interface';
-import { loadProfile } from './profile';
+import { loadPersistentProfile } from './profile';
 import { loadTerrain } from './terrain';
 import { theatres } from './data';
 
@@ -11,7 +11,7 @@ async function start(){
   let activeBackend='';
   const blocked=()=>{try{return sessionStorage.getItem('pixel-sky-webgpu-fallback')==='1';}catch{return false;}};
   try {
-    const profile=loadProfile();
+    const profile=await loadPersistentProfile();
     const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()?'gl':profile.settings.backend);
     activeBackend=entry.backend;
     const initial=theatres[0];
@@ -29,7 +29,7 @@ async function start(){
     }
     if(__FLAGSHIP_QA__)performance.mark('flagship-ready');
     if('serviceWorker'in navigator&&isSecureContext){
-      void navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).catch(()=>{});
+      void navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     }
   } catch(error) {
     if(activeBackend==='gpu'&&!blocked()){

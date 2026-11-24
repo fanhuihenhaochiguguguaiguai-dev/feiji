@@ -4,8 +4,9 @@ import { advanceFlight, Airframe, FLIGHT_STEP, ahead, above, idle, type Controls
 import { base, clamp, Terrain } from './terrain';
 import { aircraftContact, ellipsoid, terrainContact } from './contact';
 import { cannonFor, guidedStrike, gunCycle, gunDamage, gunSight, missileCycle, releaseDropSpeed, roundCapacity, standardGravity, thrustDuration } from './ordnance';
-import { groundMount, missiles, missileDamage, minimumEnemyDurability,type MissileProfile } from './items';
+import { groundMount, missiles, missileDamage, missileRails, minimumEnemyDurability, minimumPlayerMissiles,type MissileProfile } from './items';
 import type { CombatConfiguration } from './profile';
+import type { WreckPhysics } from './wreck-physics';
 import { choosePass,enemyTuning,planPass,Tactic } from './tactics';
 import { CountermeasureSystem, MissileGuidance, MissileWarningSystem, type DefenseCue, type DefenseKind, type GuidedTrack } from './defense';
 const delta=new Vector3(),local=new Vector3(),orientation=Quaternion.Identity(),inverted=Quaternion.Identity();
@@ -17,11 +18,11 @@ export type Surface='water'|'sand'|'rock'|'soil'|'grass'|'runway'|'structure';
 export type FlightEvent={kind:'gun'|'missile'|'bomb'|'trail'|'hit'|'breakup'|'impact'|'lock'|'warn'|'wave'|'counter';at:Vector3;side:number;scale?:number;surface?:Surface;weapon?:ProjectileKind|'crash';track?:number;target?:Airframe;strike?:Vector3;terminal?:boolean;direction?:Vector3;profile?:MissileProfile;defense?:DefenseKind;cue?:DefenseCue};
 export interface WeaponTrack extends GuidedTrack {
   live:boolean;kind:ProjectileKind;owner:Airframe|null;target:Airframe|null;generation:number;
-  guidedGround:boolean;aim:Vector3;
+  guidedGround:boolean;aim:Vector3;damage:number;origin:Vector3;
   position:Vector3;previous:Vector3;velocity:Vector3;direction:Vector3;time:number;age:number;smokeAt:number;
 }
 const tracks=(kind:ProjectileKind,n:number):WeaponTrack[]=>Array.from({length:n},()=>({live:false,kind,owner:null,target:null,generation:0,
-  guidedGround:false,aim:new Vector3(),position:new Vector3(),previous:new Vector3(),velocity:new Vector3(),direction:new Vector3(),time:0,age:0,smokeAt:0,
+  guidedGround:false,aim:new Vector3(),damage:0,origin:new Vector3(),position:new Vector3(),previous:new Vector3(),velocity:new Vector3(),direction:new Vector3(),time:0,age:0,smokeAt:0,
   serial:0,seeker:'radar',profile:missiles.interceptor,guidance:'tracking',decoy:null,decoySerial:0,reacquireAt:0}));
 export interface Debrief {
   operation:Operation;win:boolean;reason:string;time:number;distance:number;peak:number;altitude:number;hp:number;
@@ -86,14 +87,16 @@ export class Sortie {
   readonly aiPoint=new Vector3();
   readonly fireCursor={gun:0,missile:0,bomb:0};
   readonly enemyKit;
-  constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void,world?:Terrain){
+  constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void,world?:Terrain,public wreckPhysics:WreckPhysics|null=null){
+    if(!loadout.diagnostics&&op.kind!=='air'&&op.kind!=='free')throw new Error('正式任务必须使用空战规则');
     const config=loadout.configuration;
     this.missile=config?.missile??{...missiles.interceptor,damage:missileDamage(type,missiles.interceptor,0)};
     this.spares=config?.spares??0;this.groundWeapon=config?.groundWeapon??'bomb';
     this.defense=new CountermeasureSystem(type.era,type.safety,config?.defense??0);
     this.weapons=[];
     if(config?.rounds??type.ammo)this.weapons.push('gun');
-    if(config?.airMissiles??type.missiles)this.weapons.push('missile');
+    const airStock=type.support?0:Math.max(minimumPlayerMissiles,config?.airMissiles??type.missiles+loadout.stores);
+    if(airStock)this.weapons.push('missile');
     if(config?.groundStores??type.bombs)this.weapons.push('bomb');
     this.weapon=op.kind==='ground'&&this.weapons.includes('bomb')?'bomb':this.weapons[0]??'gun';
     this.loadout=loadout;this.difficulty=difficulties[loadout.rank]??difficulties[1];
@@ -106,7 +109,7 @@ export class Sortie {
     this.world=world??new Terrain(theatres[op.region].seed);this.radar=config?.radar??(loadout.radar?8500:6400);
     const p=this.player=new Airframe(0,type,0);
     this.friendlies=[p,this.ally];
-    p.roundsLimit=config?.rounds??roundCapacity(type,loadout.stores);p.missilesLimit=config?.airMissiles;p.bombsLimit=config?.groundStores;
+    p.roundsLimit=config?.rounds??roundCapacity(type,loadout.stores);p.missilesLimit=airStock;p.bombsLimit=config?.groundStores;
     p.maxHp=type.durability;p.enginePower=config?.engine??(1+loadout.engine*.06);
     p.handling=config?.grip??1;p.firepower=config?.gun??1;p.storesBonus=config?.stores??loadout.stores;
     const original=type.props.length?Math.max(128,type.trim*2.1):390;
@@ -145,7 +148,8 @@ export class Sortie {
     }
     const mixed=type.props.length||type.era==='early';
     const roster=mixed?flightSets[type.era]:engagement?.roster;
-    this.enemyKit=[...new Set([...(roster??flightSets[type.era]??flightSets.modern),...(engagement?.ace?[engagement.ace]:[])])];
+    this.enemyKit=[...new Set([...(roster??flightSets[type.era]??flightSets.modern),...(engagement?.ace?[engagement.ace]:[]),
+      ...(engagement?.drones?['shade-drone']:[])])];
     if(op.kind==='air'||op.kind==='escort'){
       this.total=this.waves.reduce((a,b)=>a+b,0);this.spawn();
     }else if(this.endless)this.spawn();
@@ -170,6 +174,7 @@ export class Sortie {
       e.type=byAircraft(this.enemyKit[(i+rosterShift)%this.enemyKit.length]);
       const ace=boss&&i===count-1;
       if(ace)e.type=byAircraft(plan?.ace??this.enemyKit[(rosterShift+this.enemyKit.length-1)%this.enemyKit.length]);
+      else if(plan?.drones&&i<count-1&&i>=count-plan.drones-1)e.type=byAircraft('shade-drone');
       const skill=this.pilots[i]=ace?aceSkill:normal;
       e.ace=ace;e.experience=skill.experience;
       e.maxHp=minimumEnemyDurability+Math.round(2.3*(Math.min(60,step)-1)+64*Math.log1p(Math.max(0,step-60)/18)+
@@ -272,7 +277,8 @@ export class Sortie {
     const t=p.type;
     if(!p.alive)return;
     if(weapon==='gun'&&(!p.cannon||this.time<p.gunsAt||!t.guns.length))return;
-    if(weapon==='missile'&&(!p.missiles||!target?.alive||this.time<p.missileAt||!t.rails.length))return;
+    const rails=weapon==='missile'?missileRails(t):null;
+    if(rails&&(!p.missiles||!target?.alive||this.time<p.missileAt||!rails.length))return;
     if(weapon==='bomb'&&(!p.bombs||this.time<p.bombAt))return;
     const guided=weapon==='bomb'&&p.side===0&&this.groundWeapon==='shorebolt';
     const ground=guided?this.groundLock():null;
@@ -283,6 +289,9 @@ export class Sortie {
     q.serial=++this.shotSerial;q.guidance='tracking';q.decoy=null;q.decoySerial=0;q.reacquireAt=0;
     q.profile=p.side===0?this.missile:p.type.era==='cold'||(q.serial+p.role)%3===0?missiles.flarewing:
       p.experience===3&&p.type.safety?missiles.skylance:missiles.interceptor;
+    q.origin.copyFrom(p.position);
+    q.damage=weapon==='missile'?(p.side===0?q.profile.damage:missileDamage(t,q.profile,0)*.61*p.firepower):
+      weapon==='gun'?gunDamage(t,p.firepower)*(p.side===0?1:.87):guided?guidedStrike.damage*(this.loadout.configuration?.missilePower??1):125;
     q.seeker=q.profile.seeker;q.guidedGround=guided;
     if(ground)q.aim.copyFrom(ground.position);
     q.direction.copyFrom(p.forward);
@@ -294,7 +303,7 @@ export class Sortie {
       if(p.side===0)this.stats.fired++;
     }else if(weapon==='missile'){
       p.missileAt=this.time+(p.side===0?missileCycle(this.loadout.configuration?.missileRate):6.4);p.missiles--;
-      hardpoint=t.rails[p.missiles%t.rails.length];q.time=q.profile.life;
+      hardpoint=rails![p.missiles%rails!.length];q.time=q.profile.life;
       q.velocity.copyFrom(q.direction).scaleInPlace(q.profile.speed*.39);
       if(p.side===0){this.stats.missile++;this.lastPracticalLaunch=q.profile.id;}
       else if(target===this.player)this.warning.fired(this.time);
@@ -370,11 +379,10 @@ export class Sortie {
         // Resolve the contact on the body for cues, even when the fuse went off outside it.
         q.position.subtractToRef(struck.position,delta);delta.normalize();
         eventAt.copyFrom(struck.position).addInPlaceFromFloats(delta.x*struck.type.span*.24,delta.y*struck.type.span*.12,delta.z*struck.type.length*.28);
-        const strength=missile?(player?q.profile.damage:missileDamage(owner.type,q.profile,0)*.61*owner.firepower):
-          gunDamage(owner.type,owner.firepower)*(player?1:.87);
-        const terminal=struck!==this.player&&struck.hp<=strength*(owner.side===1?this.difficulty.enemyPower:1);
+        const strength=q.damage;
+        const terminal=struck.hp<=this.effectiveDamage(struck,strength,owner.side);
         this.notify({kind:'hit',at:q.position,strike:eventAt,side:owner.side,track:q.serial,weapon:q.kind,profile:missile?q.profile:undefined,scale,target:struck,terminal,direction:q.direction});
-        this.damage(struck,strength,owner.side,owner.position,eventAt);
+        this.damage(struck,strength,owner.side,q.origin,eventAt);
       }else if(decoy){
         this.notify({kind:'hit',at:q.position,side:owner.side,track:q.serial,weapon:'missile',scale:.53});
       }else{
@@ -382,10 +390,10 @@ export class Sortie {
         if(player&&bomb&&!q.guidedGround){
           for(const target of this.targetPoints){
             if(!target.alive||Vector3.DistanceSquared(q.position,target.position)>81**2)continue;
-            this.damageTarget(target,125);
+            this.damageTarget(target,q.damage);
             ground=target;
           }
-        }else if(ground)this.damageTarget(ground,q.guidedGround?guidedStrike.damage*(this.loadout.configuration?.missilePower??1):gunDamage(owner.type,owner.firepower));
+        }else if(ground)this.damageTarget(ground,q.damage);
         if(ground){
           if(bomb)this.stats.bombHit++;else if(missile)this.stats.missileHit++;else this.stats.hit++;
           this.notify({kind:'impact',at:q.position,side:0,track:q.serial,weapon:q.kind,surface:'structure',scale:bomb?1.35:.73,direction:q.direction});
@@ -399,21 +407,25 @@ export class Sortie {
     target.alive=false;this.lost++;this.stats.kills++;
     this.stats.types['地面目标']=(this.stats.types['地面目标']??0)+1;
   }
+  private effectiveDamage(p:Airframe,raw:number,from:number){
+    const armor=p===this.player?1-.065*this.loadout.armor:1;
+    return raw*armor*(from===1?this.difficulty.enemyPower:1);
+  }
   damage(p:Airframe,raw:number,from:number,source?:Vector3,point?:Vector3){
     if(!p.alive)return;
-    const armor=p===this.player?1-.065*this.loadout.armor:1;
-    if(p!==this.player)p.hp=Math.max(0,p.hp-raw*(from===1?this.difficulty.enemyPower:1));
-    if(p!==this.player&&point){
+    const amount=this.effectiveDamage(p,raw,from);
+    p.hp=Math.max(0,p.hp-amount);
+    if(point){
       point.subtractToRef(p.position,localStrike);
       p.orientation.conjugateToRef(inverted);
       localStrike.rotateByQuaternionToRef(inverted,localStrike);
       const zone=Math.abs(localStrike.x)>p.type.span*.135?localStrike.x>0?'right':'left':localStrike.z>0?'engine':'body';
-      p.damage[zone]=clamp(p.damage[zone]+raw/p.maxHp*1.3,0,1);
+      p.damage[zone]=clamp(p.damage[zone]+amount/p.maxHp*1.3,0,1);
     }
     p.hitTime=this.time;
-    p.hitIntensity=clamp(raw/72,.28,1)*armor;
+    p.hitIntensity=clamp(amount/115,.20,1);
     if(source)source.subtractToRef(p.position,p.hitFrom).normalize();
-    if(!p.hp)this.destroy(p,from,false,p.id===9?'运输机未能抵达安全区':'机体失去控制');
+    if(!p.hp)this.destroy(p,from,false,p===this.player?'战机被击落':p.id===9?'运输机未能抵达安全区':'机体失去控制');
   }
   destroy(p:Airframe,from:number,ground:boolean,reason:string){
     if(!p.alive)return;
@@ -592,12 +604,15 @@ export class Sortie {
     if(this.op.kind==='ground'&&this.lost>=this.total)this.end(true,'训练靶全部摧毁');
   }
   advanceWrecks(dt:number){
+    for(const e of this.enemies)if(e.down){e.previous.copyFrom(e.position);e.previousOrientation.copyFrom(e.orientation);}
+    this.wreckPhysics?.advance(this.enemies,dt);
     for(const e of this.enemies){
       if(!e.down)continue;
-      e.previous.copyFrom(e.position);e.previousOrientation.copyFrom(e.orientation);
       e.down+=dt;
-      e.velocity.y-=19*dt;e.position.addInPlaceFromFloats(e.velocity.x*dt,e.velocity.y*dt,e.velocity.z*dt);
-      Quaternion.RotationAxisToRef(ahead,(.53+(e.damage.right-e.damage.left)*1.8)*dt,orientation);e.orientation.multiplyInPlace(orientation).normalize();
+      if(!this.wreckPhysics){
+        e.velocity.y-=9.81*dt;e.position.addInPlaceFromFloats(e.velocity.x*dt,e.velocity.y*dt,e.velocity.z*dt);
+        Quaternion.RotationAxisToRef(ahead,(.53+(e.damage.right-e.damage.left)*1.8)*dt,orientation);e.orientation.multiplyInPlace(orientation).normalize();
+      }
       const floor=terrainContact(this.world,e.previous,e.position,this.time);
       if(floor<=1||e.down>16){
         if(floor<=1){
@@ -605,10 +620,11 @@ export class Sortie {
           e.position.y=this.world.at(e.position.x,e.position.z,this.time);
           this.impact(e.position,e.side,'crash',1.35);
         }
-        e.down=0;
+        e.down=0;this.wreckPhysics?.remove(e);
       }
     }
   }
+  releaseRigidBodies(){this.wreckPhysics?.dispose();this.wreckPhysics=null;}
   end(win:boolean,reason:string){
     if(!this.active)return;
     this.active=false;this.win=win;this.reason=reason;

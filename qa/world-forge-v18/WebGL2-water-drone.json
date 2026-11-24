@@ -1,0 +1,42 @@
+{
+  "before": {
+    "time": 0.24444444444444433,
+    "surface": "water",
+    "foam": 0
+  },
+  "wake": {
+    "active": true,
+    "foam": 193,
+    "time": 1.5222222222222188,
+    "worker": true,
+    "altitude": 9.975393025500907,
+    "speed": 249.86927022950283
+  },
+  "chapter": {
+    "kind": "air",
+    "ground": 0,
+    "missiles": 10,
+    "enemies": [
+      {
+        "type": "shade-drone",
+        "hp": 550,
+        "model": "shade-drone"
+      },
+      {
+        "type": "shade-drone",
+        "hp": 550,
+        "model": "shade-drone"
+      },
+      {
+        "type": "gripen",
+        "hp": 550,
+        "model": "gripen"
+      }
+    ]
+  },
+  "wreck": {
+    "steps": 45,
+    "drop": 1.2219608466037357,
+    "rotated": true
+  }
+}
