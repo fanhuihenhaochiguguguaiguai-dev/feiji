@@ -1,0 +1,3 @@
+# Isolated terrain visibility test
+
+Baseline: 0dbacdcae0efd829a0b98c93b1c85c5e752cad3c. The official branch is unchanged. This candidate preserves original height assets, physics, terrain topology and KTX2 PBR textures. Combat terrain uses native StandardMaterial shading (without the custom triplanar/cloud-shadow chunk); culling is disabled for terrain to guard against missing faces. Coarse coverage is built before sortie, then normal detailed LOD refinement resumes. Replacement meshes are allocated before old ones are destroyed. Android package has a separate application ID, so it does not overwrite the official game. The mobile rendering root cause is not yet confirmed; verify on device before accepting this candidate.

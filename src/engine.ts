@@ -208,6 +208,7 @@ export class Game {
       const assets=[this.pilot.request(type),...mission.enemies.flatMap((e,i)=>e.alive?[this.foes[i].request(e.type)]:[])];
       if(mission.ally.alive)assets.push(this.support.request(mission.ally.type));
       await milestones(assets,58,93,'正在读取出击编队');
+      this.world.prepareTerrain();
       this.sortie?.releaseRigidBodies();
       this.labSortie=lab;this.notion={id,rank,runway,plan};this.sortie=mission;rigid=null;this.acc=0;
       this.world.assets.trimFleet(new Set([type.id,...mission.enemies.filter(e=>e.alive).map(e=>e.type.id),

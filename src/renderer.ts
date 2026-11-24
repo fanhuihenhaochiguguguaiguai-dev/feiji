@@ -196,7 +196,10 @@ export class WorldView {
   private readonly climateDensities=[.000027,.000029,.000066,.000058,.000092,.000108,.000080,.000046];
   constructor(readonly entry:OpenEngine){
     const {app,canvas}=entry;
-    bindRockSurface(this.terrainMaterial);bindRockSurface(this.ridgeMaterial);
+    // Terrain visibility test: use native PBR on the combat terrain; retain hangar shading.
+    bindRockSurface(this.ridgeMaterial);
+    this.terrainMaterial.cull=CULLFACE_NONE;
+    this.terrainMaterial.depthWrite=true;
     this.assets=new Assets(app);
     for(const e of [this.hangar,this.field,this.effects,this.vehicles,this.props,this.terrainRoot,this.sun,this.rim])app.root.addChild(e);
     const hangarFloor=material('磨损停机坪混凝土','#bcbbb7',.08,.62);
@@ -288,7 +291,7 @@ export class WorldView {
       }),
       this.assets.texture('surface/cloud-density.png').then(t=>{
         this.skyMat.setParameter('weatherTex',t);this.seaMat.setParameter('weatherTex',t);
-        this.terrainMaterial.setParameter('terrainWeather',t);this.ridgeMaterial.setParameter('terrainWeather',t);
+        this.ridgeMaterial.setParameter('terrainWeather',t);
         this.graph.pressure.setWeatherTexture(t);
       }),
       this.assets.texture('surface/wave-field.png').then(t=>this.seaMat.setParameter('waveTex',t)),
@@ -427,7 +430,6 @@ export class WorldView {
     else scene.ambientLight.set(.32,.40,.54);
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
     this.cloudCover=cover;
-    this.terrainMaterial.setParameter('terrainCloudCover',cover);
     this.ridgeMaterial.setParameter('terrainCloudCover',-.115);
     for(const m of [this.skyMat,this.seaMat]){
       for(const [key,value] of Object.entries(vector))m.setParameter(key,value);
@@ -552,6 +554,22 @@ export class WorldView {
     tile.render!.receiveShadows=true;
     return tile;
   }
+  // Ensure the original mountain silhouettes exist before the first combat frame.
+  // Coarse tiles are refined by the existing LOD budget, never replaced with an empty frame.
+  prepareTerrain(){
+    const patch=this.terrain.priorityArea;
+    if(patch&&!this.microTile){
+      this.microTile=this.tile(patch.i,patch.j,16,patch.cells);
+      this.microTile.name='priority-16';
+    }
+    for(const block of this.terrain.blocks){
+      const key=block.z*gridSize+block.x;
+      if(this.terrainTiles.has(key))continue;
+      const step=16;
+      this.terrainTiles.set(key,{...block,step,entity:this.tile(block.x,block.z,step)});
+    }
+    this.tileClock=-Infinity;
+  }
   private updateTiles(x:number,z:number,time:number,leadX:number,leadZ:number){
     if(time-this.tileClock<.38&&time>=this.tileClock)return;
     this.tileClock=time;
@@ -583,8 +601,9 @@ export class WorldView {
       const step=close?1:next<near?2:next<mid?4:next<13000?8:16;
       if(tile?.step===step)continue;
       if(built>=(initial?24:6))continue;
-      tile?.entity.destroy();
-      this.terrainTiles.set(key,{...block,step,entity:this.tile(block.x,block.z,step)});built++;
+      const replacement=this.tile(block.x,block.z,step);
+      this.terrainTiles.set(key,{...block,step,entity:replacement});
+      tile?.entity.destroy();built++;
     }
   }
   inspectTerrain(mode:number){
@@ -613,7 +632,7 @@ export class WorldView {
     this.sea.enabled=!this.indoors&&this.ocean&&!!this.edgeDepth;
     this.terrainRoot.enabled=!this.indoors&&this.ground;
     this.eye.set([p.x,p.y,p.z]);
-    for(const mat of [this.terrainMaterial,this.ridgeMaterial])mat.setParameter('terrainClock',ambientTime);
+    this.ridgeMaterial.setParameter('terrainClock',ambientTime);
     for(const m of [this.skyMat,this.seaMat]){
       m.setParameter('clock',m===this.seaMat?time:ambientTime);m.setParameter('atmosphereClock',ambientTime);
       m.setParameter('quality',this.level);m.setParameter('clouds',this.clouds?1:0);

@@ -1,0 +1,86 @@
+name: Build isolated V18 terrain visibility test APK
+on:
+  push:
+    branches: [test/v18-terrain-visibility]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package*.json"
+      - "tools/**"
+      - "vite.config.mjs"
+      - ".github/workflows/android-v18.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:assets
+      - name: Prepare Android wrapper
+        run: |
+          npm install --no-save --package-lock=false @capacitor/core@7.4.4 @capacitor/cli@7.4.4 @capacitor/android@7.4.4
+          cat > capacitor.config.json <<'CONFIG'
+          {"appId":"com.cangqiong.frontline.v18.terrainqa","appName":"苍穹锋刃·地形测试","webDir":"dist","server":{"androidScheme":"https"}}
+          CONFIG
+          npx cap add android
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          version = json.loads(Path('package.json').read_text())['version']
+          major, minor, patch = map(int, version.split('.'))
+          code = major * 10000 + minor * 100 + patch
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          manifest.write_text(manifest.read_text().replace('android:name=".MainActivity"', 'android:name=".MainActivity" android:screenOrientation="sensorLandscape"'))
+          gradle = Path('android/app/build.gradle')
+          gradle.write_text(gradle.read_text().replace('versionCode 1', f'versionCode {code}').replace('versionName "1.0"', f'versionName "{version}"'))
+          activity = next(Path('android/app/src/main/java').rglob('MainActivity.java'))
+          activity.write_text('''package com.cangqiong.frontline.v18.terrainqa;
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+            @Override public void onCreate(Bundle state) {
+              super.onCreate(state);
+              getWindow().getDecorView().setSystemUiVisibility(5894);
+            }
+            @Override public void onWindowFocusChanged(boolean focus) {
+              super.onWindowFocusChanged(focus);
+              if (focus) getWindow().getDecorView().setSystemUiVisibility(5894);
+            }
+          }
+          ''')
+          PY
+          npx cap sync android
+      - name: Compile and sign APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Verify APK signature and archive
+        run: |
+          mkdir output
+          cp android/app/build/outputs/apk/debug/app-debug.apk output/Cangqiong-V18-terrain-test-Android.apk
+          signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
+          "$signer" verify --verbose --print-certs output/Cangqiong-V18-terrain-test-Android.apk
+          unzip -tq output/Cangqiong-V18-terrain-test-Android.apk
+          (cd output && sha256sum Cangqiong-V18-terrain-test-Android.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cangqiong-V18-terrain-test-Android
+          path: output/
+          if-no-files-found: error
