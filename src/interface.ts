@@ -20,7 +20,7 @@ export const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElem
 const money=(n:number)=>n.toLocaleString('zh-CN');
 const clock=(v:number)=>Math.floor(v/60).toString().padStart(2,'0')+':'+Math.floor(v%60).toString().padStart(2,'0');
 const stationTitles:Record<string,string>={hangar:'战机机库',upgrade:'战机升级',weapons:'武器与改装',
-  tree:'航空科技树',missions:'战役司令部',training:'飞行训练中心',freeprep:'自由飞行准备',
+  tree:'航空科技树',missions:'战役司令部',training:'飞行训练中心',freeprep:'自由空战准备',
   quests:'任务中心',activity:'活动中心',season:'赛季通行证',sortieprep:'出击准备',base:'空军基地',inventory:'军需仓库',records:'飞行员资料',settings:'游戏设置'};
 export const studioStations=['home','hangar','upgrade','weapons','sortieprep','freeprep'];
 const rewardAvailable=(p:Save,r:RewardDefinition)=>{const state=rewardStatus(p,r);return state.earned&&!state.claimed;};
@@ -84,6 +84,12 @@ export class Interface {
     document.addEventListener('click',e=>{
       const b=(e.target as Element).closest<HTMLElement>('button');if(!b||b.matches(':disabled'))return;
       const d=b.dataset;
+      if(d.exportSave!==undefined){
+        const link=document.createElement('a');
+        const url=URL.createObjectURL(new Blob([JSON.stringify(p,null,2)],{type:'application/json'}));
+        link.href=url;link.download='cangqiong-pilot-v'+p.version+'.json';link.click();
+        window.setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+      }
       if(d.configure){
         this.aircraft=p.selected;this.gearFilter=d.configure;this.open('weapons');return;
       }
@@ -430,7 +436,7 @@ export class Interface {
         current.prerequisite?'前置 · '+technologies.find(n=>n.id===current.prerequisite)?.name:'无前置研发')+' · 航电板 '+current.material+'</small></div><button class="gold" data-research="'+current.id+'"'+disabled(researched)+'>'+(researched?'已研究':current.cost+' 信用点')+'</button></article></div>';
   }
   private missionState(m:Operation){
-    if(m.campaign&&(m.campaign>this.p.campaign||(m.level??1)>pilotLevel(this.p.xp)))return 'locked';
+    if(m.campaign&&m.campaign>this.p.campaign)return 'locked';
     return this.p.completed.includes(m.id)?'complete':'ready';
   }
   missions(){
@@ -441,8 +447,9 @@ export class Interface {
     const chapterList=campaign?'<div class="chapter-picker" role="group" aria-label="战役章节">'+chapters.map((c,i)=>
       '<button data-chapter="'+i+'" aria-pressed="'+(i===this.chapter)+'" title="'+c.name+' · Lv.'+c.level+'">'+
       '<b>'+String(i+1).padStart(2,'0')+'</b><span>'+c.name+'</span></button>').join('')+'</div>':'';
-    const stages=campaign?'<div class="stage-picker" role="group" aria-label="章节关卡">'+list.map(m=>
-      '<button data-stage-pick="'+m.id+'" title="'+m.name+'">'+String(m.campaign).padStart(2,'0')+'<span>'+m.name+'</span></button>').join('')+'</div>':'';
+    const stages=campaign?'<div class="stage-picker" role="group" aria-label="章节关卡">'+list.map((m,i)=>
+      '<button data-stage-pick="'+m.id+'" data-boss="'+!!m.engagement?.ace+'" title="'+m.name+'">'+
+      (m.engagement?.ace?'10 · 王牌':String(i+1).padStart(2,'0'))+'<span>'+m.name+'</span></button>').join('')+'</div>':'';
     return '<div class="mission-grid"><section class="mission-map glass" id="mission-chart" aria-label="全球战役地图">'+
       '<header class="chart-bar"><div class="mission-tabs" aria-label="任务类型"><button data-mode="campaign" class="'+(campaign?'on':'')+'">战役关卡</button>'+
       '<button data-mode="independent" class="'+(!campaign?'on':'')+'">独立任务</button></div>'+
@@ -468,18 +475,19 @@ export class Interface {
     }
     const section=m.engagement?objectiveNames[m.engagement.objective]:m.kind==='escort'?'运输护航':m.kind==='ground'?'对地打靶':'空域拦截';
     const boss=!!m.engagement?.ace;
-    const briefing=m.campaign?chapterFor(m.campaign)+1+'章 · '+String(m.campaign).padStart(2,'0')+'关 · Lv.'+(m.level??1):theatre.weather;
+    const briefing=m.campaign?chapterFor(m.campaign)+1+'章 · 第 '+((m.campaign-1)%10+1)+' 关':theatre.weather;
     const threat=['训练目标','常规编队','高威胁空域','精锐编队'][m.threat];
     el('mission-details').innerHTML='<div class="mission-emblem" style="--mission-image:url('+resource('charts/'+theatre.id+'.webp')+')">'+
       '<div><span class="caption">'+theatre.name+' · '+briefing+'</span><h3>'+m.name+'</h3></div></div>'+
       '<div class="mission-copy"><p>'+m.detail+'</p><dl class="mission-intel">'+metric('作战类别',section)+metric('敌情',boss?'王牌 · '+byAircraft(m.engagement!.ace!).name:threat)+
+      (m.campaign?metric('战役强度',m.campaign+' / 60'):'')+
       metric('出击战机',byAircraft(this.p.selected).name)+'</dl><div class="mission-award"><header><b>'+
       (state==='complete'?'首胜奖励已入库':'首胜奖励')+'</b><small>信用点 <strong id="mission-credit-rate">'+
       Math.round(difficulties[this.tier].reward*100)+'%</strong></small></header><div class="prize-tray">'+rewardChips(firstClearLoot)+
       '</div></div></div>';
     const launch=el<HTMLButtonElement>('mission-launch');
     launch.dataset.task=m.id;launch.disabled=state==='locked';
-    launch.innerHTML=icon(state==='locked'?'lock':'plane')+(state==='locked'?((m.level??1)>pilotLevel(this.p.xp)?'需要 Lv.'+m.level:'先完成前序战役'):state==='complete'?'再次出击':'开始任务');
+    launch.innerHTML=icon(state==='locked'?'lock':'plane')+(state==='locked'?'先完成前序战役':state==='complete'?'再次出击':'开始任务');
   }
   training(){
     return routeIntro('飞行学院','实战训练课程','选择一门课程进入对应空域。使用机库已选战机。','tech-vectoring','training')+
@@ -493,7 +501,7 @@ export class Interface {
   preparation(){return this.dispatch(this.prepared);}
   private dispatch(id:string){
     const mission=operation(id),free=id==='free',map=theatres[free?this.region:mission.region];
-    const plane=byAircraft(this.p.selected),loadout=combatConfiguration(this.p,plane.id);
+    const plane=byAircraft(this.p.selected),loadout=combatConfiguration(this.p,plane.id,mission.kind==='ground');
     const blocked=sortieBlock(this.p,mission,loadout);
     const slot=mission.kind==='ground'?'bomb':'missile';
     const progressionLocked=this.missionState(mission)==='locked';
@@ -508,14 +516,14 @@ export class Interface {
       '<div class="prep-chart" role="img" aria-label="'+map.name+'地形图" style="background-image:url('+resource('charts/'+map.id+'.webp')+')"></div>'+
       '<span class="caption">出击机型</span><select id="planned-plane" aria-label="出击机型">'+this.p.unlocked.map(id=>'<option value="'+id+'"'+selected(id===plane.id)+'>'+byAircraft(id).name+'</option>').join('')+'</select>'+
       '<dl>'+metric('机体结构',String(plane.durability))+metric('雷达探测',(loadout.radar/1000).toFixed(1)+' 公里')+metric('航炮备弹',String(loadout.rounds))+metric('空空导弹',String(loadout.airMissiles))+
-      metric(loadout.groundWeapon==='shorebolt'?'对地制导弹':'炸弹',String(loadout.groundStores))+'</dl><button data-configure="'+slot+'">检视当前挂载</button></article>'+
+      (loadout.groundStores?metric(loadout.groundWeapon==='shorebolt'?'对地制导弹':'炸弹',String(loadout.groundStores)):'')+'</dl><button data-configure="'+slot+'">检视当前挂载</button></article>'+
       '<article class="glass dispatch-options"><h3>航线条件</h3><p>默认环境 · '+map.weather+'</p>'+maps+weather+light+
       (free?'<label class="runway-option"><input type="checkbox" id="runway" '+(this.runway?'checked':'')+'>从跑道起飞</label>':'<p>任务难度 · '+difficulties[mission.kind==='train'||mission.lesson?0:this.tier].name+'</p>')+
       (blocked?'<section class="sortie-block" role="status"><strong>待补齐任务配置</strong><p>'+blocked+'</p>'+
         (progressionLocked?'<button data-nav="training">进入训练获取经验</button>':
           '<button data-configure="'+slot+'">打开'+(slot==='bomb'?'对地':'空空')+'挂位与商店</button>')+
         (!progressionLocked&&alternate.length?'<p>也可在左侧选择 '+alternate.map(a=>byAircraft(a).name).slice(0,3).join('、')+'</p>':'')+'</section>':'')+
-      '<button class="gold" '+start+disabled(!!blocked)+'>'+icon('plane')+(free?'确认起飞':'确认出击')+'</button></article></div>';
+      '<button class="gold" '+start+disabled(!!blocked)+'>'+icon('plane')+(free?'开始连续迎击':'确认出击')+'</button></article></div>';
   }
   private filteredQuests(){
     if(this.questTab==='day')return rewards.filter(r=>r.period==='day');
@@ -586,7 +594,7 @@ export class Interface {
       '<article class="glass"><h3>飞行控制</h3><label><input type="checkbox" data-setting="assist" '+(ctx.assist?'checked':'')+'>开启飞行辅助</label>'+
       '<label><input type="checkbox" data-setting="invert" '+(ctx.invert?'checked':'')+'>反转俯仰</label>'+
       '<label><input type="checkbox" data-setting="mute" '+(ctx.mute?'checked':'')+'>静音</label>'+
-      '<label>滑屏灵敏度<input type="range" data-setting="sensitivity" min=".45" max="1.55" step=".05" value="'+ctx.sensitivity+'"></label>'+
+      '<label>滑屏灵敏度<input type="range" data-setting="sensitivity" min=".45" max="1.55" step=".05" value="'+ctx.sensitivity+'"></label><button data-export-save>导出飞行员存档</button>'+
       '<details><summary>飞行操作</summary><p>手机在空白区域滑动转向或升降，另一根手指可同时操作武器。左侧反制键会根据威胁选择热诱饵、箔条或电子干扰。</p><p>方向键或 W/A/S/D 操纵。Q/E 偏航，R/V 调油门，Shift 加力。空格航炮，F 导弹，B 炸弹，X 切武器，回车使用已选武器，T 选目标，Z 反制，G 起落架，C 切视角。</p></details></article></div>';
   }
   flight(s:Sortie){
@@ -599,7 +607,7 @@ export class Interface {
     el('hud-goal').textContent=s.op.name;
     el('gun').hidden=!s.weapons.includes('gun');el('bomb').hidden=!s.weapons.includes('bomb');el('missile').hidden=!s.weapons.includes('missile');
     el('bomb').querySelector('span')!.textContent=s.groundWeapon==='shorebolt'?'对地弹':'炸弹';
-    el('boost').hidden=!s.type.boost;el('next-target').hidden=s.op.kind==='free'||s.op.kind==='train'||s.op.kind==='ground';
+    el('boost').hidden=!s.type.boost;el('next-target').hidden=s.op.kind==='free'&&!s.endless||s.op.kind==='train'||s.op.kind==='ground';
     el('gear').hidden=s.type.gearFixed;
     el('weapon-mode').hidden=s.weapons.length<2;
     el('spares').hidden=!s.spares;
@@ -609,10 +617,10 @@ export class Interface {
     history.replaceState({pixelPage:'home',depth:0},'');
     this.open('home',false);
   }
-  pause(){
+  pause(endless=false){
     this.closeTactical();
     const panel=el('overlay');panel.hidden=false;
-    panel.innerHTML='<section class="pause-card glass"><div class="caption">当前任务</div><h2>战场已暂停</h2><div class="dialog-actions"><button class="gold" data-do="resume">继续飞行</button><button data-do="restart">重新出击</button><button data-do="leave">返回大厅</button></div></section>';
+    panel.innerHTML='<section class="pause-card glass"><div class="caption">当前任务</div><h2>战场已暂停</h2><div class="dialog-actions"><button class="gold" data-do="resume">继续空战</button><button data-do="restart">重新出击</button><button data-do="leave">'+(endless?'结算并撤离':'返回大厅')+'</button></div></section>';
   }
   finish(r:Debrief,award:number,previousXp=this.p.xp){
     this.closeTactical();
@@ -628,7 +636,7 @@ export class Interface {
       '<progress value="'+xp.progress+'" max="'+xp.required+'"></progress></div>'+
       (promoted?'<div class="prize-tray">'+rewardChips(rewards)+'</div>':'')+'</section>':'';
     const pct=(v:number|null)=>v!==null?v+'%':'—';
-    overlay.innerHTML='<section class="debrief '+(r.win?'won':'lost')+'"><div class="debrief-title"><div class="caption">'+r.operation.name+'</div><h2>'+icon(r.win?'star':'shield')+(r.win?'任务胜利':'任务失败')+'</h2><p>'+r.reason+'</p></div>'+
+    overlay.innerHTML='<section class="debrief '+(r.win?'won':'lost')+'"><div class="debrief-title"><div class="caption">'+r.operation.name+'</div><h2>'+icon(r.win?'star':'shield')+(r.operation.kind==='free'?'自由空战结算':r.win?'任务胜利':'任务失败')+'</h2><p>'+r.reason+'</p></div>'+
       '<div class="debrief-main glass"><div class="score"><span>综合得分</span><b>'+money(r.score)+'</b><strong>'+r.grade+'</strong></div><dl>'+
       metric('击毁目标',String(r.kills))+metric('任务时长',clock(r.time))+metric('航炮命中',pct(r.accuracy))+metric('导弹命中',pct(r.missileAccuracy))+
       metric('炸弹命中',pct(r.bombAccuracy))+metric('航行里程',(r.distance/1000).toFixed(2)+' 公里')+metric('最高速度',Math.round(r.peak*3.6)+' 公里/时')+
@@ -677,7 +685,14 @@ export class Interface {
       el('hp-bar').classList.toggle('impact',game.time-player.hitTime<.32);
       el('ammo').textContent=String(player.cannon);el('missiles').textContent=String(player.missiles);el('missile').title=itemById[game.missile.id]?.name??'';el('bombs').textContent=String(player.bombs);
       el('gear').classList.toggle('on',player.gearTarget>0);
-      el('enemy-counter').textContent=game.op.kind==='train'?'航标 '+game.gate+' / 3':game.op.kind==='free'?'自由航线':game.op.kind==='ground'?'待摧毁 '+(game.total-game.lost):'波次 '+game.wave+' / '+game.waves.length+' · 目标 '+Math.max(0,game.total-game.lost);
+      const boss=game.enemies.find(e=>e.alive&&e.ace);
+      const stock=game.enemies.filter(e=>e.alive).length;
+      el('enemy-counter').textContent=game.endless?'第 '+game.wave+' 波 · 敌机 '+stock:game.op.kind==='train'?'航标 '+game.gate+' / 3':
+        game.op.kind==='free'?'飞行诊断':game.op.kind==='ground'?'待摧毁 '+(game.total-game.lost):
+          '波次 '+game.wave+' / '+game.waves.length+' · 待击落 '+Math.max(0,game.total-game.lost);
+      const bossHealth=el('boss-health');
+      bossHealth.hidden=!boss;
+      if(boss){bossHealth.textContent='王牌 '+Math.ceil(boss.hp/boss.maxHp*100)+'%';bossHealth.style.setProperty('--health',boss.hp/boss.maxHp*100+'%');}
       const w=game.warning,threat=w.threat,defense=game.defense;
       const type=threat?seekerNames[threat.seeker]:'敌方',kind=defense.next(w),cool=Math.max(0,defense.readyAt-game.time);
       const distance=threat?' · '+(w.distance<1000?Math.round(w.distance)+' 米':(w.distance/1000).toFixed(1)+' 公里'):'';
@@ -703,8 +718,8 @@ export class Interface {
     const camera=world.camera.position;
     const baseItems=game.op.kind==='train'&&game.gates[game.gate]?[{position:game.gates[game.gate],alive:true,id:game.gate+1}]:game.targetPoints;
     const active=game.enemies.filter(enemy=>enemy.alive).sort((a,b)=>{
-      if(a===game.locked)return -1;
-      if(b===game.locked)return 1;
+      if(a===game.locked||a.ace&&!b.ace&&b!==game.locked)return -1;
+      if(b===game.locked||b.ace&&!a.ace)return 1;
       return Vector3.DistanceSquared(player.position,a.position)-Vector3.DistanceSquared(player.position,b.position);
     });
     const tagged=[...active,...(game.ally.alive?[game.ally]:[]),...baseItems];
@@ -735,6 +750,7 @@ export class Interface {
       for(let j=0;j<assigned&&label;j++)if(Math.abs(this.labelSites[j*2]-x)<108&&Math.abs(this.labelSites[j*2+1]-y)<26)label=false;
       if(label){this.labelSites[assigned*2]=x;this.labelSites[assigned*2+1]=y;assigned++;}
       node.frame.hidden=false;node.frame.classList.toggle('locked',lock);
+      node.frame.classList.toggle('ace','ace' in target&&target.ace);
       node.frame.classList.toggle('off',edge);node.frame.classList.toggle('ally',ally);
       if(update&&'type' in target){
         const p=anchor;

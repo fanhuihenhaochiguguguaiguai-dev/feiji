@@ -461,9 +461,9 @@ export class WorldView {
     if(time-this.tileClock<.38&&time>=this.tileClock)return;
     this.tileClock=time;
     let built=0;
-    const blocks=[...this.terrain.blocks].sort((a,b)=>this.tileRange(a,x,z)-this.tileRange(b,x,z));
-    for(const block of blocks){
-      const key=block.z*1025+block.x,range=this.tileRange(block,x,z),tile=this.terrainTiles.get(key);
+    const blocks=this.terrain.blocks.map(block=>({block,range:this.tileRange(block,x,z)})).sort((a,b)=>a.range-b.range);
+    for(const {block,range} of blocks){
+      const key=block.z*1025+block.x,tile=this.terrainTiles.get(key);
       const detail=Math.max(.79,this.level);
       const near=(tile?.step===1?7600:6450)*detail;
       const mid=(tile?.step===2?10600:9000)*detail;

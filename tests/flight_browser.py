@@ -15,6 +15,7 @@ parser.add_argument("--airframe",choices=("j20","f16"))
 parser.add_argument("--armory",action="store_true")
 parser.add_argument("--coast",action="store_true")
 parser.add_argument("--sights",action="store_true")
+parser.add_argument("--all-air",action="store_true")
 parser.add_argument("--command-map",action="store_true")
 parser.add_argument("--lobby-baseline",action="store_true")
 parser.add_argument("--gallery",action="store_true")
@@ -71,7 +72,7 @@ with sync_playwright() as p:
     page.on("console",lambda m:(errors.append(m.text),print("console",m.text[:3200],flush=True)) if m.type=="error" else None)
     page.add_init_script("""if(!localStorage.getItem("pixel-sky-af-v4"))localStorage.setItem("pixel-sky-af-v4",JSON.stringify({
       credits:2600,unlocked:['j20','f16','hornet','dr1','a10','j10','spitfire'],records:[],campaign:%s,selected:%s,
-      settings:{backend:%s,quality:'medium',mute:true} }));""" % (3 if args.armory else 4,json.dumps(args.airframe or ("j20" if args.armory else "f16")),json.dumps(args.backend)))
+      settings:{backend:%s,quality:'medium',mute:true} }));""" % (10 if args.all_air else 3 if args.armory else 4,json.dumps(args.airframe or ("j20" if args.armory else "f16")),json.dumps(args.backend)))
     page.goto(BASE,wait_until="domcontentloaded")
     ready(page,"home")
     assert page.locator("#application").get_attribute("data-backend")==args.backend
@@ -85,7 +86,7 @@ with sync_playwright() as p:
         assert page.locator('[data-confirm-sortie]').is_enabled()
         assert '340' in page.locator('.briefing-flight').inner_text()
         page.screenshot(path=OUT/'factory-briefing.png',timeout=70000)
-        page.locator('.briefing-flight [data-configure="bomb"]').tap()
+        page.locator('.briefing-flight [data-configure="missile"]').tap()
         ready(page,'weapons')
         page.locator('[data-gear="cannon"]').tap()
         assert page.locator('.cannon-spec').is_visible()
@@ -105,39 +106,12 @@ with sync_playwright() as p:
         page.locator('.sortie-action').tap()
         ready(page,'sortieprep')
         assert page.locator('[data-confirm-sortie]').is_enabled()
-        assert '炸弹' in page.locator('.briefing-flight').inner_text()
+        assert '炸弹' not in page.locator('.briefing-flight').inner_text()
         page.locator('[data-confirm-sortie]').tap()
         ready(page,'flight')
-        assert page.locator('#gun').is_visible()
-        assert page.locator('#bomb').is_visible()
-        assert page.evaluate("flightQA.sortie.player.bombs===2 && flightQA.sortie.player.missiles===6")
-        for shot,index in enumerate([0,3],1):
-            page.evaluate("""index=>{
-              const g=flightQA,s=g.sortie,p=s.player,v=s.targetPoints[index].position;
-              g.state='pause';g.input.on=true;
-              const altitude=130,fall=(-5+Math.sqrt(25+19.62*altitude))/9.81;
-              p.position.set(v.x+21,v.y+altitude+.57,v.z+128*fall-.55);
-              p.previous.copyFrom(p.position);p.forward.set(0,0,-1);p.orientation.set(0,0,0,1);
-              p.previousOrientation.copyFrom(p.orientation);p.velocity.set(0,0,-128);
-              p.angular.setAll(0);p.speed=128;p.bombAt=0;g.world.cameraReset=true;
-            }""",index)
-            page.locator('#bomb').tap()
-            result=page.evaluate("""()=>{
-              const g=flightQA,s=g.sortie;
-              const command=g.input.read(1/90,true,false,1);
-              s.step(1/90,command);
-              for(let i=0;i<600 && s.groups.bomb.some(q=>q.live);i++){s.time+=1/90;s.project(1/90);}
-              return {released:s.stats.bomb,hit:s.stats.bombHit,targets:s.stats.kills,state:s.reason};
-            }""")
-            assert result["released"]==shot and result["hit"]==shot,result
-        page.screenshot(path=OUT/'ground-strike.png',timeout=70000)
-        page.evaluate("()=>{flightQA.state='flight';flightQA.input.on=true}")
-        ready(page,'result')
-        assert page.evaluate("flightQA.sortie.stats.kills===5 && flightQA.sortie.stats.bombHit===2 && flightQA.p.campaign===4")
-        assert page.locator('.promotion.earned').is_visible()
-        page.screenshot(path=OUT/'campaign-result.png',timeout=70000)
-        page.locator('[data-do="leave"]').tap()
-        ready(page,'home')
+        assert page.locator('#gun').is_visible() and page.locator('#bomb').is_hidden()
+        assert page.evaluate("flightQA.sortie.player.bombs===0 && flightQA.sortie.player.missiles===10 && flightQA.sortie.enemies.some(a=>a.alive)")
+        leave(page)
         page.locator('#navigation [data-nav="hangar"]').tap()
         ready(page,'hangar')
         assert '对地弹药' in page.locator('.air-spec').inner_text()
@@ -147,7 +121,7 @@ with sync_playwright() as p:
         page.locator('[data-unmount="bomb"]').tap()
         page.wait_for_function("flightQA.p.inventory.bomb===1 && flightQA.p.loadouts.j20.bomb==='none'")
         assert page.locator('[data-mount="bomb"]').is_visible()
-        print("J-20 shop, purchase, install, reload, s03, bombs, promotion and detach passed",flush=True)
+        print("J-20 purchase, install, reload, air-only sortie and detach passed",flush=True)
         page.locator('#section .station-heading [data-back]').tap()
         ready(page,'hangar')
         page.locator('#section .station-heading [data-back]').tap()
@@ -167,11 +141,6 @@ with sync_playwright() as p:
         ready(page,'home')
     if args.coast or args.sights:
         page.set_viewport_size({"width":1000,"height":450})
-        if args.sights:
-            page.evaluate("""()=>{
-                const p=flightQA.p;
-                p.inventory.bomb=1;p.loadouts.j20={...p.loadouts.j20,bomb:'bomb'};
-            }""")
         page.evaluate("()=>flightQA.begin('free',0,false,{region:0,weather:1,lighting:0})")
         ready(page,'flight')
         page.evaluate("""()=>new Promise(resolve=>{
@@ -185,7 +154,7 @@ with sync_playwright() as p:
         })""")
         page.screenshot(path=OUT/'coast-fixed.png',timeout=70000)
         if args.sights:
-            assert page.evaluate("flightQA.sortie.weapons.length===3 && flightQA.sortie.enemies.every(a=>!a.alive)")
+            assert page.evaluate("flightQA.sortie.weapons.length===2 && flightQA.sortie.enemies.some(a=>a.alive)")
             check_sight="""()=> {
               const g=flightQA,s=g.sortie,aim=document.querySelector('#aim');
               const r=aim.getBoundingClientRect(),canvas=g.world.entry.canvas.getBoundingClientRect();
@@ -194,7 +163,7 @@ with sync_playwright() as p:
               return {width:r.width,height:r.height,position:[r.x+r.width/2,r.y+r.height/2],error:Math.hypot(r.x+r.width/2-(point.x+canvas.left),r.y+r.height/2-(point.y+canvas.top)),mode:s.weapon};
             }"""
             sight=[]
-            for mode in ('gun','missile','bomb'):
+            for mode in ('gun','missile'):
                 page.evaluate("""mode=>new Promise(resolve=>{
                   const g=flightQA;g.sortie.weapon=mode;
                   g.engine.once('postrender',()=>{
@@ -221,6 +190,69 @@ with sync_playwright() as p:
             (OUT/'sight.json').write_text(json.dumps({"external":sight,"cockpit":cockpit},indent=2))
         page.evaluate("()=>flightQA.leave()")
         ready(page,'home')
+    if args.all_air:
+        page.locator('#front [data-nav="missions"]').tap()
+        ready(page,'missions')
+        assert page.locator('[data-chapter]').count()==6
+        for chapter in range(6):
+            page.locator(f'[data-chapter="{chapter}"]').tap()
+            assert page.locator('[data-stage-pick]').count()==10
+            assert page.locator('[data-stage-pick][data-boss="true"]').get_attribute('data-stage-pick')==f's{(chapter+1)*10:02}'
+        page.locator('[data-chapter="0"]').tap()
+        page.locator('[data-stage-pick="s10"]').tap()
+        page.screenshot(path=OUT/'chapter-boss.png',timeout=70000)
+        page.locator('#mission-launch').tap()
+        ready(page,'sortieprep')
+        page.locator('[data-confirm-sortie]').tap()
+        ready(page,'flight')
+        boss=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie;g.state='pause';g.input.on=false;
+            while(s.wave<s.waves.length&&s.active){
+                for(const e of s.enemies)if(e.alive)s.damage(e,e.hp,0);
+                s.step(1/90,g.input.read(1/90,true,false,1));
+            }
+            const ace=s.enemies.find(e=>e.alive&&e.ace);
+            s.damage(ace,s.missile.damage,0);s.damage(ace,s.missile.damage,0);
+            g.state='flight';g.input.on=true;
+            return {hp:ace.hp,type:ace.type.id,total:s.total,wave:s.wave};
+        }""")
+        assert boss['hp']>0 and boss['type']=='mirage',boss
+        page.locator('#boss-health').wait_for(state='visible')
+        page.screenshot(path=OUT/'boss-flight.png',timeout=70000)
+        clear_wave="""()=>{
+            const s=flightQA.sortie;
+            for(const e of s.enemies)if(e.alive)s.damage(e,e.hp,0);
+        }"""
+        page.evaluate(clear_wave)
+        ready(page,'result')
+        assert '任务胜利' in page.locator('.debrief-title').inner_text()
+        assert page.evaluate("flightQA.p.campaign===11 && flightQA.p.completed.includes('s10')")
+        page.locator('[data-do="leave"]').tap()
+        ready(page,'home')
+        def endless():
+            page.locator('#front [data-nav="freeprep"]').tap()
+            ready(page,'freeprep')
+            page.locator('[data-task="free"]').tap()
+            ready(page,'flight')
+            return page.evaluate("""()=>({opening:flightQA.sortie.opening,wave:flightQA.sortie.wave,
+                hp:flightQA.sortie.enemies[0].maxHp,alive:flightQA.sortie.enemies.filter(e=>e.alive).length})""")
+        first=endless()
+        assert first['wave']==1 and first['alive']>0,first
+        page.evaluate(clear_wave)
+        page.wait_for_function("flightQA.sortie.wave===2 && flightQA.sortie.enemies.some(e=>e.alive)")
+        assert page.evaluate("flightQA.sortie.enemies[0].maxHp")>first['hp']
+        page.screenshot(path=OUT/'endless-flight.png',timeout=70000)
+        page.locator('#pause').tap()
+        page.get_by_role('button',name='结算并撤离').tap()
+        ready(page,'result')
+        assert '自由空战结算' in page.locator('.debrief-title').inner_text()
+        page.locator('[data-do="leave"]').tap()
+        ready(page,'home')
+        second=endless()
+        assert second['opening']!=first['opening'] and second['hp']!=first['hp'],(first,second)
+        print('all-air flow',json.dumps({'boss':boss,'firstRun':first,'secondRun':second},ensure_ascii=False),flush=True)
+        (OUT/'mission-loop.json').write_text(json.dumps({'boss':boss,'firstRun':first,'secondRun':second},indent=2))
+        leave(page)
     if args.lobby_baseline or args.command_map:
         page.set_viewport_size({"width":1280,"height":720})
         record(page,"home-1280",outcomes,2)

@@ -12,7 +12,7 @@ import { el,Interface,studioStations } from './interface';
 import { FlightInput } from './inputs';
 import { HangarOrbit } from './hangar-control';
 import { FlightAudio } from './audio';
-import { combatConfiguration,consumeReserve,loadProfile,recordSortie,saveProfile,sortieBlock,type Backend } from './profile';
+import { combatConfiguration,consumeReserve,recordSortie,saveProfile,sortieBlock,type Backend,type Save } from './profile';
 import { pilotLevel } from './progression';
 import { defenseNames } from './defense';
 import { missiles } from './items';
@@ -20,7 +20,6 @@ import { missiles } from './items';
 const small=()=>matchMedia('(any-pointer: coarse)').matches;
 const direction=new Vector3(),soundRight=new Vector3(),rightward=new Vector3(1,0,0);
 export class Game {
-  readonly p=loadProfile();
   readonly root=el('application');
   readonly engine:OpenEngine['app'];
   readonly world:WorldView;
@@ -53,8 +52,9 @@ export class Game {
   private readonly awardPosition=new Vector3(0,2.28,0);
   private awardClock=0;
   private labSortie=false;
+  private freeSeed=crypto.getRandomValues(new Uint32Array(1))[0];
   qualityOverride:import('./profile').Quality|null=null;
-  constructor(readonly entry:OpenEngine){
+  constructor(readonly entry:OpenEngine,readonly p:Save){
     this.engine=entry.app;
     this.root.dataset.backend=entry.backend;this.root.dataset.touch=String(small());
     this.world=new WorldView(entry);
@@ -179,13 +179,15 @@ export class Game {
     this.state='loading';
     el('boot').hidden=false;el('boot-text').textContent='正在准备出击';
     const request=operation(id),op=lab?{...request,region:plan.region,name:'地貌验收空域'}:id==='free'?{...request,region:plan.region}:request;
-    const configuration=combatConfiguration(this.p,type.id);
+    const configuration=combatConfiguration(this.p,type.id,lab||op.kind==='ground');
     try {
-      const terrain=theatres[op.region];
-      await loadTerrain(terrain.seed,asset('world/'+terrain.id+'.height'));
+      const theatre=theatres[op.region];
+      await loadTerrain(theatre.seed,asset('world/'+theatre.id+'.height'));
+      await this.world.setTheme(op.region);
       const mission=new Sortie(op,type,{rank,runway,armor:configuration.armor,engine:0,
-      stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration
-    },e=>this.event(e));
+      stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
+      seed:op.kind==='free'&&!lab?++this.freeSeed:undefined,diagnostics:lab
+    },e=>this.event(e),this.world.terrain);
       await this.pilot.request(type);
       await Promise.all(mission.enemies.map((e,i)=>e.alive?this.foes[i].request(e.type):null));
       if(mission.enemies.some(e=>e.alive)){
@@ -193,8 +195,7 @@ export class Game {
       }
       if(mission.ally.alive)await this.support.request(mission.ally.type);
       this.labSortie=lab;this.notion={id,rank,runway,plan};this.sortie=mission;this.acc=0;
-      await this.world.setTheme(op.region);
-      this.world.showDeck(false);this.world.resetMarkers();this.world.configureFlightWeather(plan.weather,plan.lighting);mission.world.wavesScale=this.world.terrain.wavesScale;this.art.weather=plan.weather;this.world.view=0;
+      this.world.showDeck(false);this.world.resetMarkers();this.world.configureFlightWeather(plan.weather,plan.lighting);this.art.weather=plan.weather;this.world.view=0;
       this.input.reset(runway&&op.kind==='free'?.12:.74);this.input.on=true;
       this.art.clear();this.meshChange.clear();
       this.state='flight';this.ui.flight(mission);el('boot').hidden=true;
@@ -211,9 +212,14 @@ export class Game {
   }
   pause(){
     if(this.state!=='flight')return;
-    this.state='pause';this.input.on=false;this.input.reset(false);this.ui.pause();
+    this.state='pause';this.input.on=false;this.input.reset(false);this.ui.pause(!!this.sortie?.endless);
   }
   leave(){
+    const active=this.sortie;
+    if(this.state==='pause'&&active?.endless&&active.active&&active.stats.kills>0){
+      active.end(active.cleared>0,'已撤离 · 击落 '+active.stats.kills+' 架 · 完成 '+active.cleared+' 波');
+      this.finish(active);return;
+    }
     this.sortie=null;this.input.on=false;this.art.clear();this.state='home';this.world.showDeck(true);this.world.view=0;
     for(const other of [...this.foes,this.support])other.pivot.enabled=false;
     void this.previewAircraft(this.p.selected);this.ui.showHangar();
@@ -266,14 +272,13 @@ export class Game {
     this.engine.fire('sortie-event',e);
     if(e.kind==='wave'){
       const ready=this.sortie;if(!ready)return;
-      this.ui.toast(ready.loadout.repair?'下一批目标进入空域 · 已补充反制弹':'下一批目标进入空域');
-      const loading=ready.enemies.map((a,i)=>a.alive?this.foes[i].request(a.type):null);
-      void Promise.all(loading).catch(e=>console.error(e));
+      this.ui.toast(ready.endless?'第 '+ready.wave+' 波来袭 · 弹药已补给':
+        ready.loadout.repair?'下一批目标进入空域 · 已补充反制弹':'下一批目标进入空域');
     }
   }
   finish(s:Sortie){
     this.state='result';this.input.on=false;this.input.reset(false);
-    const previousXp=this.p.xp,report=s.report(),credits=this.labSortie?0:recordSortie(this.p,report,s.type.id);
+    const previousXp=this.p.xp,report=s.report(),credits=this.labSortie||s.endless&&!report.kills?0:recordSortie(this.p,report,s.type.id);
     if(pilotLevel(this.p.xp)>pilotLevel(previousXp))this.audio.play('ceremony');
     else if(report.win)this.audio.play('victory');
     if(report.win){this.world.showDeck(true);this.preview=s.type;}

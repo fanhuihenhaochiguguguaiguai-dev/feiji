@@ -33,6 +33,7 @@ export interface GuidedTrack {
   readonly direction:Vector3;
 }
 const aim=new Vector3(),axis=new Vector3(),identity=Quaternion.Identity(),rotation=Quaternion.Identity();
+const lineOfSight=new Vector3(),relativeVelocity=new Vector3(),losRate=new Vector3(),steering=new Vector3();
 const percentile=(n:number)=>{const t=Math.sin(n*58.5347919+.19)*43758.5453;return t-Math.floor(t);};
 
 export class MissileGuidance {
@@ -43,7 +44,7 @@ export class MissileGuidance {
       shot.reacquireAt=0;
       if(target?.alive&&target.generation===shot.generation){
         target.position.subtractToRef(shot.position,aim);
-        if(aim.lengthSquared()<2600**2&&Vector3.Dot(aim.normalize(),shot.direction)>.82&&!jammed)shot.guidance='tracking';
+        if(aim.lengthSquared()<2600**2&&Vector3.Dot(aim.normalize(),shot.direction)>.82&&(!jammed||shot.seeker==='infrared'))shot.guidance='tracking';
       }
     }
     const decoy=shot.decoy;
@@ -51,8 +52,20 @@ export class MissileGuidance {
     const speed=shot.velocity.length();
     const tracked=shot.guidance==='tracking'?target:shot.guidance==='decoy'?decoy:null;
     if(tracked){
-      const lead=clamp(Vector3.Distance(tracked.position,shot.position)*.41/Math.max(220,speed),.033,.9);
-      aim.copyFrom(tracked.position).addInPlaceFromFloats(tracked.velocity.x*lead,tracked.velocity.y*lead,tracked.velocity.z*lead).subtractInPlace(shot.position).normalize();
+      tracked.position.subtractToRef(shot.position,lineOfSight);
+      tracked.velocity.subtractToRef(shot.velocity,relativeVelocity);
+      const rangeSq=Math.max(1,lineOfSight.lengthSquared()),range=Math.sqrt(rangeSq);
+      const closing=-Vector3.Dot(lineOfSight,relativeVelocity)/range;
+      const lead=clamp(range*.41/Math.max(220,speed),.033,.9);
+      aim.copyFrom(lineOfSight).addInPlaceFromFloats(tracked.velocity.x*lead,tracked.velocity.y*lead,tracked.velocity.z*lead).normalize();
+      // Blend proportional navigation into pursuit as the seeker aligns and range starts closing.
+      if(closing>70&&Vector3.Dot(lineOfSight,shot.direction)>.72*range){
+        Vector3.CrossToRef(lineOfSight,relativeVelocity,losRate);
+        Vector3.CrossToRef(losRate,shot.direction,steering);
+        const gain=3.55*closing*dt/(rangeSq*Math.max(160,speed));
+        steering.scaleInPlace(gain).addInPlace(shot.direction).normalize();
+        Vector3.LerpToRef(aim,steering,.88,aim);aim.normalize();
+      }
       const angle=Math.acos(clamp(Vector3.Dot(aim,shot.direction),-1,1));
       if(angle>.0001){
         Quaternion.FromUnitVectorsToRef(shot.direction,aim,rotation);

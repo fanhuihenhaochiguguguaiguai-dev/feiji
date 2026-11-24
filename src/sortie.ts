@@ -4,9 +4,9 @@ import { advanceFlight, Airframe, FLIGHT_STEP, ahead, above, idle, type Controls
 import { base, clamp, Terrain } from './terrain';
 import { aircraftContact, ellipsoid, terrainContact } from './contact';
 import { cannonFor, guidedStrike, gunCycle, gunDamage, gunSight, missileCycle, releaseDropSpeed, roundCapacity, standardGravity, thrustDuration } from './ordnance';
-import { groundMount, missiles, missileDamage,type MissileProfile } from './items';
+import { groundMount, missiles, missileDamage, minimumEnemyDurability,type MissileProfile } from './items';
 import type { CombatConfiguration } from './profile';
-import { choosePass,enemyProfiles,planPass,Tactic } from './tactics';
+import { choosePass,enemyTuning,planPass,Tactic } from './tactics';
 import { CountermeasureSystem, MissileGuidance, MissileWarningSystem, type DefenseCue, type DefenseKind, type GuidedTrack } from './defense';
 const delta=new Vector3(),local=new Vector3(),orientation=Quaternion.Identity(),inverted=Quaternion.Identity();
 const spreadVector=new Vector3(),leftToRight=new Vector3(),eventAt=new Vector3(),tipNow=new Vector3(),tipBefore=new Vector3(),shotStart=new Vector3(),shotEnd=new Vector3(),localStrike=new Vector3();
@@ -28,7 +28,7 @@ export interface Debrief {
   kills:number;accuracy:number|null;missileAccuracy:number|null;bombAccuracy:number|null;score:number;grade:string;credits:number;xp:number;types:Record<string,number>;evaded:number;
 }
 interface GroundTarget {position:Vector3;hp:number;alive:boolean}
-export interface Loadout {rank:number; armor:number; engine:number; stores:number; repair:boolean; radar:boolean; runway:boolean; configuration?:CombatConfiguration}
+export interface Loadout {rank:number; armor:number; engine:number; stores:number; repair:boolean; radar:boolean; runway:boolean; configuration?:CombatConfiguration;seed?:number;diagnostics?:boolean}
 const flightSets:Record<string,string[]>={ww1:['dr1','camel'],ww2:['p51','zero','bf109','spitfire'],early:['me262','p51','bf109'],
   cold:['mig21','g91','alphajet','me262'],modern:['j10','f16','hornet','gripen','mirage','su35'],stealth:['j10','su35','f16','j20','mirage']};
 
@@ -63,6 +63,10 @@ export class Sortie {
   private readonly enemyWarning=new MissileWarningSystem();
   private readonly gunLead=new Vector3();
   readonly waves:readonly number[];
+  readonly endless:boolean;
+  readonly seed:number;
+  readonly opening:number;
+  private readonly pilots=Array.from({length:4},()=>enemyTuning(1,1));
   readonly safeLine;
   readonly weapons:ProjectileKind[];
   readonly missile:MissileProfile;
@@ -74,16 +78,15 @@ export class Sortie {
   private shotSerial=0;
   readonly gates:Vector3[]=[];
   readonly stats={kills:0,fired:0,hit:0,missile:0,missileHit:0,bomb:0,bombHit:0,distance:0,peak:0,altitude:0,types:{} as Record<string,number>};
-  time=0; wave=0; during=0; nextWave=-1; lost=0; gate=0; lockProgress=0;
+  time=0; wave=0; during=0; cleared=0; lost=0; gate=0; lockProgress=0;
   total=0; active=true; win=false; reason=''; manual:Airframe|null=null; locked:Airframe|null=null;
   readonly difficulty;
   readonly radar;
   readonly loadout;
   readonly aiPoint=new Vector3();
-  readonly formation=new Vector3();
   readonly fireCursor={gun:0,missile:0,bomb:0};
   readonly enemyKit;
-  constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void){
+  constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void,world?:Terrain){
     const config=loadout.configuration;
     this.missile=config?.missile??{...missiles.interceptor,damage:missileDamage(type,missiles.interceptor,0)};
     this.spares=config?.spares??0;this.groundWeapon=config?.groundWeapon??'bomb';
@@ -94,18 +97,20 @@ export class Sortie {
     if(config?.groundStores??type.bombs)this.weapons.push('bomb');
     this.weapon=op.kind==='ground'&&this.weapons.includes('bomb')?'bomb':this.weapons[0]??'gun';
     this.loadout=loadout;this.difficulty=difficulties[loadout.rank]??difficulties[1];
+    this.endless=op.kind==='free'&&!loadout.diagnostics;
+    this.seed=(loadout.seed??0)>>>0;this.opening=2+this.seed%9;
     const engagement=op.engagement;
     this.waves=op.lesson?[1]:engagement?engagement.waves.map(n=>clamp(n+(loadout.rank===2?1:loadout.rank===0&&n>2?-1:0),1,4)):this.difficulty.waves;
     this.safeLine=-5100-(op.campaign??0)*53;
 
-    this.world=new Terrain(theatres[op.region].seed);this.radar=config?.radar??(loadout.radar?8500:6400);
+    this.world=world??new Terrain(theatres[op.region].seed);this.radar=config?.radar??(loadout.radar?8500:6400);
     const p=this.player=new Airframe(0,type,0);
     this.friendlies=[p,this.ally];
     p.roundsLimit=config?.rounds??roundCapacity(type,loadout.stores);p.missilesLimit=config?.airMissiles;p.bombsLimit=config?.groundStores;
     p.maxHp=type.durability;p.enginePower=config?.engine??(1+loadout.engine*.06);
     p.handling=config?.grip??1;p.firepower=config?.gun??1;p.storesBonus=config?.stores??loadout.stores;
     const original=type.props.length?Math.max(128,type.trim*2.1):390;
-    const h=engagement?Math.max(original,engagement.altitude):original;
+    const h=engagement?Math.max(engagement.objective==='low'?148:original,engagement.altitude):original;
     if(op.kind==='ground'){
       const groups=op.engagement?.groups??2;
       const shift=engagement&&op.campaign!==3?(op.campaign??0)%5*34:0;
@@ -143,24 +148,32 @@ export class Sortie {
     this.enemyKit=[...new Set([...(roster??flightSets[type.era]??flightSets.modern),...(engagement?.ace?[engagement.ace]:[])])];
     if(op.kind==='air'||op.kind==='escort'){
       this.total=this.waves.reduce((a,b)=>a+b,0);this.spawn();
-    }
+    }else if(this.endless)this.spawn();
   }
   spawn(){
-    const p=this.player,plan=this.op.engagement,count=this.waves[this.wave]??0;
-    this.wave++;this.during=this.time;this.nextWave=-1;
+    const p=this.player,plan=this.op.engagement;
+    const count=this.endless?Math.min(4,2+Math.floor((this.wave+this.seed%3)/2)):this.waves[this.wave]??0;
+    if(!count)return;
+    const step=this.endless?this.opening+this.wave*3:this.op.campaign??(this.op.lesson?1:3+this.op.threat*9);
+    const boss=this.endless?(this.wave+1)%10===0:this.wave+1===this.waves.length&&!!plan?.ace;
+    const rosterShift=this.endless?(this.seed>>>4)+this.wave*3:this.wave;
+    const normal=enemyTuning(step,this.loadout.rank),aceSkill=boss?enemyTuning(step+6,this.loadout.rank):normal;
+    const formation=plan?.formation??(this.endless?['line','stack','screen','pincer'][((this.seed>>>2)+this.wave)%4]:'line');
+    this.wave++;this.during=this.time;
+    if(this.endless)this.total+=count;
     const k=Math.hypot(p.forward.x,p.forward.z),x=k>.66?p.forward.x/k:0,z=k>.66?p.forward.z/k:-1;
     const distance=plan?Math.max(465,Math.min(plan.distance+210*(this.wave-1),p.type.trim*6.5)):
       Math.max(465,Math.min(this.wave===1?1170:1670,p.type.trim*5.65));
     for(let i=0;i<this.enemies.length;i++){
       const e=this.enemies[i];e.alive=i<count;e.down=0;
       if(!e.alive)continue;
-      e.type=byAircraft(this.enemyKit[(i+this.wave-1)%this.enemyKit.length]);
-      const ace=plan?.ace&&this.wave===this.waves.length&&i===count-1;
-      if(ace)e.type=byAircraft(plan.ace!);
-      if(!ace&&!plan&&this.op.kind==='air'&&this.op.region===2&&this.wave===3&&i===count-1&&p.type.trim>140)e.type=byAircraft('ea6b');
-      e.experience=ace?3:Math.min(3,(plan?.tier??0)+(this.loadout.rank===2?1:0)+(i===count-1&&plan?.formation==='ace'?1:0));
-      const skill=enemyProfiles[e.experience];
-      e.maxHp=Math.round((94+(e.type.durability-2000)*.008)*skill.armor*(ace?1.21:1));
+      e.type=byAircraft(this.enemyKit[(i+rosterShift)%this.enemyKit.length]);
+      const ace=boss&&i===count-1;
+      if(ace)e.type=byAircraft(plan?.ace??this.enemyKit[(rosterShift+this.enemyKit.length-1)%this.enemyKit.length]);
+      const skill=this.pilots[i]=ace?aceSkill:normal;
+      e.ace=ace;e.experience=skill.experience;
+      e.maxHp=minimumEnemyDurability+Math.round(2.3*(Math.min(60,step)-1)+64*Math.log1p(Math.max(0,step-60)/18)+
+        this.loadout.rank*10+(ace?92+step*1.25:0));
       e.enginePower=skill.engine;e.handling=skill.handling;e.firepower=skill.power;e.role=i;
       const defense=skill.counter&&e.type.safety?new CountermeasureSystem(e.type.era,ace?1:0):null;
       if(defense){
@@ -168,18 +181,25 @@ export class Sortie {
         defense.stocks.chaff=Math.min(defense.stocks.chaff,e.experience===3?2:1);
       }
       this.shields[i]=defense;
-      const wing=plan?.formation==='pincer'?1.55:plan?.formation==='screen'?.73:1;
+      const wing=formation==='pincer'?1.55:formation==='screen'?.73:1;
       const r=distance+i*Math.min(205,p.type.trim*.94),offset=i===0?94:(i%2?1:-1)*(155+i*169)*wing;
-      const bx=clamp(p.position.x+x*r-z*offset,-14400,14400),bz=clamp(p.position.z+z*r+x*offset,-15000,15000);
+      const enterX=p.position.x+x*r-z*offset,enterZ=p.position.z+z*r+x*offset;
+      const bx=this.endless?enterX:clamp(enterX,-22500,22500),bz=this.endless?enterZ:clamp(enterZ,-22500,22500);
       // The lead intercepts the player on the initial pass while the wingmen peel away.
       const facing=!this.op.lesson&&i===0&&this.wave===1?
         Math.atan2(p.position.x-bx,bz-p.position.z):Math.atan2(x,-z)+(i%2?.17:-.09);
-      e.reset(bx,Math.max(this.world.at(bx,bz,this.time)+106,p.position.y+54+i*(plan?.formation==='stack'?196:67)),bz,facing,e.type.trim*.82);
-      e.cooldown=this.time+(plan?1.47:3.1)+i*.67;e.missiles=Math.min(e.missiles,skill.magazine);
+      e.reset(bx,Math.max(this.world.at(bx,bz,this.time)+150,p.position.y+38+i*(formation==='stack'?138:54)),bz,facing,e.type.trim*.82);
+      e.cooldown=this.time+2.1-skill.pressure*.62+i*.54;e.missiles=Math.min(e.missiles,skill.magazine);
     }
     this.locked=null;this.manual=null;this.lockProgress=0;
     if(this.wave>1){
-      if(this.loadout.repair)this.defense.replenish();
+      if(this.endless){
+        const rounds=p.roundsLimit??p.type.ammo;
+        const air=p.missilesLimit??p.type.missiles;
+        p.cannon=Math.min(rounds,p.cannon+Math.ceil(rounds*.54));
+        p.missiles=Math.min(air,p.missiles+Math.ceil(air*.60));
+      }
+      if(this.endless||this.loadout.repair)this.defense.replenish();
       this.notify({kind:'wave',at:p.position,side:0});
     }
   }
@@ -448,7 +468,7 @@ export class Sortie {
       pursuit(e,p.position,controls);
       advanceFlight(e,controls,dt,this.world,t);this.ground(e);return;
     }
-    const skill=enemyProfiles[e.experience],shield=this.shields[e.id-1];
+    const skill=this.pilots[e.id-1],shield=this.shields[e.id-1];
     if(shield)shield.advance(dt);
     for(const q of this.groups.missile){
       if(!q.live||q.target!==e||q.guidance!=='tracking'||q.generation!==e.generation)continue;
@@ -464,16 +484,20 @@ export class Sortie {
       break;
     }
     const sensed=range<skill.radar&&!this.world.terrainMasks(e.position.x,e.position.y,e.position.z,victim.position.x,victim.position.y,victim.position.z);
+    if(range<850){
+      victim.velocity.subtractToRef(e.velocity,shotStart);
+      victim.position.subtractToRef(e.position,delta);
+      const closest=-Vector3.Dot(delta,shotStart)/Math.max(1,shotStart.lengthSquared());
+      if(closest>0&&closest<1.7&&delta.addInPlaceFromFloats(shotStart.x*closest,shotStart.y*closest,shotStart.z*closest).lengthSquared()<120**2)
+        e.evadeUntil=Math.max(e.evadeUntil,t+1.35);
+    }
     if(sensed&&e.experience>=2&&this.locked===e&&this.lockProgress>.68&&this.time-e.hitTime<2.7)
       e.evadeUntil=Math.max(e.evadeUntil,t+.65);
     const c=e.controls;
     c.assist=false;c.boost=false;c.gun=false;
-    const leader=this.enemies[0],tactic=choosePass(e,t,t-this.during,range,leader);
-    const mission=this.op.engagement;
-    const rushing=mission?.objective==='defend'&&e.role===(this.wave-1)%Math.max(1,this.waves[this.wave-1])&&t-this.during>9&&t>=e.evadeUntil;
-    if(rushing){
-      this.aiPoint.set(0,Math.max(430,e.position.y-30),5900);c.throttle=.97;c.boost=e.experience>=2;
-    }else if(sensed||tactic===Tactic.Formation||tactic===Tactic.Evade||tactic===Tactic.Extend){
+    const leader=this.enemies.find(unit=>unit.alive)??e;
+    const tactic=choosePass(e,t,t-this.during,range,leader,skill.pressure);
+    if(sensed||tactic===Tactic.Formation||tactic===Tactic.Evade||tactic===Tactic.Extend){
       planPass(e,leader,victim,range,tactic,this.aiPoint,c);
     }else{
       const sweeping=Math.sin(t*.39+e.role*1.14)*.66;
@@ -481,7 +505,7 @@ export class Sortie {
         e.forward.z*880-e.forward.x*840*sweeping);
       c.throttle=.76;
     }
-    const attack=sensed&&!rushing&&(tactic===Tactic.Intercept||tactic===Tactic.Defend);
+    const attack=sensed&&(tactic===Tactic.Intercept||tactic===Tactic.Flank);
     const missileType=e.type.era==='cold'||(this.shotSerial+1+e.role)%3===0?missiles.flarewing:
       e.experience===3&&e.type.safety?missiles.skylance:missiles.interceptor;
     let locking=false;
@@ -510,15 +534,18 @@ export class Sortie {
     if(!locking)e.lockAt=null;
     const h=this.world.at(e.position.x+e.forward.x*390,e.position.z+e.forward.z*390,t);
     this.aiPoint.y=Math.max(this.aiPoint.y,h+139);
-    if(Math.hypot(e.position.x,e.position.z)>19600)this.aiPoint.set(0,590,0);
+    if(e.ace&&e.hp<e.maxHp*.5&&tactic===Tactic.Intercept&&e.speed<e.type.trim*1.08){
+      c.throttle=1;c.boost=!!e.type.boost;
+    }
+    if(!this.endless&&Math.hypot(e.position.x,e.position.z)>22900)this.aiPoint.set(0,960,0);
     pursuit(e,this.aiPoint,c);
     if(e.position.y<this.world.at(e.position.x,e.position.z,t)+66)c.pitch=Math.max(.34,c.pitch);
     advanceFlight(e,c,dt,this.world,t);this.ground(e);if(c.gun)this.fire(e,'gun');
   }
   closePass(a:Airframe,b:Airframe){
     if(!a.alive||!b.alive)return false;
-    return aircraftContact(a.previous,a.position,b,false)<Infinity||
-      aircraftContact(b.previous,b.position,a,false)<Infinity;
+    return aircraftContact(a.previous,a.position,b,false,true)<Infinity||
+      aircraftContact(b.previous,b.position,a,false,true)<Infinity;
   }
   step(dt:number,input:Controls){
     if(!this.active)return;
@@ -535,7 +562,7 @@ export class Sortie {
       if(previous<1&&this.lockProgress===1)this.notify({kind:'lock',at:p.position,side:0});
     }
     if(input.gun)this.fire(p,'gun');
-    if(input.missile&&this.lockProgress===1&&this.op.lesson!=='counter')this.fire(p,'missile',this.locked);
+    if(input.missile&&this.lockProgress===1)this.fire(p,'missile',this.locked);
     if(input.bomb)this.fire(p,'bomb');
     for(const e of this.enemies)this.enemy(e,dt);
     if(this.ally.alive){
@@ -556,21 +583,11 @@ export class Sortie {
         if(this.gate>=this.gates.length)this.end(true,'三个航标均已通过');
       }
     }
-    if(this.op.engagement?.objective==='defend'&&this.enemies.some(e=>e.alive&&e.position.z>5150)){
-      this.end(false,'编队突破警戒线');return;
-    }
     if(this.op.length&&this.time>this.op.length)this.end(false,'已超出挑战时限');
-    if(this.op.kind==='air'||this.op.kind==='escort'){
-      if(this.op.lesson==='counter'){
-        if(this.defense.successes>0)this.end(true,'成功引开来袭导弹');
-        else if(this.time>65||this.enemies.every(e=>!e.alive))this.end(false,'未在训练空域完成反制');
-        return;
-      }
-      if(this.lost>=this.total&&(this.op.kind!=='escort'||!this.op.engagement))this.end(true,this.op.kind==='escort'?'空中威胁已清除，运输航路安全':'空域已肃清');
-      else if(this.enemies.every(e=>!e.alive)&&this.wave<this.waves.length){
-        if(this.nextWave<0)this.nextWave=this.time+2.5;
-        if(this.time>=this.nextWave)this.spawn();
-      }
+    if(this.active&&(this.endless||this.op.kind==='air'||this.op.kind==='escort')&&this.enemies.every(e=>!e.alive)){
+      this.cleared=this.wave;
+      if(this.endless||this.wave<this.waves.length)this.spawn();
+      else this.end(true,'全部敌机已击落');
     }
     if(this.op.kind==='ground'&&this.lost>=this.total)this.end(true,'训练靶全部摧毁');
   }

@@ -11,12 +11,12 @@ async function start(){
   let activeBackend='';
   const blocked=()=>{try{return sessionStorage.getItem('pixel-sky-webgpu-fallback')==='1';}catch{return false;}};
   try {
-    const settings=loadProfile().settings;
-    const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()?'gl':settings.backend);
+    const profile=loadProfile();
+    const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()?'gl':profile.settings.backend);
     activeBackend=entry.backend;
     const initial=theatres[0];
     await loadTerrain(initial.seed,new URL('world/'+initial.id+'.height',document.baseURI).href);
-    const game=new Game(entry);
+    const game=new Game(entry,profile);
     if(__FLAGSHIP_QA__){
       const {instrument}=await import('./qa-instrumentation');
       Object.defineProperty(window,'flightQA',{value:game});

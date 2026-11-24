@@ -5,19 +5,25 @@ import type { Terrain } from './terrain';
 const relativeStart=new Vector3(),relativeEnd=new Vector3(),inverse=Quaternion.Identity();
 const noContact=Infinity;
 
-// Solve in the moving target's frame. The generous dimensions retain the game's
-// existing arcade hit envelope while distinguishing wings, fuselage and proximity fuzes.
-export function aircraftContact(start:Vector3,end:Vector3,target:Airframe,proximity:boolean){
+// Each sweep runs in the moving target's frame, so relative motion cannot tunnel.
+export function aircraftContact(start:Vector3,end:Vector3,target:Airframe,proximity:boolean,hullOnly=false){
   start.subtractToRef(target.previous,relativeStart);
   end.subtractToRef(target.position,relativeEnd);
-  const padding=proximity?18:5.5;
+  const padding=proximity?18:hullOnly?.35:5.5;
   const radius=Math.max(target.type.length*.53,target.type.span*.55)+padding;
   if(Math.min(relativeStart.lengthSquared(),relativeEnd.lengthSquared())>
     (radius+Vector3.Distance(relativeStart,relativeEnd))**2)return noContact;
   target.orientation.conjugateToRef(inverse);
   relativeStart.rotateByQuaternionToRef(inverse,relativeStart);
   relativeEnd.rotateByQuaternionToRef(inverse,relativeEnd);
-  return ellipsoid(relativeStart,relativeEnd,target.type.span*.48+padding,target.type.span*.13+padding,target.type.length*.50+padding);
+  const {span,length}=target.type;
+  if(proximity||!hullOnly)return ellipsoid(relativeStart,relativeEnd,span*.48+padding,span*.13+padding,length*.50+padding);
+  const fuselage=ellipsoid(relativeStart,relativeEnd,span*.105+padding,span*.12+padding,length*.48);
+  relativeStart.z-=length*.04;relativeEnd.z-=length*.04;
+  const wing=ellipsoid(relativeStart,relativeEnd,span*.48+padding,span*.035+padding,length*.23);
+  relativeStart.z-=length*.32;relativeEnd.z-=length*.32;
+  const tail=ellipsoid(relativeStart,relativeEnd,span*.24+padding,span*.086+padding,length*.155);
+  return Math.min(fuselage,wing,tail);
 }
 
 export function ellipsoid(start:Vector3,end:Vector3,width:number,height:number,length:number){

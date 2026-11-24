@@ -495,3 +495,6 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
   .debrief .dialog-actions {margin-top:5px}
   .debrief .dialog-actions button {min-height:34px;padding-block:4px}
 }
+#boss-health{display:block;margin:3px auto 0;min-width:70px;padding:3px 6px;border:1px solid #d3a368a0;color:#ffe5af;background:linear-gradient(90deg,#664528e8 var(--health,0%),#142338dd 0);font-weight:700;text-align:center}
+.target-pin.ace:not(.ally){border-color:#ffbe71;color:#fff1c9}
+.stage-picker button[data-boss="true"]:not([data-state="locked"]){border-color:#d0a365;color:#ffe4a7}

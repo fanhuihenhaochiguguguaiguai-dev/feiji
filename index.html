@@ -38,8 +38,8 @@
       </aside>
       <aside class="quick">
         <button class="launch-card" data-nav="missions" data-briefing="coast"><strong>战役司令部</strong><span>战役与独立任务</span><i data-icon="target"></i></button>
-        <button data-nav="training" data-briefing="training"><strong>训练模式</strong><span>航线与操纵</span><i data-icon="wing"></i></button>
-        <button data-nav="freeprep" data-briefing="hangar"><strong>自由飞行</strong><span>海面与机场</span><i data-icon="plane"></i></button>
+        <button data-nav="training" data-briefing="training"><strong>训练模式</strong><span>空战教学</span><i data-icon="wing"></i></button>
+        <button data-nav="freeprep" data-briefing="hangar"><strong>自由空战</strong><span>连续迎击</span><i data-icon="plane"></i></button>
       </aside>
       <div class="selected-ship"><button id="prev-plane" aria-label="上一架战机" data-icon="left"></button><span id="deck-name"></span><button id="next-plane" aria-label="下一架战机" data-icon="right"></button></div>
     </div>
@@ -60,7 +60,7 @@
       <div class="telemetry"><span>空速 <b id="speed"></b> <small>公里/时</small></span><span>高度 <b id="alt"></b> <small>米</small></span><span>航向 <b id="heading"></b></span></div>
       <div id="hud-goal" class="hud-extra"></div>
     </div>
-    <div class="hud-middle"><b id="enemy-counter"></b><span id="flight-time"></span><output id="alerts" role="status"></output></div>
+    <div class="hud-middle"><b id="enemy-counter"></b><span id="flight-time"></span><small id="boss-health" hidden></small><output id="alerts" role="status"></output></div>
     <div class="hud-right">
       <button id="pause" class="square" data-icon="pause" aria-label="暂停"></button>
       <button id="gear" class="square small-label" aria-label="起落架">起落架</button>

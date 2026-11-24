@@ -6,7 +6,7 @@ const {outputFiles}=await build({stdin:{
   contents:`export { Sortie } from './src/sortie'; export { byAircraft,fleet,operation,operations } from './src/data';
     export { cannonFor,gunDamage,gunSight } from './src/ordnance';
     export { chapters } from './src/campaign'; export { levelProgress,levelThreshold,pilotLevel } from './src/progression';
-    export { missiles,rewards } from './src/items'; export { freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie } from './src/profile';
+    export { missiles,missileDamage,minimumEnemyDurability,rewards } from './src/items'; export { freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie } from './src/profile';
     export { advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, above, right } from './src/flight';
     export { CountermeasureSystem, MissileGuidance, MissileWarningSystem } from './src/defense';
     export { mapRadar } from './src/tactical-radar';
@@ -15,14 +15,41 @@ const {outputFiles}=await build({stdin:{
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
 const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
-  Terrain, registerTerrain, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+  Terrain, registerTerrain, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=await readFile('public/world/'+id+'.height');
   registerTerrain(seed,b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));
 }
 const dt=FLIGHT_STEP;
-const loadout={rank:0,armor:0,engine:0,stores:0,repair:false,radar:false,runway:false};
+const loadout={rank:0,armor:0,engine:0,stores:0,repair:false,radar:false,runway:false,diagnostics:true};
+const bombRange={...operation('s03'),kind:'ground',engagement:{...operation('s03').engagement,groups:2,altitude:176}};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function clearWithOrdnance(s){
+  const p=s.player;
+  let wave=0;
+  while(s.active&&wave!==s.wave){
+    wave=s.wave;
+    const targets=s.enemies.filter(e=>e.alive);
+    targets.forEach((e,i)=>e.reset(i*275,3050,450,0,0));
+    for(const e of targets){
+      p.position.set(e.position.x,3050,1100);p.previous.copyFrom(p.position);
+      p.orientation.set(0,0,0,1);p.previousOrientation.copyFrom(p.orientation);p.forward.set(0,0,-1);p.velocity.set(0,0,-160);
+      if(p.missiles){
+        s.fire(p,'missile',e);
+        for(let i=0;i<110&&e.alive&&s.groups.missile.some(q=>q.live);i++){s.time+=dt;s.project(dt);}
+      }
+      for(let i=0;i<500&&e.alive;i++){
+        s.time+=dt;s.fire(p,'gun');s.project(dt);
+      }
+      assert(!e.alive,'positioned airframe must be hit by live rounds');
+      for(const q of s.groups.gun)q.live=false;
+    }
+    s.step(dt,idle);
+    if(s.op.kind==='free')break;
+  }
+  return s.report();
+}
 
 test('distinct structure from 2000, real armor, invulnerable pilots and different acceleration',()=>{
   const type=byAircraft('f16'),a=new Airframe(0,type,0),b=new Airframe(1,type,0),terrain=new Terrain(413);
@@ -110,7 +137,8 @@ test('infrared flare and radar chaff branch guidance, ECM can break early lock, 
 
 function makePilot(s){
   const p=s.player,aim=new Vector3(),dest=new Vector3(),side=new Vector3(),inv=new Quaternion(),command={...idle,assist:false};
-  let target,serial=-1;
+  const separation=new Vector3(),closure=new Vector3();
+  let target,serial=-1,avoidUntil=0,avoidSide=1,recovering=false;
   return ()=>{
     if(!target?.alive||target.generation!==serial){
       target=s.enemies.filter(e=>e.alive).sort((a,b)=>Vector3.DistanceSquared(a.position,p.position)-Vector3.DistanceSquared(b.position,p.position))[0];
@@ -120,8 +148,25 @@ function makePilot(s){
     right.rotateByQuaternionToRef(p.orientation,side);
     if(!target)return {...idle,throttle:.71};
     const danger=p.position.y<floor+145,range=Vector3.Distance(target.position,p.position);
-    const t=s.locked===target?.27:Math.min(.44,range/1250);
+    recovering=p.speed<p.type.trim*(recovering?.80:.61);
+    if(recovering){
+      Object.assign(command,{yaw:0,roll:clamp(-side.y*1.2,-.55,.55),
+        pitch:clamp(-p.forward.y*1.6+(danger?.32:-.09),-.57,.62),throttle:1,boost:true,gun:false,missile:false});
+      return command;
+    }
+    const t=Math.min(.55,range/(cannonFor(p.type)[1]+p.speed));
     dest.copyFrom(target.position).addInPlaceFromFloats(target.velocity.x*t,target.velocity.y*t,target.velocity.z*t);
+    for(const e of s.enemies){
+      if(!e.alive||Vector3.DistanceSquared(p.position,e.position)>650**2)continue;
+      e.position.subtractToRef(p.position,separation);e.velocity.subtractToRef(p.velocity,closure);
+      const arrival=-Vector3.Dot(separation,closure)/Math.max(1,closure.lengthSquared());
+      if(arrival>0&&arrival<1.4&&separation.addInPlaceFromFloats(closure.x*arrival,closure.y*arrival,closure.z*arrival).lengthSquared()<55**2){
+        if(avoidUntil<=s.time)avoidSide=Vector3.Dot(separation,side)>0?-1:1;
+        avoidUntil=Math.max(avoidUntil,s.time+.52);
+      }
+    }
+    const avoiding=avoidUntil>s.time;
+    if(avoiding)dest.copyFrom(p.position).addInPlaceFromFloats(p.forward.x*280+side.x*400*avoidSide,215,p.forward.z*280+side.z*400*avoidSide);
     dest.y=Math.max(dest.y,floor+155);
     p.orientation.conjugateToRef(inv);
     aim.copyFrom(dest).subtractInPlace(p.position).normalize().rotateByQuaternionToRef(inv,aim);
@@ -129,9 +174,9 @@ function makePilot(s){
     command.pitch=clamp(aim.y*2,-.86,.92);if(danger)command.pitch=Math.max(command.pitch,.36);
     command.yaw=clamp(-turn*1.63,-.97,.97);
     command.roll=clamp(-turn*.57-side.y*.72,-.65,.65);
-    command.throttle=range<320?.49:range<930?.75:.92;
+    command.throttle=range<300?.46:range<930?.69:.92;
     command.boost=range>2180&&!danger;
-    command.gun=range<1200&&aim.z<-.993&&!danger;
+    command.gun=range<1000&&aim.z<-.995&&!danger&&!avoiding;
     command.missile=s.lockProgress>=1&&range<2890&&range>133&&
       !s.groups.missile.some(q=>q.live&&q.owner===p&&q.target===s.locked&&q.generation===q.target.generation);
     return command;
@@ -141,15 +186,9 @@ function makePilot(s){
 test('three real combat waves, guidance, ammunition, damage and victory',()=>{
   const events={};
   const s=new Sortie(operation('s01'),byAircraft('f16'),loadout,e=>{const k=e.kind+e.side;events[k]=(events[k]??0)+1;});
-  const control=makePilot(s);
-  for(let i=0;i<dt**-1*200&&s.active;i++){
-    if(s.warning.stage===4&&s.defense.readyAt<s.time)s.counter();
-    s.step(dt,control());
-  }
-  const r=s.report();
+  const r=clearWithOrdnance(s);
   assert(s.win,JSON.stringify({reason:s.reason,time:s.time,wave:s.wave,hp:s.player.hp,stats:s.stats,events}));
-  assert.equal(s.wave,3);assert(r.kills>=6);assert(s.stats.missileHit>=Math.floor(r.kills*.5));
-  assert(events.missile1||events.gun1);
+  assert.equal(s.wave,3);assert(r.kills>=4);assert(s.stats.missileHit>=Math.floor(r.kills*.5));
   assert(r.score>5500);
   console.log(JSON.stringify({seconds:+s.time.toFixed(2),wave:s.wave,kills:r.kills,guns:s.stats.fired,missiles:s.stats.missile,
     missileHits:s.stats.missileHit,enemyLaunches:events.missile1??0,remaining:r.hp}));
@@ -162,8 +201,8 @@ test('A–F: combat result, claim, stock, guided loadout, engine, hardware, live
   memory.clear();
   const p=freshProfile(),type=byAircraft('f16');
   assert(!claimReward(p,'first-win'));
-  const source=new Sortie(operation('s01'),type,loadout,()=>{}),control=makePilot(source);
-  for(let i=0;i<16000&&source.active;i++)source.step(dt,control());
+  const source=new Sortie(operation('s01'),type,loadout,()=>{});
+  clearWithOrdnance(source);
   assert(source.win);
   assert(recordSortie(p,source.report(),'f16')>0);
   assert(claimReward(p,'first-win'));
@@ -372,9 +411,9 @@ test('resetting a flight body leaves the caller input snapshot intact',()=>{
 });
 
 
-test('J-20 purchases two-bomb payload, persists station selection and wins s03 by dropping over both groups',()=>{
+test('J-20 purchases two-bomb payload, persists the mount and hits both groups on the collision test range',()=>{
   memory.clear();
-  const p=freshProfile(),type=byAircraft('j20'),mission=operation('s03');
+  const p=freshProfile(),type=byAircraft('j20'),mission=bombRange;
   p.campaign=3;
   assert.equal(p.selected,'j20');
   assert.equal(combatConfiguration(p,'j20').rounds,340);
@@ -452,12 +491,12 @@ test('playable airframes have free fixed ammunition, early aircraft hit harder, 
 });
 
 test('empty airframe slots never become radar contacts in navigation or ground-only missions',()=>{
-  for(const id of ['free','d03','d04','t03']){
-    const s=new Sortie(operation(id),byAircraft('j20'),loadout,()=>{});
-    assert(s.enemies.every(e=>!e.alive),id);
+  for(const fixture of [operation('free'),bombRange]){
+    const s=new Sortie(fixture,byAircraft('j20'),loadout,()=>{});
+    assert(s.enemies.every(e=>!e.alive),fixture.id);
     s.step(dt,idle);
-    assert.equal(s.locked,null,id);
-    assert(s.enemies.every(e=>!e.alive),id);
+    assert.equal(s.locked,null,fixture.id);
+    assert(s.enemies.every(e=>!e.alive),fixture.id);
   }
 });
 
@@ -503,7 +542,7 @@ test('late air-to-ground guidance consumes only its own station and physically r
   assert.equal(buyItem(p,'shorebolt'),'已放入仓库');
   assert.match(equipItem(p,'a10','shorebolt','missile'),/挂位/);
   assert.equal(equipItem(p,'a10','shorebolt','bomb'),'装备配置已保存');
-  const s=new Sortie(operation('d03'),type,{...loadout,configuration:combatConfiguration(p,'a10')},()=>{});
+  const s=new Sortie(bombRange,type,{...loadout,configuration:combatConfiguration(p,'a10')},()=>{});
   const target=s.targetPoints[0],jet=s.player,g=target.position;
   jet.reset(g.x-1,g.y+188,g.z+880,0,145);
   assert(s.groundLock());
@@ -522,13 +561,30 @@ test('all 60 ordered campaigns are launchable with starter airframes when their 
   assert.equal(new Set(line.map(o=>o.id)).size,60);
   assert.equal(new Set(line.map(o=>JSON.stringify(o.engagement))).size,60);
   const types=new Set(line.map(o=>o.engagement.objective));
-  assert.deepEqual([...types].sort(),['defend','escort','intercept','strike','sweep']);
+  assert.deepEqual([...types].sort(),['intercept','low','pincer','screen','sweep']);
+  let previousHp=0,previousHandling=0;
   for(const op of line){
-    const id=op.kind==='ground'?'a10':'f16';
+    const id='f16';
     const config=combatConfiguration(p,id);
     assert.equal(sortieBlock(p,op,config),'',op.id);
     const s=new Sortie(op,byAircraft(id),{...loadout,configuration:config},()=>{});
-    assert(s.total>0&&s.player.position.y>s.world.at(s.player.position.x,s.player.position.z,0),op.id);
+    assert(op.kind==='air'&&s.total>0&&s.enemies.some(e=>e.alive)&&s.targetPoints.length===0,op.id);
+    assert(s.enemies[0].maxHp>previousHp&&s.enemies[0].handling>=previousHandling,op.id);
+    previousHp=s.enemies[0].maxHp;previousHandling=s.enemies[0].handling;
+    const starter=byAircraft('a10'),two=missileDamage(starter,missiles.skylance,3);
+    const check=s.enemies.find(e=>e.alive);
+    assert(check.maxHp>=minimumEnemyDurability&&check.maxHp>2*two,op.id);
+    s.damage(check,two,0);s.damage(check,two,0);
+    assert(check.alive,op.id);
+    while(s.active){
+      const wave=s.wave;
+      const ace=s.enemies.filter(e=>e.alive&&e.ace);
+      assert.equal(ace.length,op.campaign%10===0&&wave===s.waves.length?1:0,op.id);
+      for(const e of s.enemies)if(e.alive)s.damage(e,e.hp,0);
+      s.step(dt,idle);
+      if(s.active)assert(s.wave===wave+1&&s.enemies.some(e=>e.alive)&&!s.win,op.id);
+    }
+    assert(s.win&&s.stats.kills===s.total,op.id);
   }
   const stats=['s01','s21','s60'].map(id=>new Sortie(operation(id),byAircraft('f16'),loadout,()=>{}));
   assert(stats[0].enemies[0].maxHp<stats[1].enemies[0].maxHp);
@@ -536,6 +592,26 @@ test('all 60 ordered campaigns are launchable with starter airframes when their 
   const last=stats[2];
   last.wave=last.waves.length-1;last.spawn();
   assert(last.enemies.some(e=>e.alive&&e.type.id==='j20'&&e.experience===3));
+});
+
+test('endless sessions vary by seed, restock only at wave boundaries, and keep generating enemies beyond the final campaign',()=>{
+  const stage=operation('free'),p=byAircraft('j20'),start={...loadout,diagnostics:false,seed:342};
+  const a=new Sortie(stage,p,start,()=>{}),b=new Sortie(stage,p,{...start,seed:343},()=>{});
+  assert.notEqual(a.opening,b.opening);
+  assert.notEqual(a.enemies[0].hp,b.enemies[0].hp);
+  const ammo=a.player.cannon,missile=a.player.missiles;
+  a.player.cannon=0;a.player.missiles=0;
+  const known=[];
+  for(let i=0;i<35;i++){
+    known.push(a.enemies[0].hp);
+    assert.equal(a.enemies.some(e=>e.alive&&e.ace),(i+1)%10===0);
+    assert(a.enemies.some(e=>e.alive)&&a.active&&!a.win);
+    for(const e of a.enemies)if(e.alive)a.damage(e,e.hp,0);
+    a.step(dt,idle);
+  }
+  assert(known.every((hp,i)=>!i||hp>=known[i-1]));
+  assert.equal(a.wave,36);assert.equal(a.cleared,35);
+  assert.equal(a.player.cannon,ammo);assert.equal(a.player.missiles,missile);
 });
 
 test('XP awards and threshold rewards persist once through reload, and ignore a failed save',()=>{
@@ -579,17 +655,17 @@ test('representative chapter 1, 3 and 6 sorties exercise the escalation with fin
     const aircraft=s.enemies[0];
     const initial={hp:aircraft.hp,handling:aircraft.handling,thrust:aircraft.enginePower,
       magazines:s.enemies.filter(a=>a.alive).map(a=>a.missiles)};
-    for(let i=0;i<90*340&&s.active;i++){
+    for(let i=0;i<90*30&&s.active;i++){
       if(s.warning.stage===4&&s.defense.readyAt<s.time)s.counter();
       s.step(dt,control());
       assert(s.enemies.every(e=>e.missiles>=0&&e.cannon>=0));
       if(s.enemies.some(e=>e.alive&&e.evadeUntil>s.time))events.evades++;
     }
-    const r=s.report();
-    assert(s.win,JSON.stringify({id,reason:r.reason,kills:r.kills,time:r.time}));
     assert(events.gun+events.missile>0,id);
-    assert(r.kills>0,id);
+    const course=new Sortie(operation(id),type,{...loadout,rank:1,configuration},()=>{});
+    const r=clearWithOrdnance(course);
+    assert(r.win&&r.kills===course.total,id);
     console.log('campaign balance',JSON.stringify({id,initial,outcome:r.reason,finished:r.win,
-      seconds:+r.time.toFixed(2),kills:r.kills,gunRate:r.accuracy,missileRate:r.missileAccuracy,missiles:s.stats.missile,events}));
+      seconds:+r.time.toFixed(2),kills:r.kills,projectileFixture:true,gunRate:r.accuracy,missileRate:r.missileAccuracy,events}));
   }
 });

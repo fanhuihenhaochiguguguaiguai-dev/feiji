@@ -27,6 +27,7 @@ export class Airframe {
   hitIntensity=0;
   handling=1;
   experience=0;
+  ace=false;
   lockAt:number|null=null;
   firepower=1;
   roundsLimit?:number; missilesLimit?:number; bombsLimit?:number;

@@ -29,15 +29,15 @@ export interface Operation {
 export const operations:Operation[]=[
   ...campaignOperations,
   {id:'d01',name:'岛链拦截',kind:'air',region:0,detail:'自由选择战机和难度，迎击敌方编队。',threat:2},
-  {id:'d02',name:'运输护航',kind:'escort',region:1,detail:'在运输机抵达安全区前保护它。',threat:2},
-  {id:'d03',name:'对地打靶',kind:'ground',region:0,detail:'在训练场用航炮或炸弹摧毁无人靶。',threat:1},
-  {id:'d04',name:'低空训练',kind:'train',region:0,detail:'连续通过三道航标，练习油门、转向和低空飞行。',threat:0},
-  {id:'d05',name:'苍穹挑战',kind:'air',region:2,detail:'限时迎击精锐编队，挑战本机最高战绩。',threat:3,length:230},
-  {id:'t02',name:'峡湾转向',kind:'train',region:1,detail:'连续通过三个错位航标，练习带坡度的左右转弯。',threat:0,lesson:'turn'},
-  {id:'t03',name:'航炮瞄准',kind:'ground',region:0,detail:'沿跑道方向使用航炮或炸弹命中无人靶。',threat:0,lesson:'gun'},
-  {id:'t04',name:'锁定与发射',kind:'air',region:0,detail:'锁定并击落一架练习敌机。',threat:0,lesson:'missile'},
-  {id:'t05',name:'热诱饵与箔条',kind:'air',region:0,detail:'识别来袭弹种，实际引开一枚训练导弹。',threat:0,lesson:'counter'},
-  {id:'free',name:'自由飞行',kind:'free',region:0,detail:'从海面上空或基地跑道出发，自由探索岛屿。',threat:0}
+  {id:'d02',name:'雪线攻防',kind:'air',region:1,detail:'在雪山走廊迎战从两翼切入的敌机，击落全部敌机。',threat:2},
+  {id:'d03',name:'海岬追猎',kind:'air',region:0,detail:'沿海岸低空接战，击落来袭空中编队。',threat:1},
+  {id:'d04',name:'低空训练',kind:'air',region:0,detail:'练习油门、转向和低空飞行，击落一架练习敌机。',threat:0,lesson:'flight'},
+  {id:'d05',name:'苍穹挑战',kind:'air',region:2,detail:'接连迎击精锐编队，击落全部敌机。',threat:3},
+  {id:'t02',name:'峡湾转向',kind:'air',region:1,detail:'沿峡湾转向，追踪并击落练习敌机。',threat:0,lesson:'turn'},
+  {id:'t03',name:'航炮瞄准',kind:'air',region:0,detail:'用航炮校准提前量，击落练习敌机。',threat:0,lesson:'gun'},
+  {id:'t04',name:'锁定与发射',kind:'air',region:0,detail:'练习锁定与发射，再以航炮或导弹击落练习敌机。',threat:0,lesson:'missile'},
+  {id:'t05',name:'热诱饵与箔条',kind:'air',region:0,detail:'识别来袭弹种并反制，击落训练敌机后过关。',threat:0,lesson:'counter'},
+  {id:'free',name:'自由空战',kind:'free',region:0,detail:'每次出击的初始强度会变化。每清空一波立即迎来更强的敌机，可在暂停时结算战绩。',threat:0}
 ];
 export const operation=(id:string)=>operations.find(m=>m.id===id)??operations[0];
 export const difficulties=[

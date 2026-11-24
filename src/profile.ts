@@ -209,7 +209,7 @@ export function consumeReserve(p:Save){
   if(!(p.inventory.reserve>0))return false;
   return commit(p,{...p,inventory:{...p.inventory,reserve:p.inventory.reserve-1}});
 }
-export function combatConfiguration(p:Save,id:string):CombatConfiguration{
+export function combatConfiguration(p:Save,id:string,groundEnabled=true):CombatConfiguration{
   const plane=byAircraft(id),owned=p.unlocked.includes(id),choices=owned?p.loadouts[id]??{}:{};
   const get=(slot:GearSlot)=>{
     const key=choices[slot],value=key&&itemById[key];
@@ -219,7 +219,7 @@ export function combatConfiguration(p:Save,id:string):CombatConfiguration{
   const stores=level('stores');
   const warhead=level('warhead'),cadence=level('cadence');
   const payload=get('bomb');
-  const groundStock=choices.bomb==='none'?0:payload?(plane.bombs||2):plane.bombs;
+  const groundStock=!groundEnabled||choices.bomb==='none'?0:payload?(plane.bombs||2):plane.bombs;
   const airStock=Math.max(0,plane.missiles-(plane.id==='j20'&&groundStock?4:0));
   const missile=missiles[get('missile')?.id??'interceptor'];
   return {aircraft:plane.id,missile:{...missile,damage:missileDamage(plane,missile,warhead)},paint:get('skin')?.color??'',
@@ -234,9 +234,9 @@ export function combatConfiguration(p:Save,id:string):CombatConfiguration{
     gun:1+level('weapons')*.07,gunRate:1+cadence*.09,missileRate:1+cadence*.06,missilePower:1+warhead*.12,
     armor:level('armor'),stores:level('stores'),spares:p.inventory.reserve??0};
 }
-export function sortieBlock(p:Save,op:Operation,loadout=combatConfiguration(p,p.selected)){
+export function sortieBlock(p:Save,op:Operation,loadout=combatConfiguration(p,p.selected,op.kind==='ground')){
   if(op.campaign&&op.campaign>p.campaign)return '完成前序战役后解锁';
-  if((op.level??1)>pilotLevel(p.xp))return '需要飞行员 Lv.'+op.level+'，可完成训练或已解锁任务获得经验';
+  if(!op.campaign&&(op.level??1)>pilotLevel(p.xp))return '需要飞行员 Lv.'+op.level+'，可完成训练或已解锁任务获得经验';
   if(op.kind==='ground'&&!loadout.rounds&&!loadout.groundStores)return '缺少对地武器。请安装航炮、炸弹或空对地制导弹';
   if(op.engagement?.groups&&!loadout.rounds&&loadout.groundStores<op.engagement.groups)
     return '本关有 '+op.engagement.groups+' 处目标群。请换用航炮或装载更多对地弹药';
@@ -244,7 +244,7 @@ export function sortieBlock(p:Save,op:Operation,loadout=combatConfiguration(p,p.
     return '对地弹药不足以清扫分散目标。请选择重力炸弹或装备航炮';
   if(op.lesson==='missile'&&!loadout.airMissiles)return '缺少空空导弹。请安装空空弹或更换战机';
   if(op.lesson==='counter'&&!byAircraft(loadout.aircraft).safety)return '请更换配备反制设备的战机';
-  if((op.kind==='air'||op.kind==='escort')&&op.lesson!=='counter'&&!loadout.rounds&&!loadout.airMissiles)
+  if((op.kind==='air'||op.kind==='escort'||op.kind==='free')&&!loadout.rounds&&!loadout.airMissiles)
     return '缺少空战武器。请恢复原厂航炮、空空弹或更换战机';
   return '';
 }
