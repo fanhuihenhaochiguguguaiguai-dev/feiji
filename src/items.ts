@@ -74,8 +74,8 @@ export function missileDamage(plane:PlaneSpec,profile:MissileProfile,level:numbe
   const airframe=plane.era==='cold'?1.11:plane.era==='stealth'?.96:plane.id==='a10'?1.06:1;
   return profile.damage*airframe*(1+level*.12);
 }
-// All hostile aircraft have 120 fewer HP than the original V18.1 balance.
-export const minimumEnemyDurability=71-120+Math.ceil(2*Math.max(...fleet.flatMap(plane=>
+// Every stock enemy survives two impacts from any currently available upgraded air-to-air loadout.
+export const minimumEnemyDurability=71+Math.ceil(2*Math.max(...fleet.flatMap(plane=>
   Object.values(missiles).filter(weapon=>!plane.support&&compatible(plane,itemById[weapon.id]!))
     .map(weapon=>missileDamage(plane,weapon,3)))));
 export function compatible(plane:PlaneSpec,entry:ItemDefinition){

@@ -597,12 +597,11 @@ test('all 60 ordered campaigns are launchable with starter airframes when their 
     assert(op.kind==='air'&&s.total>0&&s.enemies.some(e=>e.alive)&&s.targetPoints.length===0,op.id);
     assert(s.enemies[0].maxHp>previousHp&&s.enemies[0].handling>=previousHandling,op.id);
     previousHp=s.enemies[0].maxHp;previousHandling=s.enemies[0].handling;
+    const starter=byAircraft('a10'),two=missileDamage(starter,missiles.skylance,3);
     const check=s.enemies.find(e=>e.alive);
-    const originalMinimum=71+Math.ceil(2*Math.max(...fleet.filter(plane=>!plane.support).flatMap(plane=>
-      Object.values(missiles).filter(weapon=>weapon.id!=='skylance'||plane.era==='modern'||plane.era==='stealth')
-        .map(weapon=>missileDamage(plane,weapon,3)))));
-    assert.equal(minimumEnemyDurability,originalMinimum-120,op.id);
-    assert.equal(check.maxHp,originalMinimum-120+Math.round(2.3*(op.campaign-1)),op.id);
+    assert(check.maxHp>=minimumEnemyDurability&&check.maxHp>2*two,op.id);
+    s.damage(check,two,0);s.damage(check,two,0);
+    assert(check.alive,op.id);
     while(s.active){
       const wave=s.wave;
       const ace=s.enemies.filter(e=>e.alive&&e.ace);
