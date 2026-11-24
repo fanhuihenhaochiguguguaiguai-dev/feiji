@@ -154,7 +154,7 @@ export class AircraftView {
     Vector3.TransformCoordinatesToRef(this.center,this.pivot.computeWorldMatrix(true),this.projectedCenter);
     this.anchor.set(this.projectedCenter.x,this.projectedCenter.y,this.projectedCenter.z);
     const range=Vector3.Distance(at,this.world.camera.position);
-    const height=this.world.entry.canvas.clientHeight;
+    const height=this.world.entry.app.device.getRenderHeight();
     const pixels=Math.max(p.type.span,p.type.length)*height/(2*Math.max(1,range)*Math.tan(this.world.camera.fov*.5));
     const exterior=range<228||pixels>(this.lod===0?45:57);
     const combat=range<(this.lod===1?1950:1700)||pixels>(this.lod===1?5.2:6.8);

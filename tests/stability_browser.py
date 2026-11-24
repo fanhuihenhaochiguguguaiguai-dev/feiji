@@ -1,7 +1,9 @@
 """Run recovery checks against an instrumented Vite build using local static fixtures."""
 from argparse import ArgumentParser
+import json
 from mimetypes import guess_type
 from pathlib import Path
+from statistics import median
 from time import perf_counter
 from urllib.parse import unquote, urlparse
 
@@ -10,12 +12,15 @@ from playwright.sync_api import sync_playwright
 parser = ArgumentParser()
 parser.add_argument("root", type=Path)
 parser.add_argument("out", type=Path)
-parser.add_argument("scenario", choices=("gl", "gpu", "gpu-stall", "device-loss", "shader", "gl-loss", "gl-restore", "no-device", "asset", "module"))
+parser.add_argument("scenario", choices=("gl", "gpu", "loading", "gpu-stall", "device-loss", "shader", "gl-loss", "gl-restore", "no-device", "asset", "module"))
+parser.add_argument("--baseline", action="store_true")
 args = parser.parse_args()
 root = args.root.resolve()
 args.out.mkdir(parents=True, exist_ok=True)
 base = "https://recovery-flight.test/"
 blocked = {"asset": args.scenario == "asset", "module": args.scenario == "module"}
+held = []
+hold_terrain = args.scenario == "loading"
 
 
 def serve(route):
@@ -23,6 +28,8 @@ def serve(route):
     file = (root / (path or "index.html")).resolve()
     if blocked["asset"] and path == "world/sundown.height":
         route.fulfill(status=404)
+    elif hold_terrain and path == "world/sundown.height":
+        held.append(route)
     elif blocked["module"] and path.startswith("assets/index-") and file.suffix == ".js":
         route.fulfill(status=200, content_type="text/html", body="<html>Previous shell</html>")
     elif file.is_relative_to(root) and file.is_file():
@@ -48,6 +55,14 @@ with sync_playwright() as playwright:
         "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--disable-dev-shm-usage"])
     context = browser.new_context(viewport={"width": 800, "height": 360}, is_mobile=True, has_touch=True, service_workers="block")
     context.route(base + "**", serve)
+    external = set()
+
+    def reject_external(route):
+        external.add(route.request.url)
+        print("unexpected external asset", route.request.url, flush=True)
+        route.abort()
+
+    context.route(lambda url: url.startswith("https://") and not url.startswith(base), reject_external)
     drm = "gpu" if args.scenario in ("gpu", "gpu-stall", "device-loss", "shader") else "gl"
     context.add_init_script("""if(!localStorage.getItem('pixel-sky-af-v4'))localStorage.setItem('pixel-sky-af-v4',JSON.stringify({
         credits:2687,unlocked:['j20','f16'],selected:'j20',campaign:4,settings:{backend:'%s',quality:'medium',mute:true}}));""" % drm)
@@ -58,12 +73,31 @@ with sync_playwright() as playwright:
             HTMLCanvasElement.prototype.getContext=function(kind,...args){return kind.startsWith('webgl')?null:original.call(this,kind,...args);};""")
     page = context.new_page()
     errors = []
-    external = set()
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.on("request", lambda request: external.add(urlparse(request.url).netloc) if request.url.startswith("https://") and not request.url.startswith(base) else None)
     page.on("console", lambda m: print(m.type, m.text[:450], flush=True) if m.type in ("warning", "error") else None)
     started = perf_counter()
     page.goto(base, wait_until="domcontentloaded")
+
+    if args.scenario == "loading":
+        page.wait_for_function("document.querySelector('#boot-progress').value===23", timeout=25000)
+        assert page.locator('#boot').is_visible()
+        assert page.locator('#boot h1 img').get_attribute('alt') == '苍穹锋刃'
+        assert not page.locator('#boot h1').inner_text().strip()
+        page.screenshot(path=args.out / 'loading-landscape.png', timeout=30000)
+        page.set_viewport_size({'width':390,'height':844})
+        assert page.locator('#boot').is_visible()
+        page.screenshot(path=args.out / 'loading-portrait.png', timeout=30000)
+        page.set_viewport_size({'width':800,'height':360})
+        hold_terrain = False
+        assert held
+        for route in held:
+            serve(route)
+        ready(page, 'home', 'gl')
+        assert page.locator('#boot-progress').evaluate('e=>e.value') == 100
+        assert not errors,errors
+        print('loading passed, actual terrain wait 23% and valid first frame 100%',flush=True)
+        browser.close()
+        raise SystemExit(0)
 
     if args.scenario == "no-device":
         page.wait_for_url("**graphics=safe**")
@@ -91,6 +125,8 @@ with sync_playwright() as playwright:
         assert perf_counter() - started >= 9.0
     else:
         ready(page, "home", drm)
+        if not args.baseline:
+            assert page.locator('#application').get_attribute('data-render-path')=='framegraph'
         if args.scenario=="gl-restore":
             frame=page.evaluate("""()=>{
                 const current=flightProfile.sample().frames;
@@ -125,11 +161,25 @@ with sync_playwright() as playwright:
             page.evaluate("""()=>new Promise(resolve=>{
                 const game=flightQA,s=game.sortie,p=s.player;
                 game.state='pause';game.input.on=false;
+                game.clock=4;s.time=9;
                 p.reset(54,155,3970,.075,p.type.trim*.95);
                 game.art.clear();game.world.cameraReset=true;
                 game.engine.once('postrender',()=>{game.ui.telemetry(s,game.world,game.targetAnchors,game.playerPose);resolve();});
             })""")
             page.screenshot(path=args.out / f"{drm}-coast.png", timeout=50000)
+            coast = page.evaluate("""async()=>{
+                const results=[];
+                for(let i=0;i<7;i++){
+                    await new Promise(resolve=>flightQA.engine.once('postrender',resolve));
+                    results.push(flightProfile.sample());
+                }
+                return results;
+            }""")
+            (args.out/'coast-metrics.json').write_text(json.dumps({
+                'samples':coast,
+                'medianCPUms':median(s['cpuFrameMs'] for s in coast if s.get('cpuFrameMs') is not None),
+                'medianGPUms':median([s['gpuFrameMs'] for s in coast if s.get('gpuFrameMs') is not None]) if any(s.get('gpuFrameMs') is not None for s in coast) else None,
+            },indent=2))
             assert page.evaluate("flightQA.sortie.enemies.some(e=>e.alive)")
             page.evaluate("()=>{flightQA.state='flight';flightQA.input.on=true;}")
             page.locator('#gun').tap()
@@ -139,10 +189,20 @@ with sync_playwright() as playwright:
             page.screenshot(path=args.out / f"{drm}-cockpit.png", timeout=50000)
             page.evaluate("flightQA.leave()")
             ready(page, "home", drm)
+            if not args.baseline:
+                page.locator('#navigation [data-nav="settings"]').tap()
+                rate=page.locator('select[data-setting="frameRate"]')
+                assert rate.locator('option').evaluate_all('options=>options.map(o=>o.value)')==['60','90']
+                rate.select_option('90')
+                assert page.evaluate('flightQA.p.settings.frameRate')==90
+                page.locator('[data-back]').tap()
+                ready(page,'home',drm)
 
     assert page.evaluate("flightQA.p.credits===2687&&flightQA.p.campaign===4")
     assert not errors, errors
     print(args.scenario, "passed", round(perf_counter() - started, 2), "seconds", page.evaluate("flightProfile.sample()"),
-          "KTX2", page.evaluate("flightQA.world.assets.compressedCount()"), "external", sorted(external), flush=True)
+          "KTX2", page.evaluate("flightQA.world.assets?.compressedCount?.()??null"), "external", sorted(external), flush=True)
+    if not args.baseline:
+        assert not external, sorted(external)
     context.close()
     browser.close()

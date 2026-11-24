@@ -13,12 +13,12 @@ import { el,Interface,studioStations } from './interface';
 import { FlightInput } from './inputs';
 import { HangarOrbit } from './hangar-control';
 import { FlightAudio } from './audio';
-import { combatConfiguration,consumeReserve,recordSortie,saveProfile,sortieBlock,type Backend,type Save } from './profile';
+import { combatConfiguration,consumeReserve,recordSortie,saveProfile,sortieBlock,type Save } from './profile';
 import { pilotLevel } from './progression';
 import { defenseNames } from './defense';
 import { missiles } from './items';
 import { openWreckPhysics,type WreckPhysics } from './wreck-physics';
-import { deadline,startupStatus } from './startup';
+import { deadline,loadMilestones,startupStatus } from './startup';
 
 const small=()=>matchMedia('(any-pointer: coarse)').matches;
 const direction=new Vector3(),soundRight=new Vector3(),rightward=new Vector3(1,0,0),soundUp=new Vector3(),upward=new Vector3(0,1,0);
@@ -41,6 +41,7 @@ export class Game {
   state:'loading'|'home'|'flight'|'settling'|'pause'|'result'='loading';
   private busy=false;
   private flightStarting=false;
+  private graphBuild:Promise<void>|null=null;
   private last=0;
   private acc=0;
   private readonly playerPose=new FlightPose();
@@ -63,6 +64,7 @@ export class Game {
     this.engine=entry.app;
     this.root.dataset.backend=entry.backend;this.root.dataset.touch=String(small());
     this.world=new WorldView(entry);
+    this.root.dataset.renderPath=this.world.rendering?'framegraph':'direct';
     this.art=new CombatArt(this.world);
     this.pilot=new AircraftView(this.world,0);
     this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i));
@@ -134,16 +136,24 @@ export class Game {
     this.root.style.setProperty('--hud',this.p.settings.hud.toFixed(2));
   }
   async init(){
-    await deadline(Promise.all([this.world.ready,this.pilot.request(this.preview)]),26000,'机库或战机资源读取超时');
+    await loadMilestones([this.world.ready,this.pilot.request(this.preview)],'正在载入机库和战机',50,83,26000);
+    this.budget.apply(this.p.settings.frameRate,0,this.p.settings.renderScale,this.engine.safe);
+    const prepared=this.world.rendering?.prepare();
+    if(prepared){
+      startupStatus('正在构建渲染帧图',89);
+      try{await deadline(prepared,15000,'渲染帧图构建超时');}
+      catch(error){throw new GraphicsFailure('frame',error);}
+    }
     this.pilot.preview(this.preview,this.clock,combatConfiguration(this.p,this.preview.id),0);
     this.state='home';
     this.ui.open('home');
-    startupStatus('正在验证第一帧');
+    startupStatus('正在验证第一帧',96);
     this.engine.on('update',()=>this.frame(performance.now()));
     this.engine.on('postrender',()=>{
       if(this.state==='flight'&&this.sortie)this.ui.telemetry(this.sortie,this.world,this.targetAnchors,this.playerPose);
     });
     await this.engine.start();
+    startupStatus('机库已就绪',100);
     el('boot').hidden=true;el('menu').hidden=false;
     if(this.engine.safe||this.entry.fallback)this.ui.toast(this.engine.safe?'已恢复 · WebGL2 安全模式':'已使用 WebGL2');
   }
@@ -189,21 +199,25 @@ export class Game {
     const type=byAircraft(lab?'f16':this.p.selected),old=this.state;
     this.input.on=false;
     this.state='loading';
-    startupStatus('正在准备出击');
+    startupStatus('正在准备出击',0);
     const request=operation(id),op=lab?{...request,region:plan.region,name:'地貌验收空域'}:id==='free'?{...request,region:plan.region}:request;
     const configuration=combatConfiguration(this.p,type.id,lab||op.kind==='ground');
     let rigid:WreckPhysics|null=null;
     try {
       const theatre=theatres[op.region];
       await deadline(loadTerrain(theatre.seed,asset('world/'+theatre.id+'.height')),23000,'战场地貌读取超时');
+      startupStatus('正在配置战场材质',28);
       await deadline(this.world.setTheme(op.region),20000,'战场材质读取超时');
+      startupStatus('正在启动战场物理',45);
       rigid=await deadline(openWreckPhysics(FLIGHT_STEP),18000,'残骸物理初始化超时');
       const mission=new Sortie(op,type,{rank,runway,armor:configuration.armor,engine:0,
       stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
       seed:op.kind==='free'&&!lab?++this.freeSeed:undefined,diagnostics:lab
     },e=>this.event(e),this.world.terrain,rigid);
-      await deadline(Promise.all([this.pilot.request(type),...mission.enemies.map((e,i)=>e.alive?this.foes[i].request(e.type):null),
-        mission.ally.alive?this.support.request(mission.ally.type):null]),23000,'编队模型读取超时');
+      const models=[this.pilot.request(type)];
+      for(const [i,enemy] of mission.enemies.entries())if(enemy.alive)models.push(this.foes[i].request(enemy.type));
+      if(mission.ally.alive)models.push(this.support.request(mission.ally.type));
+      await loadMilestones(models,'正在载入编队模型',55,90,23000);
       if(mission.enemies.some(e=>e.alive)){
         for(const id of mission.enemyKit)void this.world.assets.container('fleet/'+id+'.glb').catch(()=>{});
       }
@@ -213,8 +227,9 @@ export class Game {
       this.input.reset(runway&&op.kind==='free'?.12:.74);
       this.art.clear();this.meshChange.clear();
       this.flightStarting=true;this.state='flight';this.ui.flight(mission);
-      startupStatus('正在验证战场画面');
+      startupStatus('正在验证战场画面',96);
       await this.engine.whenDrawn();
+      startupStatus('战场已就绪',100);
       this.input.on=this.state==='flight';el('boot').hidden=true;
     }catch(e){
       rigid?.dispose();
@@ -317,8 +332,13 @@ export class Game {
       this.audio.update(false,0,0,0,false,true);
       this.engine.renderNextFrame=false;return;
     }
-    const level=this.budget.apply(this.engine.safe?'low':this.qualityOverride??this.p.settings.quality,span,this.p.settings.renderScale);
+    const level=this.budget.apply(this.p.settings.frameRate,span,this.p.settings.renderScale,this.engine.safe,this.qualityOverride);
     this.world.level=level;this.world.applyQuality(level);
+    const pending=this.world.rendering?.prepare();
+    if(pending){
+      this.engine.renderNextFrame=false;
+      if(this.graphBuild!==pending){this.graphBuild=pending;void pending.catch(error=>this.recover(new GraphicsFailure('frame',error)));}
+    }
     const player=s?.player;
     if(this.state==='flight'&&s&&!this.flightStarting){
       this.acc=Math.min(.25,this.acc+span);
@@ -380,12 +400,13 @@ export class Game {
         this.world.updateWater(player,s.time);
         const p=player.position,h=s.world.water(p.x,p.z,s.time),altitude=p.y-h;
         const low=altitude<27&&player.speed>95&&s.world.classify(p.x,p.z)==='water';
-        if(low)this.seaMist.set(p.x-player.forward.x*10,h+.5,p.z-player.forward.z*10);
-        const hardware=this.art.skim(low?this.seaMist:null,low?Math.max(0,1-altitude/27):0,level);
         this.timeSinceImpact+=dt;
         if(this.timeSinceImpact>.097){
           this.timeSinceImpact=0;
-          if(low&&!hardware)this.art.burst(this.seaMist,2,'mist',.65);
+          if(low){
+            this.seaMist.set(p.x-player.forward.x*10,h+.5,p.z-player.forward.z*10);
+            this.art.burst(this.seaMist,level>=.79&&altitude<14?3:2,'mist',.55+.35*Math.max(0,1-altitude/27));
+          }
         }
       }
       this.world.updateShaders(s.time,this.clock);

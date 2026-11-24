@@ -49,13 +49,17 @@ export function instrument(g:Game,openedAt:number){
       });
     },
     sample(){
+      const width=d.getRenderWidth(),height=d.getRenderHeight();
+      const heap=(performance as Performance&{memory?:{usedJSHeapSize:number}}).memory?.usedJSHeapSize??null;
       return {
         renderer:g.entry.backend==='gpu'?'webgpu':'webgl2',frames,peakParticles,
-        resolution:[d.getRenderWidth(),d.getRenderHeight()],fps:g.budget.fps,onePercentLow:g.budget.onePercentLow,target:g.budget.target,
+        graph:g.engine.scene.frameGraph?'active':'direct',resolution:[width,height],fps:g.budget.fps,onePercentLow:g.budget.onePercentLow,target:g.budget.target,
         firstLoadMs:Math.round(performance.getEntriesByName('flagship-ready')[0]?.startTime??performance.now()-openedAt),
         cpuFrameMs:g.engine.frameMs,gpuFrameMs:profiler.gpuFrameTimeCounter.current/1e6||null,
         triangles:g.engine.scene.getActiveIndices()/3,
-        drawCalls:counters.drawCallsCounter.current,videoMemory:g.world.assets.estimatedTextureBytes(),stream:g.world.terrainStats()
+        drawCalls:counters.drawCallsCounter.current,videoMemory:g.world.assets.estimatedTextureBytes(),
+        attachments:g.engine.scene.frameGraph?.textureManager.computeTotalTextureSize(true,width,height)??0,
+        heap,stream:g.world.terrainStats()
       };
     }
   };

@@ -15,8 +15,8 @@ export function material(scene:Scene,name:string,hex:string,metal=0,rough=.65){
 }
 export class WorldMaterial extends ShaderMaterial {
   private readonly vectors=new Map<string,Vector2|Vector3|Vector4>();
-  constructor(scene:Scene,gpu:boolean,ocean:boolean){
-    const source=environmentSource(gpu,ocean);
+  constructor(scene:Scene,gpu:boolean,ocean:boolean,linear:boolean){
+    const source=environmentSource(gpu,ocean,linear);
     super(ocean?'真实海面':'分层大气',scene,{vertexSource:source.vertex,fragmentSource:source.fragment},{
       attributes:['position'],uniforms:source.uniforms,samplers:source.samplers,
       shaderLanguage:gpu?ShaderLanguage.WGSL:ShaderLanguage.GLSL,

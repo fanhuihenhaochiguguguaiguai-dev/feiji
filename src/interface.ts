@@ -232,7 +232,7 @@ export class Interface {
       const key=node.dataset.setting;
       if(!key)return;
       if(key==='backend'){p.settings.backend=node.value as Save['settings']['backend'];saveProfile(p);location.replace(recoveryUrl());return;}
-      if(key==='quality')p.settings.quality=node.value as Save['settings']['quality'];
+      if(key==='frameRate')p.settings.frameRate=node.value==='90'?90:60;
       if(key==='assist'||key==='invert'||key==='mute')p.settings[key]=(node as HTMLInputElement).checked;
       if(key==='sensitivity'||key==='hud'||key==='renderScale')p.settings[key]=Number(node.value);
       this.changed('设置已保存');
@@ -587,10 +587,10 @@ export class Interface {
   }
   settings(){
     const ctx=this.p.settings;
-    const options=(key:string,caption:string,items:[string,string][])=>'<label>'+caption+'<select data-setting="'+key+'">'+items.map(([id,name])=>'<option value="'+id+'"'+selected(ctx[key as keyof typeof ctx]===id)+'>'+name+'</option>').join('')+'</select></label>';
-    return '<div class="panel-scroll settings-grid"><article class="glass"><h3>画面与设备</h3><p id="backend-status">Babylon.js 8.56.2 · '+(el('application').dataset.backend==='gpu'?'WebGPU':'WebGL2')+'</p>'+
+    const options=(key:string,caption:string,items:[string,string][])=>'<label>'+caption+'<select data-setting="'+key+'">'+items.map(([id,name])=>'<option value="'+id+'"'+selected(String(ctx[key as keyof typeof ctx])===id)+'>'+name+'</option>').join('')+'</select></label>';
+    return '<div class="panel-scroll settings-grid"><article class="glass"><h3>画面与设备</h3><p id="backend-status">Babylon.js 9 · '+(el('application').dataset.backend==='gpu'?'WebGPU':'WebGL2')+'</p>'+
       options('backend','渲染方式',[['auto','自动 · 优先 WebGPU'],['gpu','优先 WebGPU'],['gl','使用 WebGL2']])+
-      options('quality','渲染品质',[['auto','自动画质'],['high','精细'],['medium','均衡'],['low','流畅']])+
+      options('frameRate','帧率上限',[['60','60 FPS'],['90','90 FPS · 设备支持时']])+
       '<label>渲染比例<input type="range" data-setting="renderScale" min=".65" max="1" step=".05" value="'+ctx.renderScale+'"></label><label>仪表大小<input type="range" data-setting="hud" min=".8" max="1.23" step=".03" value="'+ctx.hud+'"></label></article>'+
       '<article class="glass"><h3>飞行控制</h3><label><input type="checkbox" data-setting="assist" '+(ctx.assist?'checked':'')+'>开启飞行辅助</label>'+
       '<label><input type="checkbox" data-setting="invert" '+(ctx.invert?'checked':'')+'>反转俯仰</label>'+

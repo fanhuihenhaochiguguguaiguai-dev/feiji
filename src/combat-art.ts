@@ -1,7 +1,3 @@
-import '@babylonjs/core/Particles/computeShaderParticleSystem';
-import '@babylonjs/core/Particles/webgl2ParticleSystem';
-import { GPUParticleSystem } from '@babylonjs/core/Particles/gpuParticleSystem';
-import { Color4 } from '@babylonjs/core/Maths/math.color';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
 import { Constants } from '@babylonjs/core/Engines/constants';
 import { Material } from '@babylonjs/core/Materials/material';
@@ -84,24 +80,10 @@ export class CombatArt {
   private cursor=0;
   private live=0;
   private readonly precipitation:Batch;
-  private spray:GPUParticleSystem|null=null;
-  private readonly sprayEmitter=new Vector3();
   weather=0;
   constructor(readonly world:WorldView){
     const scene=world.entry.app.scene;
     this.wingWake=new WingWake(world);
-    if(!world.entry.app.safe&&GPUParticleSystem.IsSupported)void world.assets.texture('surface/water.png').then(texture=>{
-      const p=new GPUParticleSystem('掠海飞沫',{capacity:128,emitRateControl:true},scene);
-      p.particleTexture=texture;p.emitter=this.sprayEmitter;p.emitRate=0;
-      p.minEmitBox.set(-1.4,0,-2.5);p.maxEmitBox.set(1.4,.65,2.5);
-      p.direction1.set(-13,5,-12);p.direction2.set(13,13,12);
-      p.minEmitPower=.54;p.maxEmitPower=1.06;p.gravity.set(0,-9.81,0);
-      p.minLifeTime=.76;p.maxLifeTime=1.52;p.updateSpeed=1/60;
-      p.minSize=1.1;p.maxSize=3.6;p.minAngularSpeed=-.35;p.maxAngularSpeed=.35;
-      p.color1=new Color4(.79,.91,.98,.29);p.color2=new Color4(.63,.83,.91,.44);
-      p.colorDead=new Color4(.56,.73,.86,0);p.blendMode=GPUParticleSystem.BLENDMODE_STANDARD;
-      this.spray=p;
-    }).catch(()=>{});
     const rain=tint(scene,'天气降水','#b8d4e6',.44,true);
     this.precipitation=new Batch(world,'近景雨雪','box',rain,66);
     const smoke=tint(scene,'软边烟尘','#a9abb1',0);
@@ -143,18 +125,8 @@ export class CombatArt {
       new Batch(world,'远程弹蓝焰','box',tint(scene,'苍矛尾焰','#a1d9ff',2.6,true),24),
     ];
   }
-  clear(){for(const p of this.particles)p.life=0;this.live=0;this.effectsClock.clear();this.wingWake.clear();
-    if(this.spray){this.spray.emitRate=0;this.spray.reset();}}
-  activeParticles(){return this.live+(this.spray?.getActiveCount()??0);}
-  skim(position:Vector3|null,strength:number,level:number){
-    const p=this.spray;
-    if(!p||level<.79){if(p)p.emitRate=0;return false;}
-    if(position){
-      this.sprayEmitter.copyFrom(position);p.emitRate=12+48*strength;
-      if(!p.isStarted())p.start();
-    }else p.emitRate=0;
-    return true;
-  }
+  clear(){for(const p of this.particles)p.life=0;this.live=0;this.effectsClock.clear();this.wingWake.clear();}
+  activeParticles(){return this.live;}
   burst(v:Vector3,n:number,kind:Effect,power=1,inherited?:Vector3,axis?:Vector3){
     const spec=types[kind],fixed=kind==='ring'||kind==='shock'||kind==='scorch';
     const kick=axis?(kind==='sparks'?14:kind==='fragment'?7:kind==='dust'?2:0)*power:0;

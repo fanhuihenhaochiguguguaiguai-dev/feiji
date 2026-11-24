@@ -8,6 +8,7 @@ const {outputFiles}=await build({stdin:{
     export { chapters } from './src/campaign'; export { levelProgress,levelThreshold,pilotLevel } from './src/progression';
     export { missiles,missileDamage,minimumEnemyDurability,rewards } from './src/items'; export { freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie } from './src/profile';
     export { advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, above, right } from './src/flight';
+    export { aeroForces } from './src/aerodynamics';
     export { CountermeasureSystem, MissileGuidance, MissileWarningSystem } from './src/defense';
     export { mapRadar } from './src/tactical-radar';
     export { OceanSpectrum, ShallowWake, oceanSize } from './src/ocean-solver';
@@ -17,7 +18,7 @@ const {outputFiles}=await build({stdin:{
     export { Vector3,Quaternion } from '@babylonjs/core/Maths/math.vector';`,
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
-const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
+const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, aeroForces, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
   Terrain, registerTerrain, edgeNode, partition, streamBlocks, SquadronBlackboard, TacticalPilot, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=await readFile('public/world/'+id+'.height');
@@ -257,8 +258,18 @@ test('A–F: combat result, claim, stock, guided loadout, engine, hardware, live
     settings:{quality:'low'},improvements:{'f16:engine':2}});
   assert.equal(combatConfiguration(old,'f16').paint,'#526e91');
   assert.equal(old.credits,777);
-  assert.equal(old.settings.quality,'low');
+  assert.equal(old.settings.frameRate,60);
+  assert.equal(normalizeProfile({...old,settings:{...old.settings,frameRate:90}}).settings.frameRate,90);
   assert.equal(combatConfiguration(old,'f16').engine,1.12);
+});
+
+test('nonlinear wing tables lose lift and gain drag past peak angle of attack',()=>{
+  const type=byAircraft('j20');
+  const peak=aeroForces(type,380,type.trim,.44,0,{});
+  const stalled=aeroForces(type,380,type.trim,.98,.12,{});
+  assert(stalled.lift<peak.lift*.50);
+  assert(stalled.drag>peak.drag*2);
+  assert(stalled.stalled>.8);
 });
 
 test('bulk reward receipts report only the committed grants and cannot pay twice',()=>{

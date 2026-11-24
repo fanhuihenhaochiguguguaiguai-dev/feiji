@@ -23,14 +23,16 @@ async function start(){
     }else setTimeout(retry,0);
   };
   try {
+    startupStatus('正在读取飞行员档案',12);
     const profile=await loadPersistentProfile();
+    startupStatus('正在载入首张地貌',23);
     const initial=theatres[0];
     await deadline(loadTerrain(initial.seed,asset('world/'+initial.id+'.height')),20000,'首张地貌资产读取超时');
-    phase='device';startupStatus('正在连接图形设备');
+    phase='device';startupStatus('正在连接图形设备',36);
     entry=await openEngine(document.getElementById('scene') as HTMLCanvasElement,compat?'gl':profile.settings.backend,safe);
     entry.app.onGraphicsFailure(recover);
     const game=new Game(entry,profile,recover);
-    phase='assets';startupStatus('正在载入机库和战机');
+    phase='assets';startupStatus('正在载入机库和战机',50);
     if(__FLAGSHIP_QA__){
       const {instrument}=await import('./qa-instrumentation');
       Object.defineProperty(window,'flightQA',{value:game});

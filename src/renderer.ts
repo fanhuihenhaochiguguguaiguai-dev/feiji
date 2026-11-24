@@ -20,10 +20,6 @@ import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder'
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
-import { CascadedShadowGenerator } from '@babylonjs/core/Lights/Shadows/cascadedShadowGenerator';
-import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
-import { SSAO2RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline';
-import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
 import { ColorCurves } from '@babylonjs/core/Materials/colorCurves';
 import { HDRCubeTexture } from '@babylonjs/core/Materials/Textures/hdrCubeTexture';
@@ -44,6 +40,7 @@ import { wakeCeiling } from './ocean-solver';
 import { Terrain, clamp, chunkCells, gridStep, noise, worldExtent } from './terrain';
 import { rotate,type OpenEngine } from './scene-runtime';
 import { asset,deadline } from './startup';
+import { FlightRenderGraph } from './flight-render-graph';
 export { openEngine,type OpenEngine } from './scene-runtime';
 export { material } from './world-material';
 
@@ -188,9 +185,7 @@ export class WorldView {
   readonly sun:DirectionalLight;
   readonly rim:DirectionalLight;
   private readonly fill:HemisphericLight;
-  private readonly shadows:ShadowGenerator|null;
-  private readonly pipeline:DefaultRenderingPipeline|null;
-  private ambientOcclusion:SSAO2RenderingPipeline|null=null;
+  readonly rendering:FlightRenderGraph|null;
   private readonly terrainMaterial:PBRMaterial;
   private readonly ridgeMaterial:PBRMaterial;
   private readonly rock:RockSurface;
@@ -247,27 +242,13 @@ export class WorldView {
     scene.imageProcessingConfiguration.colorCurvesEnabled=true;
     scene.imageProcessingConfiguration.contrast=1.07;
     const caps=app.device.getCaps(),hdr=caps.textureHalfFloatRender||caps.textureFloatRender;
-    this.pipeline=app.safe?null:new DefaultRenderingPipeline('航空成像',hdr,scene,[native]);
-    if(this.pipeline){
-      // World shaders grade their own HDR light before sending pixels to the display.
-      this.pipeline.imageProcessingEnabled=false;
-      this.pipeline.bloomThreshold=.87;this.pipeline.bloomWeight=.11;this.pipeline.bloomKernel=24;
-      this.pipeline.samples=app.backend==='gpu'?1:caps.maxMSAASamples>=2?2:1;
-      this.pipeline.fxaaEnabled=this.pipeline.samples===1;
-    }
     this.sun=new DirectionalLight('太阳主光',new Vector3(.88,-.43,-.22),scene);
     this.sun.shadowMinZ=1;this.sun.shadowMaxZ=250;
     this.rim=new DirectionalLight('机库轮廓光',new Vector3(-.57,-.32,.75),scene);
-    this.rim.diffuse.set(.51,.73,.96);this.rim.intensity=1.34;
+    this.rim.diffuse.set(.57,.74,.96);this.rim.intensity=1.48;
     this.fill=new HemisphericLight('天空与地面补光',new Vector3(.1,1,.15),scene);
     this.fill.groundColor.set(.19,.24,.28);this.fill.intensity=.72;
-    if(app.safe)this.shadows=null;
-    else if(CascadedShadowGenerator.IsSupported){
-      const csm=new CascadedShadowGenerator(1024,this.sun);
-      csm.numCascades=2;csm.shadowMaxZ=110;csm.lambda=.61;csm.usePercentageCloserFiltering=true;
-      this.shadows=csm;
-    }else this.shadows=new ShadowGenerator(1024,this.sun);
-    if(this.shadows){this.shadows.normalBias=.045;this.shadows.bias=.0007;}
+    this.rendering=!app.safe&&hdr?new FlightRenderGraph(scene,native,this.sun):null;
     const hangarFloor=material(scene,'水磨混凝土','#a3acb0',.11,.55);
     hangarFloor.clearCoat.isEnabled=true;hangarFloor.clearCoat.intensity=.25;hangarFloor.clearCoat.roughness=.29;
     primitive(this.hangar,'整体现浇机坪','plane',hangarFloor,0,0,23,140,1,191).receiveShadows=true;
@@ -329,8 +310,8 @@ export class WorldView {
     ]).then(()=>undefined);
     this.showDeck(true);
   }
-  castShadow(mesh:Mesh){this.shadows?.addShadowCaster(mesh,false);}
-  dropShadow(mesh:Mesh){this.shadows?.removeShadowCaster(mesh,false);}
+  castShadow(mesh:Mesh){this.rendering?.cast(mesh);}
+  dropShadow(mesh:Mesh){this.rendering?.drop(mesh);}
   private lightingProbe(name:string){
     this.probeName=name;
     let pending=this.probes.get(name);
@@ -378,7 +359,7 @@ export class WorldView {
     primitive(this.hangar,'远处泊地','plane',water,0,-.98,420,1400,1,1000);
   }
   private environment(name:'sky'|'sea'){
-    const m=new WorldMaterial(this.entry.app.scene,this.entry.backend==='gpu',name==='sea');
+    const m=new WorldMaterial(this.entry.app.scene,this.entry.backend==='gpu',name==='sea',!!this.rendering);
     for(const [key,v] of Object.entries(skyVectors(this.theme)))m.setParameter(key,v);
     for(const [key,v] of Object.entries({quality:.94,cover:0,clouds:1,exposure:1.04,clock:0,eye:this.eye,waveHeight:1}))m.setParameter(key,v);
     return m;
@@ -427,7 +408,7 @@ export class WorldView {
     this.sun.direction.set(-vector.sunDir[0],-vector.sunDir[1],-vector.sunDir[2]);
     this.sun.diffuse.set(vector.sunColor[0],vector.sunColor[1],vector.sunColor[2]);
     this.sun.intensity=this.indoors?2.28:lighting===3?.30:sunlight*.88;
-    this.sun.shadowEnabled=!!this.shadows&&this.indoors;
+    this.sun.shadowEnabled=!!this.rendering&&this.indoors;
     this.rim.setEnabled(this.indoors);
     scene.environmentIntensity=this.indoors?.91:dim?.64:.79;
     scene.imageProcessingConfiguration.exposure=this.indoors?.97:lighting===3||weather===7?1.16:.97;
@@ -436,7 +417,7 @@ export class WorldView {
     scene.fogDensity=this.indoors?.00040:this.climateDensities[weather]??.000045;
     scene.fogColor.set(vector.horizon[0]**2*.79,vector.horizon[1]**2*.85,vector.horizon[2]**2*.95);
     this.fill.diffuse.set(this.indoors?.53:.59,this.indoors?.70:.73,this.indoors?.87:.9);
-    this.fill.intensity=this.indoors?.66:dim?.77:.70;
+    this.fill.intensity=this.indoors?.76:dim?.80:.73;
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
     for(const m of [this.skyMat,this.seaMat]){
       for(const [key,value] of Object.entries(vector))m.setParameter(key,value);
@@ -459,7 +440,7 @@ export class WorldView {
     this.seaFields.advance({time,x,z,altitude,speed:plane.speed,water:altitude<wakeCeiling&&this.terrain.classify(x,z)==='water'},plane.forward.x,plane.forward.z);
   }
   resetMarkers(){for(const m of [...this.targets,...this.rings])m.setEnabled(false);}
-  setAwardLighting(on:boolean){this.rim.intensity=on?1.57:1.34;}
+  setAwardLighting(on:boolean){this.rim.intensity=on?1.67:1.48;}
   preview(plane:PlaneSpec,t:number,mode:string,zoom=1){
     const hero=mode==='home',size=Math.max(plane.length,plane.span);
     const yaw=this.orbit+(hero?.09:0)+Math.sin(t*.19)*.016;
@@ -468,7 +449,7 @@ export class WorldView {
     const d=Math.max(hero?10:15,size*(hero?.97:mode==='reveal'?1.19:1.28)*fit*zoom);
     const y=plane.gearClearance||1.45;
     this.contact.scaling.set(plane.span*.91,1,plane.length*.96);
-    this.camera.position.set(Math.sin(yaw)*d,y+d*((hero?.079:.110)+this.tilt*.25),-Math.cos(yaw)*d);
+    this.camera.position.set(Math.sin(yaw)*d,y+d*((hero?.144:.110)+this.tilt*.25),-Math.cos(yaw)*d);
     this.look.set(hero?-1.67:0,y+(hero?.72:.43),0);
     this.camera.fov=hero?.80:.91;this.camera.minZ=.14;this.camera.setTarget(this.look);
   }
@@ -572,14 +553,9 @@ export class WorldView {
   }
   applyQuality(level:number){
     const enhanced=level>=1.07;
-    const ambient=enhanced&&this.indoors&&!!this.pipeline&&SSAO2RenderingPipeline.IsSupported;
-    if(ambient&&!this.ambientOcclusion){
-      const ao=new SSAO2RenderingPipeline('机库接触遮蔽',this.entry.app.scene,{ssaoRatio:.45,blurRatio:.55},[this.camera.native],true);
-      ao.radius=.85;ao.totalStrength=.55;ao.samples=8;ao.maxZ=100;this.ambientOcclusion=ao;
-    }else if(!ambient&&this.ambientOcclusion){this.ambientOcclusion.dispose(true);this.ambientOcclusion=null;}
-    if(this.pipeline&&this.pipeline.bloomEnabled!==enhanced)this.pipeline.bloomEnabled=enhanced;
-    if(this.shadows)this.shadows.filteringQuality=enhanced?ShadowGenerator.QUALITY_HIGH:ShadowGenerator.QUALITY_MEDIUM;
-    this.sun.shadowEnabled=!!this.shadows&&(this.indoors||enhanced);
+    const shadows=this.indoors||enhanced;
+    this.sun.shadowEnabled=!!this.rendering&&shadows;
+    this.rendering?.quality(shadows,enhanced);
   }
   updateShaders(time:number,ambientTime=time){
     this.camera.commit();

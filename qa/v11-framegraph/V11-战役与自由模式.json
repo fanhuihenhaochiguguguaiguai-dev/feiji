@@ -1,0 +1,20 @@
+{
+  "boss": {
+    "hp": 395.44000000000005,
+    "type": "mirage",
+    "total": 7,
+    "wave": 3
+  },
+  "firstRun": {
+    "opening": 2,
+    "wave": 1,
+    "hp": 499,
+    "alive": 2
+  },
+  "secondRun": {
+    "opening": 3,
+    "wave": 1,
+    "hp": 502,
+    "alive": 2
+  }
+}

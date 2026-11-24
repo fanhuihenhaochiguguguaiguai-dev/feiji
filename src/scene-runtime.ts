@@ -89,7 +89,9 @@ export class SceneRuntime {
     document.removeEventListener('visibilitychange',this.visibility);
   }
   private frameReady(){
-    if(!this.scene.getActiveIndices()||!this.scene.activeCamera?.isReady(true))return false;
+    if(!this.scene.getActiveIndices())return false;
+    if(this.scene.frameGraph)return this.scene.frameGraph.isReady();
+    if(!this.scene.activeCamera?.isReady(true))return false;
     const visible=this.scene.getActiveMeshes();
     for(let i=0;i<visible.length;i++)if(!visible.data[i].isReady(true))return false;
     return true;

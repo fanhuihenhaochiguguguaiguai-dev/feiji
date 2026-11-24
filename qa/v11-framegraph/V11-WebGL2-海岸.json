@@ -1,0 +1,188 @@
+{
+  "samples": [
+    {
+      "renderer": "webgl2",
+      "frames": 41,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.507141098303063,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 43.5,
+      "gpuFrameMs": 225.756879,
+      "triangles": 193460,
+      "drawCalls": 250,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 109587004,
+      "stream": {
+        "roots": 109,
+        "leaves": 133,
+        "triangles": 97280
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 42,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.507141098303063,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 18.899999998509884,
+      "gpuFrameMs": 225.756879,
+      "triangles": 196020,
+      "drawCalls": 255,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 85362268,
+      "stream": {
+        "roots": 114,
+        "leaves": 138,
+        "triangles": 99840
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 43,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.507141098303063,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 14.399999998509884,
+      "gpuFrameMs": 225.756879,
+      "triangles": 196020,
+      "drawCalls": 255,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 89212012,
+      "stream": {
+        "roots": 114,
+        "leaves": 138,
+        "triangles": 99840
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 44,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.6082936153445404,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 17.5,
+      "gpuFrameMs": 228.243856,
+      "triangles": 198580,
+      "drawCalls": 260,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 94560680,
+      "stream": {
+        "roots": 119,
+        "leaves": 143,
+        "triangles": 102400
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 45,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.6082936153445404,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 13.599999994039536,
+      "gpuFrameMs": 228.243856,
+      "triangles": 198580,
+      "drawCalls": 260,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 98456792,
+      "stream": {
+        "roots": 119,
+        "leaves": 143,
+        "triangles": 102400
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 46,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.6082936153445404,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 62.400000005960464,
+      "gpuFrameMs": 228.243856,
+      "triangles": 201140,
+      "drawCalls": 265,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 103872972,
+      "stream": {
+        "roots": 124,
+        "leaves": 148,
+        "triangles": 104960
+      }
+    },
+    {
+      "renderer": "webgl2",
+      "frames": 47,
+      "peakParticles": 0,
+      "graph": "active",
+      "resolution": [
+        800,
+        360
+      ],
+      "fps": 2.6082936153445404,
+      "onePercentLow": 0.5504486211697117,
+      "target": 60,
+      "firstLoadMs": 2936,
+      "cpuFrameMs": 21.700000002980232,
+      "gpuFrameMs": 228.243856,
+      "triangles": 201140,
+      "drawCalls": 265,
+      "videoMemory": 24125450,
+      "attachments": 6417152,
+      "heap": 107872844,
+      "stream": {
+        "roots": 124,
+        "leaves": 148,
+        "triangles": 104960
+      }
+    }
+  ],
+  "medianCPUms": 18.899999998509884,
+  "medianGPUms": 228.243856
+}

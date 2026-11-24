@@ -22,9 +22,24 @@ export function recoveryUrl(mode?:'compat'|'safe'){
   return url.href;
 }
 
-export function startupStatus(message:string){
+export function startupStatus(message:string,progress?:number){
   document.getElementById('boot')!.hidden=false;
-  document.getElementById('boot-text')!.textContent=message;
+  const status=document.getElementById('boot-text')!;
+  if(status.textContent!==message)status.textContent=message;
+  if(progress!==undefined){
+    const value=Math.round(Math.min(100,Math.max(0,progress)));
+    (document.getElementById('boot-progress') as HTMLProgressElement).value=value;
+    document.getElementById('boot-percent')!.textContent=value+'%';
+  }
+}
+
+export function loadMilestones<T>(jobs:readonly Promise<T>[],message:string,low:number,high:number,timeout:number){
+  let done=0,active=true;
+  const completion=Promise.all(jobs.map(job=>job.then(value=>{
+    if(active)startupStatus(message,low+(high-low)*++done/jobs.length);
+    return value;
+  })));
+  return deadline(completion,timeout,message+'超时').finally(()=>{active=false;});
 }
 
 export function startupFailure(message:string,error:unknown){

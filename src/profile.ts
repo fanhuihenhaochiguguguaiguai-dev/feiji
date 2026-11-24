@@ -7,7 +7,8 @@ import type {Debrief} from './sortie';
 
 export type Backend='auto'|'gpu'|'gl';
 export type Quality='auto'|'high'|'medium'|'low';
-interface Settings {backend:Backend;quality:Quality;mute:boolean;assist:boolean;invert:boolean;sensitivity:number;hud:number;renderScale:number;}
+export type FrameRate=60|90;
+interface Settings {backend:Backend;frameRate:FrameRate;mute:boolean;assist:boolean;invert:boolean;sensitivity:number;hud:number;renderScale:number;}
 interface RecordRow {date:number;name:string;aircraft:string;grade:string;score:number;kills:number;seconds:number;win:boolean;}
 export type InventoryState=Record<string,number>;
 export type AircraftLoadout=Partial<Record<GearSlot,string>>;
@@ -33,7 +34,7 @@ export const freshProfile=():Save=>({
   version:9,savedAt:0,rewardedLevel:1,daily:blankDay(),credits:2600,xp:0,selected:'j20',unlocked:[...startingFleet],campaign:1,completed:[],improvements:{},
   bases:[],claimed:[],records:[],inventory:{...defaults},loadouts:{},technology:[],
   sorties:0,kills:0,distance:0,victories:0,
-  settings:{backend:'auto',quality:'auto',mute:false,assist:true,invert:false,sensitivity:1,hud:1,renderScale:1}
+  settings:{backend:'auto',frameRate:60,mute:false,assist:true,invert:false,sensitivity:1,hud:1,renderScale:1}
 });
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const ids=(v:unknown):string[]=>Array.isArray(v)?[...new Set(v.filter(x=>typeof x==='string').slice(0,128))]:[];
@@ -56,7 +57,7 @@ export function normalizeProfile(raw:unknown):Save{
   d.technology=ids(input.technology).filter(x=>technologies.some(t=>t.id===x));
   const settings=object(input.settings);
   if(['auto','gpu','gl'].includes(String(settings.backend)))d.settings.backend=settings.backend as Backend;
-  if(['auto','low','medium','high'].includes(String(settings.quality)))d.settings.quality=settings.quality as Quality;
+  if(settings.frameRate===90)d.settings.frameRate=90;
   for(const k of ['mute','assist','invert'] as const)if(typeof settings[k]==='boolean')d.settings[k]=settings[k];
   d.settings.sensitivity=Math.max(.45,number(settings.sensitivity,1,1.55));d.settings.hud=Math.max(.8,number(settings.hud,1,1.23));d.settings.renderScale=Math.max(.65,number(settings.renderScale,1,1));
   if(Array.isArray(input.records))d.records=input.records.filter(r=>r&&typeof r.name==='string'&&!retiredOperations.has(r.name)&&typeof r.aircraft==='string'&&Number.isFinite(r.score)).slice(0,36);

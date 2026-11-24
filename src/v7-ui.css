@@ -259,7 +259,7 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 
 #orientation-gate {display:none}
 @media (orientation:portrait) {
-  #application>:not(#orientation-gate) {display:none!important}
+  #application>:not(#orientation-gate):not(#boot) {display:none!important}
   #orientation-gate {
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;
     text-align:center;color:#f7ebca;padding:20px;background:radial-gradient(ellipse at 50% 43%,#26425d,#081525 70%);

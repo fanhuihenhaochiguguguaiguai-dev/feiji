@@ -90,7 +90,8 @@ with sync_playwright() as p:
     outcomes={}
     record(page,"a-lobby",outcomes)
     if args.migration:
-        assert page.evaluate("flightQA.engine.device.constructor.Version")=='8.56.2'
+        assert page.evaluate("flightQA.engine.device.constructor.Version")=='9.0.0'
+        assert page.locator('#application').get_attribute('data-render-path')=='framegraph'
         quality=page.evaluate("""()=>{
             const g=flightQA;g.qualityOverride='high';
             return {textures:g.world.assets.estimatedTextureBytes(),ktx2:g.world.assets.compressedCount(),gl:!g.engine.device.isWebGPU};
