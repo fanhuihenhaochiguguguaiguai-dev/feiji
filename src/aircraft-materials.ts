@@ -1,39 +1,35 @@
-import { Color,StandardMaterial } from 'playcanvas';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { clamp } from './terrain';
 
-const calibrated=new WeakSet<StandardMaterial>();
-const coldShadow=new Color().fromString('#2d2b29');
-export function calibrateAircraft(source:StandardMaterial,maxAnisotropy:number){
+const calibrated=new WeakSet<PBRMaterial>();
+const coldShadow=Color3.FromHexString('#2d2b29');
+export function calibrateAircraft(source:PBRMaterial,maxAnisotropy:number){
   if(calibrated.has(source))return;
   calibrated.add(source);
-  for(const texture of [source.diffuseMap,source.normalMap,source.metalnessMap,source.glossMap])
-    if(texture)texture.anisotropy=Math.min(12,maxAnisotropy);
+  for(const texture of [source.albedoTexture,source.bumpTexture,source.metallicTexture])
+    if(texture)texture.anisotropicFilteringLevel=Math.min(8,maxAnisotropy);
   const category=source.name.toLowerCase();
   if(/skin|belly|panel/.test(category)){
-    source.bumpiness=source.normalMap?.51:source.bumpiness;
-    source.clearCoat=category.includes('belly')?.10:.24;
-    source.clearCoatGloss=.76;
-    source.reflectivity=.91;
+    if(source.bumpTexture)source.bumpTexture.level=.51;
+    source.clearCoat.isEnabled=true;
+    source.clearCoat.intensity=category.includes('belly')?.10:.24;
+    source.clearCoat.roughness=.24;
+    source.environmentIntensity=.91;
   }else if(/glass/.test(category)){
-    source.clearCoat=.66;
-    source.clearCoatGloss=.91;
-    source.useMetalness=true;
-    source.reflectivity=.89;
+    source.clearCoat.isEnabled=true;source.clearCoat.intensity=.66;
+    source.clearCoat.roughness=.09;source.environmentIntensity=.89;
   }else if(/titanium/.test(category)){
-    source.metalness=Math.max(.71,source.metalness);
-    source.gloss=Math.max(.49,source.gloss);
-  }else if(/rubber|intake/.test(category)){
-    source.reflectivity*=.52;
-  }
-  source.update();
+    source.metallic=Math.max(.71,source.metallic??0);
+    source.roughness=Math.min(.51,source.roughness??.51);
+  }else if(/rubber|intake/.test(category))source.environmentIntensity*=.52;
 }
-export type AirframeFinish={material:StandardMaterial;base:Color;coat:number;gloss:number};
-export function finishAirframe(finish:AirframeFinish,livery:Color|null,damage:number){
-  const {material,base,coat,gloss}=finish;
-  if(livery)material.diffuse.lerp(base,livery,.63);
-  else material.diffuse.copy(base);
-  material.diffuse.lerp(material.diffuse,coldShadow,clamp(damage*.60,0,.56));
-  material.clearCoat=coat*(1-damage*.76);
-  material.gloss=gloss*(1-damage*.46);
-  material.update();
+export type AirframeFinish={material:PBRMaterial;base:Color3;coat:number;roughness:number};
+export function finishAirframe(finish:AirframeFinish,livery:Color3|null,damage:number){
+  const {material,base,coat,roughness}=finish;
+  if(livery)Color3.LerpToRef(base,livery,.63,material.albedoColor);
+  else material.albedoColor.copyFrom(base);
+  Color3.LerpToRef(material.albedoColor,coldShadow,clamp(damage*.60,0,.56),material.albedoColor);
+  material.clearCoat.intensity=coat*(1-damage*.76);
+  material.roughness=roughness+(1-roughness)*damage*.46;
 }

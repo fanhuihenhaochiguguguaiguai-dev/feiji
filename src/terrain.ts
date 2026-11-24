@@ -63,13 +63,28 @@ export class Terrain {
     if(!source)throw new Error('地貌未载入 · '+seed);
     this.source=source;this.blocks=source.blocks;
   }
-  get flightCeiling(){return Math.max(this.source.max,120,this.wavesScale*2);}
+  get flightCeiling(){return Math.max(this.source.max,4300,this.wavesScale*2);}
   bathymetry(){return this.source.heights;}
-  node(i:number,j:number){return this.source.heights[j*gridSize+i]*.25;}
+  node(i:number,j:number){
+    if(i>=0&&j>=0&&i<gridSize&&j<gridSize)return this.source.heights[j*gridSize+i]*.25;
+    const x=i*gridStep-worldExtent*.5,z=j*gridStep-worldExtent*.5;
+    return this.generated(x,z);
+  }
+  private generated(x:number,z:number){
+    const fade=clamp((Math.max(Math.abs(x),Math.abs(z))-worldExtent*.5)/4250,0,1);
+    const u=x+this.seed*107.1,v=z-this.seed*53.3;
+    const wobble=(noise(u/12200,v/12200)-.5)*6800;
+    const p=(u+wobble)/13400,q=(v-wobble*.68)/13400;
+    const continent=noise(p,q)*.68+noise(p*2.14+3.9,q*2.14-5.9)*.32;
+    const ridge=1-Math.abs(2*noise(p*4.4+q*.28,q*4.1)-1);
+    const basin=(1-Math.abs(noise(p*8.7,q*8.7)*2-1))**4;
+    const finer=noise(p*20.4,q*21.6)*61+noise(p*44,q*39)*23;
+    const relief=Math.max(0,continent-.47)*(1750+ridge**2*6100)-Math.max(0,.51-continent)*1870;
+    return mix(seabed,relief-basin*205*Math.max(0,continent-.36)+finer-87,fade*fade*(3-2*fade));
+  }
   elevation(x:number,z:number){
     const u=(x+worldExtent*.5)/gridStep,v=(z+worldExtent*.5)/gridStep;
-    if(u<0||v<0||u>=gridSize-1||v>=gridSize-1)return seabed;
-    const i=u|0,j=v|0,s=u-i,t=v-j;
+    const i=Math.floor(u),j=Math.floor(v),s=u-i,t=v-j;
     // Match the diagonal and triangle interpolation used by the terrain mesh.
     if(s+t<=1){
       const a=this.node(i,j);

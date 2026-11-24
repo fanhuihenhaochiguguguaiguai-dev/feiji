@@ -1,12 +1,15 @@
-import { Mat4 } from 'playcanvas';
+import "@babylonjs/core/Engines/Extensions/engine.query";
+import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import { EngineInstrumentation } from '@babylonjs/core/Instrumentation/engineInstrumentation';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { FlightEvent } from './sortie';
 import type { Game } from './engine';
 
 export function instrument(g:Game,openedAt:number){
-  const d=g.engine.graphicsDevice,nose=new Vector3(),projected=new Vector3(),origin=new Vector3();
-  const profiler=d.gpuProfiler;
-  if(profiler)profiler.enabled=true;
+  const d=g.engine.device,nose=new Vector3(),projected=new Vector3(),origin=new Vector3();
+  const profiler=new EngineInstrumentation(d);
+  profiler.captureGPUFrameTime=true;
+  const counters=new SceneInstrumentation(g.engine.scene);
   let frames=0,peakParticles=0;
   const contacts:{kind:string;weapon:string|null;id:number|null;track:number|null;terminal:boolean;at:number[];time:number;frame:number;cue:string}[]=[];
   g.engine.on('sortie-event',(e:FlightEvent)=>{
@@ -19,24 +22,24 @@ export function instrument(g:Game,openedAt:number){
   return {
     combat:()=>({events:contacts,activeParticles:g.art.activeParticles(),audio:g.audio.stats()}),
     noseX(){
-      const p=g.pilot.pivot,b=p.getPosition(),f=p.forward;
+      const p=g.pilot.pivot,b=p.position,f=p.forward;
       nose.set(b.x+f.x*g.preview.length*.46,b.y+f.y*g.preview.length*.46,b.z+f.z*g.preview.length*.46);
       g.world.camera.project(nose,projected);
       return projected.x;
     },
     body(){
-      const b=g.pilot.pivot.getPosition();g.world.camera.project(origin.set(b.x,b.y,b.z),projected);
+      const b=g.pilot.pivot.position;g.world.camera.project(origin.set(b.x,b.y,b.z),projected);
       return {x:projected.x/innerWidth,y:projected.y/innerHeight,altitude:g.sortie?.player.position.y??0};
     },
     alignment(){
-      const camera=g.world.camera.entity.camera!.camera;
-      const matrix=new Mat4().mul2(camera.projectionMatrix,camera.viewMatrix).data;
+      const camera=g.world.camera.native;
+      const matrix=camera.getTransformationMatrix().m;
       const viewport=g.entry.canvas.getBoundingClientRect(),s=g.sortie;
       if(!s)return [];
       return g.foes.flatMap((view,i)=>{
         const target=s.enemies[i];
         const pin=document.querySelector<HTMLElement>('.target-pin[data-target="'+target.id+'"]:not([hidden]):not(.off)');
-        if(!pin||!target.alive||!view.pivot.enabled)return [];
+        if(!pin||!target.alive||!view.pivot.isEnabled())return [];
         const p=view.anchor;
         const clip=matrix[3]*p.x+matrix[7]*p.y+matrix[11]*p.z+matrix[15];
         const x=viewport.left+(1+(matrix[0]*p.x+matrix[4]*p.y+matrix[8]*p.z+matrix[12])/clip)*viewport.width/2;
@@ -47,15 +50,12 @@ export function instrument(g:Game,openedAt:number){
     },
     sample(){
       return {
-        renderer:d.deviceType,frames,peakParticles,
-        resolution:[d.width,d.height],fps:g.budget.fps,onePercentLow:g.budget.onePercentLow,target:g.budget.target,
+        renderer:g.entry.backend==='gpu'?'webgpu':'webgl2',frames,peakParticles,
+        resolution:[d.getRenderWidth(),d.getRenderHeight()],fps:g.budget.fps,onePercentLow:g.budget.onePercentLow,target:g.budget.target,
         firstLoadMs:Math.round(performance.getEntriesByName('flagship-ready')[0]?.startTime??performance.now()-openedAt),
-        cpuFrameMs:g.engine.stats.frame.renderTime,gpuFrameMs:profiler?.frameTime??null,
-        triangles:g.engine.scene.layers.layerList.find(layer=>layer.name==='World')?.meshInstances.reduce((count,i)=>{
-          if(!i.visibleThisFrame||!i.mesh)return count;
-          return count+(i.mesh.primitive[0]?.count??0)/3*Math.max(1,i.instancingCount);
-        },0)??null,
-        drawCalls:g.engine.stats.drawCalls.total,videoMemory:[g.engine.stats.vram.tex,g.engine.stats.vram.vb,g.engine.stats.vram.ib].every(Number.isFinite)?g.engine.stats.vram.tex+g.engine.stats.vram.vb+g.engine.stats.vram.ib:null
+        cpuFrameMs:g.engine.frameMs,gpuFrameMs:profiler.gpuFrameTimeCounter.current/1e6||null,
+        triangles:g.engine.scene.getActiveIndices()/3,
+        drawCalls:counters.drawCallsCounter.current,videoMemory:g.world.assets.estimatedTextureBytes(),stream:g.world.terrainStats()
       };
     }
   };

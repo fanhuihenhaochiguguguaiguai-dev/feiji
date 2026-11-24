@@ -1,12 +1,22 @@
-import { BLEND_ADDITIVE, BLEND_ADDITIVEALPHA, BLEND_NORMAL, BUFFER_DYNAMIC, CULLFACE_NONE, Entity, Mat4, Quat, Vec3, VertexBuffer, VertexFormat, type StandardMaterial } from 'playcanvas';
-import { Vector3, type Quaternion } from '@babylonjs/core/Maths/math.vector';
+import '@babylonjs/core/Particles/computeShaderParticleSystem';
+import '@babylonjs/core/Particles/webgl2ParticleSystem';
+import { GPUParticleSystem } from '@babylonjs/core/Particles/gpuParticleSystem';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import '@babylonjs/core/Meshes/thinInstanceMesh';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Material } from '@babylonjs/core/Materials/material';
+import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { Scene } from '@babylonjs/core/scene';
+import { directionRotation,radians } from './scene-runtime';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { material, primitive, type Primitive, type WorldView } from './renderer';
 import type { FlightEvent, Sortie } from './sortie';
 import type { FlightPose } from './flight';
 import { WingWake } from './wing-wake';
 
-const position=new Vec3(),scale=new Vec3(),direction=new Vec3(),rotation=new Quat(),matrix=new Mat4();
-const angle=new Vec3(),zAxis=new Vec3(0,0,-1);
+const position=new Vector3(),scale=new Vector3(),direction=new Vector3(),rotation=Quaternion.Identity(),matrix=Matrix.Identity();
+const zAxis=new Vector3(0,0,-1);
 const types={
   smoke:{life:3.9,scale:4.5,gravity:-1.3,drag:1.01},
   dust:{life:2.7,scale:4.1,gravity:-.43,drag:.79},
@@ -36,36 +46,30 @@ const patterns={
 class Batch {
   private count=0;
   private readonly data:Float32Array;
-  private readonly vb:VertexBuffer;
-  private readonly model:Entity;
-  constructor(world:WorldView,name:string,shape:Primitive,mat:StandardMaterial,readonly capacity:number){
+  private readonly model:Mesh;
+  constructor(world:WorldView,name:string,shape:Primitive,mat:PBRMaterial,readonly capacity:number){
     this.model=primitive(world.effects,name,shape,mat,0,0,0,1,1,1);
-    const gpu=world.entry.app.graphicsDevice;
     this.data=new Float32Array(capacity*16);
-    this.vb=new VertexBuffer(gpu,VertexFormat.getDefaultInstancingFormat(gpu),capacity,{usage:BUFFER_DYNAMIC,data:this.data.buffer as ArrayBuffer});
-    this.model.render!.meshInstances[0].setInstancing(this.vb);
-    this.model.render!.meshInstances[0].cull=false;
-    this.model.enabled=false;
+    this.model.thinInstanceSetBuffer('matrix',this.data,16,false);
+    this.model.doNotSyncBoundingInfo=true;this.model.alwaysSelectAsActiveMesh=true;
+    this.model.setEnabled(false);
   }
-  put(x:number,y:number,z:number,w:number,h:number,l:number,q:Quat=Quat.IDENTITY){
+  put(x:number,y:number,z:number,w:number,h:number,l:number,q=identity){
     if(this.count>=this.capacity)return;
-    matrix.setTRS(position.set(x,y,z),q,scale.set(w,h,l));
-    this.data.set(matrix.data,this.count++*16);
+    Matrix.ComposeToRef(scale.set(w,h,l),q,position.set(x,y,z),matrix);
+    this.data.set(matrix.m,this.count++*16);
   }
   flush(){
-    this.model.enabled=this.count>0;
-    if(this.count){
-      this.model.render!.meshInstances[0].instancingCount=this.count;
-      this.vb.setData(this.data.buffer as ArrayBuffer);
-    }
+    this.model.setEnabled(this.count>0);
+    if(this.count){this.model.thinInstanceCount=this.count;this.model.thinInstanceBufferUpdated('matrix');}
     this.count=0;
   }
 }
-const tint=(name:string,color:string,gain:number,blend=false)=>{
-  const m=material(name,color,.12,.46);
-  if(gain){m.useLighting=false;m.emissive.copy(m.diffuse).mulScalar(gain);}
-  if(blend){m.blendType=BLEND_ADDITIVE;m.depthWrite=false;}
-  m.update();return m;
+const tint=(scene:Scene,name:string,color:string,gain:number,blend=false)=>{
+  const m=material(scene,name,color,.12,.46);
+  if(gain){m.unlit=true;m.albedoColor.scaleToRef(gain,m.emissiveColor);}
+  if(blend){m.alphaMode=Constants.ALPHA_ADD;m.transparencyMode=Material.MATERIAL_ALPHABLEND;m.disableDepthWrite=true;}
+  return m;
 };
 
 export class CombatArt {
@@ -80,28 +84,44 @@ export class CombatArt {
   private cursor=0;
   private live=0;
   private readonly precipitation:Batch;
+  private spray:GPUParticleSystem|null=null;
+  private readonly sprayEmitter=new Vector3();
   weather=0;
   constructor(readonly world:WorldView){
+    const scene=world.entry.app.scene;
     this.wingWake=new WingWake(world);
-    const rain=tint('天气降水','#b8d4e6',.44,true);
+    if(GPUParticleSystem.IsSupported)void world.assets.texture('surface/water.png').then(texture=>{
+      const p=new GPUParticleSystem('掠海飞沫',{capacity:128,emitRateControl:true},scene);
+      p.particleTexture=texture;p.emitter=this.sprayEmitter;p.emitRate=0;
+      p.minEmitBox.set(-1.4,0,-2.5);p.maxEmitBox.set(1.4,.65,2.5);
+      p.direction1.set(-13,5,-12);p.direction2.set(13,13,12);
+      p.minEmitPower=.54;p.maxEmitPower=1.06;p.gravity.set(0,-9.81,0);
+      p.minLifeTime=.76;p.maxLifeTime=1.52;p.updateSpeed=1/60;
+      p.minSize=1.1;p.maxSize=3.6;p.minAngularSpeed=-.35;p.maxAngularSpeed=.35;
+      p.color1=new Color4(.79,.91,.98,.29);p.color2=new Color4(.63,.83,.91,.44);
+      p.colorDead=new Color4(.56,.73,.86,0);p.blendMode=GPUParticleSystem.BLENDMODE_STANDARD;
+      this.spray=p;
+    }).catch(()=>{});
+    const rain=tint(scene,'天气降水','#b8d4e6',.44,true);
     this.precipitation=new Batch(world,'近景雨雪','box',rain,66);
-    const smoke=tint('软边烟尘','#a9abb1',0);
-    const oil=tint('持续损伤黑烟','#6b625d',0);
-    const dust=tint('扬起的地表粉尘','#ad9377',0);
-    const mist=tint('海面雾滴','#bfe1e9',.5);
-    const flame=tint('火球辐照','#ff8b43',2.25,true);
-    const ash=tint('砂岩飞溅','#a69578',0);
-    const scorch=tint('烧灼残留','#2c2b2b',0);
-    const flash=tint('高速白炽碎火','#ffe8ad',2.0,true);
-    const shock=tint('空中折光冲击','#a2c6e3',.35,true);
+    const smoke=tint(scene,'软边烟尘','#a9abb1',0);
+    const oil=tint(scene,'持续损伤黑烟','#6b625d',0);
+    const dust=tint(scene,'扬起的地表粉尘','#ad9377',0);
+    const mist=tint(scene,'海面雾滴','#bfe1e9',.5);
+    const flame=tint(scene,'火球辐照','#ff8b43',2.25,true);
+    const ash=tint(scene,'砂岩飞溅','#a69578',0);
+    const scorch=tint(scene,'烧灼残留','#2c2b2b',0);
+    const flash=tint(scene,'高速白炽碎火','#ffe8ad',2.0,true);
+    const shock=tint(scene,'空中折光冲击','#a2c6e3',.35,true);
     for(const [m,file] of [[smoke,'soot.webp'],[oil,'soot.webp'],[dust,'soot.webp'],[mist,'water.png'],[flame,'combustion.webp'],[flash,'spark.webp'],[shock,'pressure.webp']] as const){
-      m.cull=CULLFACE_NONE;m.blendType=m===flame||m===flash?BLEND_ADDITIVEALPHA:BLEND_NORMAL;m.depthWrite=false;
-      m.opacity=m===flame?.84:m===mist?.62:m===shock?.48:.57;
+      m.backFaceCulling=false;m.alphaMode=m===flame||m===flash?Constants.ALPHA_ONEONE:Constants.ALPHA_COMBINE;m.disableDepthWrite=true;
+      m.transparencyMode=Material.MATERIAL_ALPHABLEND;
+      m.alpha=m===flame?.84:m===mist?.62:m===shock?.48:.57;
       void world.assets.texture('surface/'+file).then(t=>{
-        m.diffuseMap=t;m.opacityMap=t;m.opacityMapChannel='a';m.emissiveMap=t;m.update();
+        t.hasAlpha=true;m.albedoTexture=t;m.opacityTexture=t;m.emissiveTexture=t;
       }).catch(()=>{});
     }
-    const waterRing=tint('水面冲击环','#d4f8ff',.65,true);
+    const waterRing=tint(scene,'水面冲击环','#d4f8ff',.65,true);
     this.batches={
       smoke:new Batch(world,'涡流烟迹','plane',smoke,164),
       dust:new Batch(world,'受击尘浪','plane',dust,44),
@@ -115,16 +135,26 @@ export class CombatArt {
       oil:new Batch(world,'损伤燃烧烟迹','plane',oil,68),
     };
     this.rounds=[
-      new Batch(world,'己方曳光','box',tint('曳光黄色','#ffd49c',2.10,true),170),
-      new Batch(world,'敌方曳光','box',tint('曳光橙红','#ff7352',2.4,true),170),
-      new Batch(world,'导弹与挂载','cylinder',material('武器抛光金属','#c5c7cd',.47,.47),40),
-      new Batch(world,'导弹点火','box',tint('推进核','#ffa46b',2.7,true),40),
-      new Batch(world,'红外弹短焰','box',tint('赤尾尾焰','#ff644e',2.5,true),24),
-      new Batch(world,'远程弹蓝焰','box',tint('苍矛尾焰','#a1d9ff',2.6,true),24),
+      new Batch(world,'己方曳光','box',tint(scene,'曳光黄色','#ffd49c',2.10,true),170),
+      new Batch(world,'敌方曳光','box',tint(scene,'曳光橙红','#ff7352',2.4,true),170),
+      new Batch(world,'导弹与挂载','cylinder',material(scene,'武器抛光金属','#c5c7cd',.47,.47),40),
+      new Batch(world,'导弹点火','box',tint(scene,'推进核','#ffa46b',2.7,true),40),
+      new Batch(world,'红外弹短焰','box',tint(scene,'赤尾尾焰','#ff644e',2.5,true),24),
+      new Batch(world,'远程弹蓝焰','box',tint(scene,'苍矛尾焰','#a1d9ff',2.6,true),24),
     ];
   }
-  clear(){for(const p of this.particles)p.life=0;this.live=0;this.effectsClock.clear();this.wingWake.clear();}
-  activeParticles(){return this.live;}
+  clear(){for(const p of this.particles)p.life=0;this.live=0;this.effectsClock.clear();this.wingWake.clear();
+    if(this.spray){this.spray.emitRate=0;this.spray.reset();}}
+  activeParticles(){return this.live+(this.spray?.getActiveCount()??0);}
+  skim(position:Vector3|null,strength:number,level:number){
+    const p=this.spray;
+    if(!p||level<.79){if(p)p.emitRate=0;return false;}
+    if(position){
+      this.sprayEmitter.copyFrom(position);p.emitRate=12+48*strength;
+      if(!p.isStarted())p.start();
+    }else p.emitRate=0;
+    return true;
+  }
   burst(v:Vector3,n:number,kind:Effect,power=1,inherited?:Vector3,axis?:Vector3){
     const spec=types[kind],fixed=kind==='ring'||kind==='shock'||kind==='scorch';
     const kick=axis?(kind==='sparks'?14:kind==='fragment'?7:kind==='dust'?2:0)*power:0;
@@ -184,7 +214,7 @@ export class CombatArt {
     }
   }
   update(s:Sortie,dt:number,eye:Vector3,cam:Quaternion,level:number,time:number,pose:FlightPose,alpha:number){
-    rotation.set(cam.x,cam.y,cam.z,cam.w).mul(billboard);
+    rotation.copyFrom(cam).multiplyInPlace(billboard);
     this.wingWake.update(s,pose,eye,dt,this.world.view===0);
     if(dt>0)this.damaged(s,eye);
     let live=0;
@@ -204,7 +234,7 @@ export class CombatArt {
           if(p.dy<-9){p.y=surface+.1;p.dy*=-.25;p.dx*=.48;p.dz*=.48;}
           else {p.life=p.age;continue;}
         }
-        const q=particleRotation.setFromEulerAngles(p.spin*23+p.age*176,p.age*91,p.spin*51);
+        const q=Quaternion.RotationYawPitchRollToRef(p.age*91*radians,(p.spin*23+p.age*176)*radians,p.spin*51*radians,particleRotation);
         batch.put(p.x,p.y,p.z,p.size,p.size*.18,p.size*1.4,q);
       }else if(p.kind==='ring'||p.kind==='scorch'){
         const size=p.kind==='ring'?p.size*(1+fraction*9):p.size;
@@ -225,10 +255,10 @@ export class CombatArt {
         const speed=p.velocity.length();
         this.tracer(v,d,p.owner?.side?1:0,Math.min(23,speed*.012,speed*p.age));continue;
       }
-      const q=weaponRotation.setFromDirections(Vec3.UP,direction.set(d.x,d.y,d.z));
+      const q=directionRotation(Vector3.UpReadOnly,direction.copyFrom(d),weaponRotation);
       this.rounds[2].put(v.x,v.y,v.z,.44,p.kind==='bomb'&&!p.guidedGround?2.4:3.9,.44,q);
       if(p.kind==='missile'||p.guidedGround){
-        const after=weaponRotation.setFromDirections(zAxis,direction);
+        const after=directionRotation(zAxis,direction,weaponRotation);
         const shape=p.guidedGround?0:p.profile.shape,long=shape===2?10:shape===1?5:7;
         this.rounds[3+shape].put(v.x-d.x*(2+long*.42),v.y-d.y*(2+long*.42),v.z-d.z*(2+long*.42),.58,.58,long,after);
       }
@@ -249,9 +279,10 @@ export class CombatArt {
   }
   private tracer(p:Vector3,d:Vector3,kind:0|1,length:number){
     if(length<1)return;
-    weaponRotation.setFromDirections(zAxis,direction.set(d.x,d.y,d.z).normalize());
+    directionRotation(zAxis,direction.copyFrom(d).normalize(),weaponRotation);
     this.rounds[kind].put(p.x-d.x*length*.45,p.y-d.y*length*.45,p.z-d.z*length*.45,.16,.16,length,weaponRotation);
   }
   flush(){for(const b of this.rounds)b.flush();}
 }
-const billboard=new Quat().setFromEulerAngles(90,0,0),particleRotation=new Quat(),weaponRotation=new Quat(),weatherAngle=new Quat().setFromEulerAngles(10,0,12);
+const identity=Quaternion.Identity(),billboard=Quaternion.RotationAxis(Vector3.Right(),Math.PI/2);
+const particleRotation=Quaternion.Identity(),weaponRotation=Quaternion.Identity(),weatherAngle=Quaternion.RotationYawPitchRoll(0,10*radians,12*radians);

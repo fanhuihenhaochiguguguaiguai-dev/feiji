@@ -1,4 +1,8 @@
-import { BLEND_NORMAL, Color, CULLFACE_NONE, Entity, Mesh, MeshInstance, PRIMITIVE_TRIANGLES, StandardMaterial } from 'playcanvas';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Material } from '@babylonjs/core/Materials/material';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { FlightPose } from './flight';
 import type { WorldView } from './renderer';
@@ -11,47 +15,33 @@ const lifetime=1.08;
 export class WingWake {
   private readonly history=new Float32Array(samples*7);
   private readonly vertices=new Float32Array(samples*2*lanes*3);
-  private readonly colors=new Uint8Array(samples*2*lanes*4).fill(255);
+  private readonly colors=new Float32Array(samples*2*lanes*4).fill(1);
   private readonly tip=new Vector3();
   private readonly mesh:Mesh;
   private readonly indices:number[]=[];
-  private readonly entity=new Entity('翼尖凝结尾迹');
   private head=0;
   private used=0;
   private time=-1;
 
   constructor(world:WorldView){
-    this.mesh=new Mesh(world.entry.app.graphicsDevice);
-    this.mesh.clear(true,false,samples*2*lanes,(samples-1)*24);
+    const scene=world.entry.app.scene;
+    this.mesh=new Mesh('翼尖凝结尾迹',scene);
+    this.mesh.parent=world.effects;
     for(let side=0;side<2;side++)for(let row=0;row<samples-1;row++)for(let lane=0;lane<2;lane++){
       const a=(side*samples+row)*lanes+lane;
       this.indices.push(a,a+lanes,a+1,a+1,a+lanes,a+lanes+1);
     }
-    const material=new StandardMaterial();
-    material.diffuse=new Color(.79,.90,1);
-    material.emissive=new Color(.17,.23,.30);
-    material.useLighting=false;
-    material.opacityVertexColor=true;
-    material.opacityVertexColorChannel='a';
-    material.blendType=BLEND_NORMAL;
-    material.depthWrite=false;
-    material.cull=CULLFACE_NONE;
-    material.update();
-    this.mesh.setPositions(this.vertices);
-    const normals=new Float32Array(this.vertices.length);
-    for(let i=1;i<normals.length;i+=3)normals[i]=1;
-    this.mesh.setNormals(normals);
-    this.mesh.setColors32(this.colors);
-    this.mesh.setIndices(this.indices);
-    this.mesh.update(PRIMITIVE_TRIANGLES,false);
-    const instance=new MeshInstance(this.mesh,material);
-    instance.cull=false;
-    this.entity.addComponent('render',{meshInstances:[instance],castShadows:false,receiveShadows:false});
-    world.effects.addChild(this.entity);
-    this.entity.enabled=false;
+    const material=new StandardMaterial('机翼凝结云',scene);
+    material.emissiveColor.set(.77,.86,.96);material.disableLighting=true;
+    material.transparencyMode=Material.MATERIAL_ALPHABLEND;
+    material.disableDepthWrite=true;material.backFaceCulling=false;
+    const data=new VertexData();data.positions=this.vertices;data.colors=this.colors;data.indices=this.indices;
+    data.applyToMesh(this.mesh,true);
+    this.mesh.hasVertexAlpha=true;this.mesh.alwaysSelectAsActiveMesh=true;this.mesh.material=material;
+    this.mesh.setEnabled(false);
   }
 
-  clear(){this.head=this.used=0;this.time=-1;this.entity.enabled=false;}
+  clear(){this.head=this.used=0;this.time=-1;this.mesh.setEnabled(false);}
 
   update(s:Sortie,pose:FlightPose,eye:Vector3,step:number,show:boolean){
     const p=s.player,time=s.time;
@@ -69,8 +59,8 @@ export class WingWake {
       this.head=(this.head+1)%samples;
       this.used=Math.min(this.used+1,samples);
     }
-    this.entity.enabled=show&&this.used>=2&&strength>.07;
-    if(!this.entity.enabled)return;
+    this.mesh.setEnabled(show&&this.used>=2&&strength>.07);
+    if(!this.mesh.isEnabled())return;
     for(let side=0;side<2;side++)for(let i=0;i<samples;i++){
       const offset=(this.head-1-Math.min(i,this.used-1)+samples)%samples*7;
       const from=(this.head-1-Math.max(0,Math.min(i-1,this.used-1))+samples)%samples*7;
@@ -82,7 +72,7 @@ export class WingWake {
       const nx=dy*vz-dz*vy,ny=dz*vx-dx*vz,nz=dx*vy-dy*vx;
       const elapsed=time-this.history[offset];
       const halfWidth=(.23+Math.min(lifetime,elapsed)*.64)*Math.max(.66,p.type.span/12)/Math.max(.001,Math.hypot(nx,ny,nz));
-      const opacity=i>=this.used?0:Math.round(210*strength*Math.max(0,1-elapsed/lifetime)**1.65);
+      const opacity=i>=this.used?0:.82*strength*Math.max(0,1-elapsed/lifetime)**1.65;
       for(let lane=0;lane<lanes;lane++){
         const vertex=(side*samples+i)*lanes+lane,across=(lane-1)*halfWidth;
         this.vertices[vertex*3]=x+nx*across;
@@ -91,8 +81,7 @@ export class WingWake {
         this.colors[vertex*4+3]=lane===1?opacity:0;
       }
     }
-    this.mesh.setPositions(this.vertices);
-    this.mesh.setColors32(this.colors);
-    this.mesh.update(PRIMITIVE_TRIANGLES,false);
+    this.mesh.updateVerticesData(VertexBuffer.PositionKind,this.vertices,false);
+    this.mesh.updateVerticesData(VertexBuffer.ColorKind,this.colors,false);
   }
 }

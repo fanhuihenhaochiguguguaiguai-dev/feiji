@@ -1,3 +1,4 @@
+import { rotate } from './scene-runtime';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { byAircraft,operation,theatres,type PlaneSpec,type FreeFlightPlan } from './data';
 import { FlightPose, FLIGHT_STEP } from './flight';
@@ -19,7 +20,7 @@ import { missiles } from './items';
 import { openWreckPhysics,type WreckPhysics } from './wreck-physics';
 
 const small=()=>matchMedia('(any-pointer: coarse)').matches;
-const direction=new Vector3(),soundRight=new Vector3(),rightward=new Vector3(1,0,0);
+const direction=new Vector3(),soundRight=new Vector3(),rightward=new Vector3(1,0,0),soundUp=new Vector3(),upward=new Vector3(0,1,0);
 export class Game {
   readonly root=el('application');
   readonly engine:OpenEngine['app'];
@@ -48,6 +49,7 @@ export class Game {
   private notion={id:'s01',rank:1,runway:false,plan:{region:0,weather:0,lighting:0}};
   private meshChange=new Set<string>();
   private timeSinceImpact=0;
+  private readonly seaMist=new Vector3();
   private awardPlane:PlaneSpec|null=null;
   private awardMissile:ReturnType<typeof makeMissile>|null=null;
   private readonly awardPosition=new Vector3(0,2.28,0);
@@ -64,7 +66,7 @@ export class Game {
     this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i));
     this.support=new AircraftView(this.world,5);
     this.preview=byAircraft(this.p.selected);
-    this.budget=new RenderBudget(this.engine.graphicsDevice,small());
+    this.budget=new RenderBudget(this.engine.device,small());
     this.input=new FlightInput(entry.canvas,command=>this.action(command));
     this.ui=new Interface(this.p,{
       amend:()=>this.settings(),preview:(id)=>void this.previewAircraft(id),
@@ -134,12 +136,12 @@ export class Game {
     this.engine.on('postrender',()=>{
       if(this.state==='flight'&&this.sortie)this.ui.telemetry(this.sortie,this.world,this.targetAnchors,this.playerPose);
     });
-    this.engine.autoRender=false;this.engine.start();
+    this.engine.start();
   }
   presentAward(id?:string){
     const aircraftWasActive=this.awardPlane!==null;
     this.awardPlane=null;
-    this.awardMissile?.destroy();this.awardMissile=null;
+    this.awardMissile?.dispose();this.awardMissile=null;
     this.awardClock=this.clock;
     this.root.dataset.reveal=id?'model':'none';
     this.world.setAwardLighting(Boolean(id));
@@ -159,7 +161,7 @@ export class Game {
       const subject=missiles[id];
       if(!subject)return;
       const model=this.awardMissile=makeMissile(this.engine.root,'入库展示 '+id,subject.shape);
-      model.setPosition(0,2.28,0);
+      model.position.set(0,2.28,0);
     }
   }
   async previewAircraft(id:string){
@@ -194,7 +196,7 @@ export class Game {
       await this.pilot.request(type);
       await Promise.all(mission.enemies.map((e,i)=>e.alive?this.foes[i].request(e.type):null));
       if(mission.enemies.some(e=>e.alive)){
-        for(const id of mission.enemyKit)void this.world.assets.load('fleet/'+id+'.glb','container').catch(()=>{});
+        for(const id of mission.enemyKit)void this.world.assets.container('fleet/'+id+'.glb').catch(()=>{});
       }
       if(mission.ally.alive)await this.support.request(mission.ally.type);
       this.sortie?.releaseRigidBodies();
@@ -226,7 +228,7 @@ export class Game {
       this.finish(active);return;
     }
     active?.releaseRigidBodies();this.sortie=null;this.input.on=false;this.art.clear();this.state='home';this.world.showDeck(true);this.world.view=0;
-    for(const other of [...this.foes,this.support])other.pivot.enabled=false;
+    for(const other of [...this.foes,this.support])other.pivot.setEnabled(false);
     void this.previewAircraft(this.p.selected);this.ui.showHangar();
   }
   action(name:string){
@@ -268,12 +270,14 @@ export class Game {
     }
     const p=this.sortie?.player;
     const range=p?e.at.subtractToRef(p.position,direction).length():0;
-    let pan=0;
+    let pan=0,elevation=0;
     if(p&&range>2){
       rightward.rotateByQuaternionToRef(p.orientation,soundRight);
-      pan=Vector3.Dot(soundRight,direction)/range*.87;
+      upward.rotateByQuaternionToRef(p.orientation,soundUp);
+      pan=Math.atan2(Vector3.Dot(soundRight,direction),Vector3.Dot(p.forward,direction));
+      elevation=Vector3.Dot(soundUp,direction)/range;
     }
-    this.audio.battle(e,range,pan);
+    this.audio.battle(e,range,pan,elevation);
     this.engine.fire('sortie-event',e);
     if(e.kind==='wave'){
       const ready=this.sortie;if(!ready)return;
@@ -302,7 +306,7 @@ export class Game {
       this.engine.renderNextFrame=false;return;
     }
     const level=this.budget.apply(this.qualityOverride??this.p.settings.quality,span,this.p.settings.renderScale);
-    this.world.level=level;
+    this.world.level=level;this.world.applyQuality(level);
     const player=s?.player;
     if(this.state==='flight'&&s){
       this.acc=Math.min(.25,this.acc+span);
@@ -322,9 +326,9 @@ export class Game {
     }
     const result=this.state==='result';
     if(home&&this.awardMissile){
-      this.pilot.pivot.enabled=false;
+      this.pilot.pivot.setEnabled(false);
       const age=this.clock-this.awardClock;
-      this.awardMissile.setEulerAngles(31,age*35-47,-52);
+      rotate(this.awardMissile,31,age*35-47,-52);
       this.world.previewOrdnance(this.awardPosition,age);
     }else if(home&&this.awardPlane){
       const plane=this.awardPlane;
@@ -335,7 +339,7 @@ export class Game {
       this.world.tilt=this.hangar.elevation;
       this.world.preview(this.preview,this.clock,result?'result':this.ui.station,this.hangar.distance);
       this.pilot.preview(this.preview,this.clock,combatConfiguration(this.p,this.preview.id),this.hangar.angle);
-      for(const a of [...this.foes,this.support])a.pivot.enabled=false;
+      for(const a of [...this.foes,this.support])a.pivot.setEnabled(false);
     }else if(s&&player&&!this.world.fixed){
       const alpha=this.state==='flight'?this.acc/FLIGHT_STEP:1;
       this.playerPose.sample(player,alpha);
@@ -349,26 +353,27 @@ export class Game {
           void view.request(enemy.type).finally(()=>this.meshChange.delete(key)).catch(console.error);
         }
         view.sync(enemy,this.clock,'',false,false,undefined,undefined,alpha);
-        if(view.pivot.enabled&&enemy.alive)this.targetAnchors.set(enemy.id,view.anchor);
+        if(view.pivot.isEnabled()&&enemy.alive)this.targetAnchors.set(enemy.id,view.anchor);
       }
       this.support.sync(s.ally,this.clock,'',false,false,undefined,undefined,alpha);
-      if(this.support.pivot.enabled&&s.ally.alive)this.targetAnchors.set(s.ally.id,this.support.anchor);
+      if(this.support.pivot.isEnabled()&&s.ally.alive)this.targetAnchors.set(s.ally.id,this.support.anchor);
       for(const [i,t] of s.targetPoints.entries()){
-        const m=this.world.targets[i];if(!m)continue; m.setPosition(t.position.x,t.position.y,t.position.z);m.enabled=t.alive;m.setLocalScale(28,Math.max(4,12*t.hp/100),26);
+        const m=this.world.targets[i];if(!m)continue; m.position.copyFrom(t.position);m.setEnabled(t.alive);m.scaling.set(28,Math.max(4,12*t.hp/100),26);
       }
       for(const [i,g] of s.gates.entries()){
-        const mesh=this.world.rings[i];mesh.setPosition(g.x,g.y,g.z);mesh.enabled=i===s.gate;
+        const mesh=this.world.rings[i];mesh.position.copyFrom(g);mesh.setEnabled(i===s.gate);
       }
       const effectTime=this.state==='pause'?0:dt;
       if(this.state==='flight'){
         this.world.updateWater(player,s.time);
+        const p=player.position,h=s.world.water(p.x,p.z,s.time),altitude=p.y-h;
+        const low=altitude<27&&player.speed>95&&s.world.classify(p.x,p.z)==='water';
+        if(low)this.seaMist.set(p.x-player.forward.x*10,h+.5,p.z-player.forward.z*10);
+        const hardware=this.art.skim(low?this.seaMist:null,low?Math.max(0,1-altitude/27):0,level);
         this.timeSinceImpact+=dt;
         if(this.timeSinceImpact>.097){
           this.timeSinceImpact=0;
-          if(player.position.y<24&&player.speed>105&&s.world.classify(player.position.x,player.position.z)==='water'){
-            const spot=new Vector3(player.position.x-player.forward.x*10,1.4,player.position.z-player.forward.z*10);
-            this.art.burst(spot,2,'mist',.65);
-          }
+          if(low&&!hardware)this.art.burst(this.seaMist,2,'mist',.65);
         }
       }
       this.world.updateShaders(s.time,this.clock);

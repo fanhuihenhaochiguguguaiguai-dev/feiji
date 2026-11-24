@@ -7,7 +7,7 @@ import { cannonFor, guidedStrike, gunCycle, gunDamage, gunSight, missileCycle, r
 import { groundMount, missiles, missileDamage, missileRails, minimumEnemyDurability, minimumPlayerMissiles,type MissileProfile } from './items';
 import type { CombatConfiguration } from './profile';
 import type { WreckPhysics } from './wreck-physics';
-import { choosePass,enemyTuning,planPass,Tactic } from './tactics';
+import { enemyTuning,SquadronBlackboard,TacticalPilot,Tactic } from './tactics';
 import { CountermeasureSystem, MissileGuidance, MissileWarningSystem, type DefenseCue, type DefenseKind, type GuidedTrack } from './defense';
 const delta=new Vector3(),local=new Vector3(),orientation=Quaternion.Identity(),inverted=Quaternion.Identity();
 const spreadVector=new Vector3(),leftToRight=new Vector3(),eventAt=new Vector3(),tipNow=new Vector3(),tipBefore=new Vector3(),shotStart=new Vector3(),shotEnd=new Vector3(),localStrike=new Vector3();
@@ -67,6 +67,8 @@ export class Sortie {
   readonly endless:boolean;
   readonly seed:number;
   readonly opening:number;
+  readonly tacticalPilots=Array.from({length:4},()=>new TacticalPilot());
+  private readonly squadron=new SquadronBlackboard();
   private readonly pilots=Array.from({length:4},()=>enemyTuning(1,1));
   readonly safeLine;
   readonly weapons:ProjectileKind[];
@@ -164,6 +166,7 @@ export class Sortie {
     const normal=enemyTuning(step,this.loadout.rank),aceSkill=boss?enemyTuning(step+6,this.loadout.rank):normal;
     const formation=plan?.formation??(this.endless?['line','stack','screen','pincer'][((this.seed>>>2)+this.wave)%4]:'line');
     this.wave++;this.during=this.time;
+    this.squadron.reset();for(const pilot of this.tacticalPilots)pilot.reset();
     if(this.endless)this.total+=count;
     const k=Math.hypot(p.forward.x,p.forward.z),x=k>.66?p.forward.x/k:0,z=k>.66?p.forward.z/k:-1;
     const distance=plan?Math.max(465,Math.min(plan.distance+210*(this.wave-1),p.type.trim*6.5)):
@@ -508,15 +511,7 @@ export class Sortie {
     const c=e.controls;
     c.assist=false;c.boost=false;c.gun=false;
     const leader=this.enemies.find(unit=>unit.alive)??e;
-    const tactic=choosePass(e,t,t-this.during,range,leader,skill.pressure);
-    if(sensed||tactic===Tactic.Formation||tactic===Tactic.Evade||tactic===Tactic.Extend){
-      planPass(e,leader,victim,range,tactic,this.aiPoint,c);
-    }else{
-      const sweeping=Math.sin(t*.39+e.role*1.14)*.66;
-      this.aiPoint.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*880+e.forward.z*840*sweeping,58,
-        e.forward.z*880-e.forward.x*840*sweeping);
-      c.throttle=.76;
-    }
+    const tactic=this.tacticalPilots[e.id-1].command(e,leader,victim,sensed,range,skill.pressure,t,this.during,this.world,this.squadron,this.aiPoint,c);
     const attack=sensed&&(tactic===Tactic.Intercept||tactic===Tactic.Flank);
     const missileType=e.type.era==='cold'||(this.shotSerial+1+e.role)%3===0?missiles.flarewing:
       e.experience===3&&e.type.safety?missiles.skylance:missiles.interceptor;

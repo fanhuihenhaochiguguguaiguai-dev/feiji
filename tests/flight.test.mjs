@@ -11,12 +11,14 @@ const {outputFiles}=await build({stdin:{
     export { CountermeasureSystem, MissileGuidance, MissileWarningSystem } from './src/defense';
     export { mapRadar } from './src/tactical-radar';
     export { OceanSpectrum, ShallowWake, oceanSize } from './src/ocean-solver';
+    export { edgeNode,partition,streamBlocks } from './src/terrain-stream';
+    export { SquadronBlackboard,TacticalPilot } from './src/tactics';
     export { Terrain,registerTerrain } from './src/terrain';
     export { Vector3,Quaternion } from '@babylonjs/core/Maths/math.vector';`,
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
 const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
-  Terrain, registerTerrain, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+  Terrain, registerTerrain, edgeNode, partition, streamBlocks, SquadronBlackboard, TacticalPilot, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=await readFile('public/world/'+id+'.height');
   registerTerrain(seed,b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));
@@ -695,4 +697,39 @@ test('representative chapter 1, 3 and 6 sorties exercise the escalation with fin
     console.log('campaign balance',JSON.stringify({id,initial,outcome:r.reason,finished:r.win,
       seconds:+r.time.toFixed(2),kills:r.kills,projectileFixture:true,gunRate:r.accuracy,missileRate:r.missileAccuracy,events}));
   }
+});
+
+
+test('authored terrain joins a deterministic, subdivided outer world with matching sample edges',()=>{
+  const a=new Terrain(413),b=new Terrain(413),different=new Terrain(116);
+  const samples=Array.from({length:65},(_,i)=>[27700+i*421,-17800+i*688]);
+  assert.deepEqual(samples.map(([x,z])=>a.elevation(x,z)),samples.map(([x,z])=>b.elevation(x,z)));
+  assert(samples.some(([x,z])=>a.elevation(x,z)>20));
+  assert(samples.some(([x,z])=>Math.abs(a.elevation(x,z)-different.elevation(x,z))>75));
+  assert(Math.abs(a.elevation(24000-.001,0)-a.elevation(24000+.001,0))<.1);
+  const blocks=streamBlocks(65000,21000,930,-710,a.blocks);
+  assert(blocks.some(p=>p.x>1024));
+  const leaves=partition({x:0,z:0},-24000,-24000,1100);
+  assert(leaves.length>1&&leaves.length<17);
+  assert.equal(leaves.reduce((sum,p)=>sum+p.size**2,0),64**2);
+  const raw=(i,j)=>i*i+j*j;
+  assert.equal(edgeNode(9,16,true,raw),raw(8,16)*.75+raw(12,16)*.25);
+  assert.equal(edgeNode(-32,7,false,raw),raw(-32,4)*.25+raw(-32,8)*.75);
+});
+
+test('tactical planning is throttled, uses sensor tracks and changes promptly on missile threat',()=>{
+  const terrain=new Terrain(413),type=byAircraft('f16');
+  const enemy=new Airframe(1,type,1),victim=new Airframe(0,type,0);
+  enemy.reset(0,1500,2000,0);victim.reset(0,1550,0,0);
+  const pilot=new TacticalPilot(),board=new SquadronBlackboard(),point=new Vector3(),c={...idle};
+  for(let i=0;i<255;i++)pilot.command(enemy,enemy,victim,true,2000,.71,i*dt,0,terrain,board,point,c);
+  assert(pilot.planned>=10&&pilot.planned<=15,pilot.planned);
+  const aim=point.clone();
+  victim.position.set(40000,18000,0);
+  pilot.command(enemy,enemy,victim,false,40000,.71,3,0,terrain,board,point,c);
+  assert(Vector3.Distance(aim,point)<1200,'occluded target must use its remembered track');
+  enemy.evadeUntil=4;
+  pilot.command(enemy,enemy,victim,false,40000,.71,3.01,0,terrain,board,point,c);
+  assert.equal(c.boost,true);
+  assert(Vector3.Distance(enemy.position,point)<1050);
 });

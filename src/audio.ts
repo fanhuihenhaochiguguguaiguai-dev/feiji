@@ -19,6 +19,8 @@ export class FlightAudio {
   private engineGain:GainNode|null=null;private sound:AudioBuffer|null=null;private link:GainNode|null=null;
   private wind:BiquadFilterNode|null=null;private rotor:OscillatorNode|null=null;
   private rotorGain:GainNode|null=null;private voices=0;private lastGun=-1;
+  private readonly samples:Partial<Record<'jet'|'reheat',{player:AudioBufferSourceNode;gain:GainNode}>>={};
+  private battleMix=0;
   issuedBattleCue=0;
   private playedVoices=0;
   lastCue:''|ToneKind='';
@@ -43,30 +45,48 @@ export class FlightAudio {
       filter.type='bandpass';filter.frequency.value=550;
       const g=this.link=c.createGain();g.gain.value=0;
       ambient.buffer=h;ambient.loop=true;ambient.connect(filter).connect(g).connect(master);ambient.start();
+      for(const key of ['jet','reheat'] as const)void this.loadLayer(c,master,key);
     }catch {/* Audio is optional on the current browser. */}
+  }
+  private async loadLayer(context:AudioContext,bus:GainNode,key:'jet'|'reheat'){
+    try{
+      const response=await fetch(new URL('audio/'+key+'.ogg',document.baseURI));
+      if(!response.ok)return;
+      const clip=await context.decodeAudioData(await response.arrayBuffer());
+      const player=context.createBufferSource(),gain=context.createGain();
+      player.buffer=clip;player.loop=true;gain.gain.value=0;
+      player.connect(gain).connect(bus);player.start();this.samples[key]={player,gain};
+    }catch{/* Synthesized propulsion remains audible while recording support is unavailable. */}
   }
   update(active:boolean,throttle:number,speed:number,boost:number,propeller:boolean,hangar=false){
     const c=this.context;if(!c||!this.master||!this.engineGain||!this.engine||!this.wind||!this.link)return;
     const t=c.currentTime;
     this.master.gain.setTargetAtTime(this.mute?0:.45,t,.13);
+    this.battleMix*=.983;
+    const jet=this.samples.jet,reheat=this.samples.reheat;
+    jet?.gain.gain.setTargetAtTime(active&&!propeller?(.018+throttle*.051)*(1-.42*boost)*(1-.25*this.battleMix):0,t,.16);
+    jet?.player.playbackRate.setTargetAtTime(.76+throttle*.37+speed*.00021,t,.16);
+    reheat?.gain.gain.setTargetAtTime(active&&!propeller?boost*.092*(1-.33*this.battleMix):0,t,.12);
+    reheat?.player.playbackRate.setTargetAtTime(.94+Math.min(.27,speed*.00072),t,.12);
     this.engineGain.gain.setTargetAtTime(active?.017+throttle*.032+boost*.044:0,t,.09);
     this.engine.frequency.setTargetAtTime(propeller?37+throttle*37:49+speed*.18+boost*46,t,.11);
     this.rotor?.frequency.setTargetAtTime(propeller?19+throttle*22:47+throttle*35+boost*27,t,.15);
     this.rotorGain?.gain.setTargetAtTime(active?.016+throttle*.012+boost*.018:0,t,.12);
     this.wind.frequency.setTargetAtTime(active?280+speed*3.1:210,t,.12);this.link.gain.setTargetAtTime(active?Math.min(.075,speed*.00024)+boost*.025:hangar?.026:0,t,.15);
   }
-  stats(){return {context:this.context?.state??'off',cues:this.issuedBattleCue,voices:this.playedVoices,last:this.lastCue};}
-  battle(e:FlightEvent,range:number,bearing:number){
+  stats(){return {context:this.context?.state??'off',cues:this.issuedBattleCue,voices:this.playedVoices,recordedLayers:Object.keys(this.samples).length,last:this.lastCue};}
+  battle(e:FlightEvent,range:number,bearing:number,elevation:number){
     const cue=e.kind==='breakup'?'fracture':e.kind==='hit'||e.kind==='impact'
       ?e.terminal?null:e.surface==='water'?'water':e.weapon==='gun'?'scrape':'blast'
       :e.kind==='warn'?(e.scale??0)>=4?'near':'warn'
       :e.kind==='gun'||e.kind==='missile'||e.kind==='lock'||e.kind==='wave'?e.kind:null;
     if(cue){
       this.lastCue=cue;this.issuedBattleCue++;
-      this.play(cue,range,bearing);
+      if(cue==='gun'||cue==='missile'||cue==='blast'||cue==='near')this.battleMix=Math.min(1,this.battleMix+.31);
+      this.play(cue,range,bearing,elevation);
     }
   }
-  play(kind:ToneKind,range=0,bearing=0){
+  play(kind:ToneKind,range=0,bearing=0,elevation=0){
     const c=this.context,master=this.master;
     if(!c||!master||this.mute||range>5400)return;
     const now=c.currentTime,attenuation=Math.max(.04,Math.exp(-range/2800));
@@ -77,7 +97,10 @@ export class FlightAudio {
       n.buffer=this.sound;b.type=kind==='gun'||kind==='water'||kind==='scrape'?'bandpass':'lowpass';
       b.frequency.setValueAtTime(start,now);b.frequency.exponentialRampToValueAtTime(end,now+life);
       g.gain.setValueAtTime(attenuation*amp,now);g.gain.exponentialRampToValueAtTime(.0001,now+life);
-      const position=c.createStereoPanner();position.pan.value=bearing;
+      const position=c.createPanner();position.panningModel='equalpower';position.distanceModel='linear';
+      position.rolloffFactor=0;
+      position.positionX.value=Math.sin(bearing);position.positionZ.value=-Math.cos(bearing);
+      position.positionY.value=elevation;
       n.connect(b).connect(g).connect(position).connect(master);this.voices++;this.playedVoices++;
       n.onended=()=>{this.voices--;n.disconnect();b.disconnect();g.disconnect();position.disconnect();};
       n.start(now,Math.random()*.44);n.stop(now+life+.02);return;

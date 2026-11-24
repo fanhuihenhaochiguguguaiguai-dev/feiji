@@ -1,43 +1,134 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Airframe, Controls } from './flight';
+import type { Terrain } from './terrain';
+import { clamp } from './terrain';
 
-export const enum Tactic { Intercept, Extend, Formation, Evade, Flank }
-export function choosePass(e:Airframe,time:number,sinceWave:number,range:number,lead:Airframe,pressure:number){
-  if(time<e.evadeUntil)return Tactic.Evade;
-  const energy=e.speed/Math.max(1,e.type.trim),hurt=1-e.hp/e.maxHp;
-  const age=time-e.atStage;
-  if(e.phase===Tactic.Extend&&age<2.0+pressure*.68)return Tactic.Extend;
-  const extension=(range<170+pressure*55?1.15:0)+(energy<.63&&range<970?.68:0)+
-    (hurt>.55&&range<540&&!e.ace?.44:0)+Math.min(.59,age/(18-pressure*4));
-  const flank=e.role>0&&range>610&&range<2500?.31+pressure*.34+(e.role===2?.10:0):0;
-  if(e.phase!==Tactic.Extend&&extension>Math.max(.71,flank)){
-    e.phase=Tactic.Extend;e.atStage=time;return Tactic.Extend;
+export const enum Tactic { Intercept, Extend, Formation, Evade, Flank, Search }
+export const enum Maneuver { Lead, Lag, HighYoYo, LowYoYo, Outside, Inside, Vertical, Bracket }
+class Track {
+  readonly position=new Vector3();
+  readonly velocity=new Vector3();
+  readonly acceleration=new Vector3();
+  last=-Infinity;
+  reset(){this.last=-Infinity;this.acceleration.setAll(0);}
+  observe(target:Airframe,now:number){
+    const dt=now-this.last;
+    if(dt>.05&&dt<.8){
+      target.velocity.subtractToRef(this.velocity,this.acceleration).scaleInPlace(1/dt);
+      const limit=35/Math.max(35,this.acceleration.length());this.acceleration.scaleInPlace(limit);
+    }else this.acceleration.setAll(0);
+    this.position.copyFrom(target.position);this.velocity.copyFrom(target.velocity);this.last=now;
   }
-  if(e.phase===Tactic.Extend){e.phase=Tactic.Intercept;e.atStage=time;}
-  if(e!==lead&&lead.alive&&sinceWave<1.25+e.role*.42)return Tactic.Formation;
-  return flank>.56&&!e.ace?Tactic.Flank:Tactic.Intercept;
+  extrapolate(time:number,out:Vector3){
+    const dt=clamp(time-this.last,0,7),acceleration=Math.min(2,dt)*dt*.22;
+    out.copyFrom(this.position).addInPlaceFromFloats(this.velocity.x*dt+this.acceleration.x*acceleration,
+      this.velocity.y*dt+this.acceleration.y*acceleration,this.velocity.z*dt+this.acceleration.z*acceleration);
+  }
 }
-export function planPass(e:Airframe,lead:Airframe,victim:Airframe,range:number,move:Tactic,point:Vector3,c:Controls){
-  const side=e.role%2?1:-1;
-  if(move===Tactic.Extend||move===Tactic.Evade){
-    const lateral=move===Tactic.Evade?745:440;
-    point.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*420+e.forward.z*lateral*side,
-      (move===Tactic.Evade?122:223)+e.role*34,e.forward.z*420-e.forward.x*lateral*side);
-    c.throttle=1;c.boost=move===Tactic.Evade;return;
+export class SquadronBlackboard {
+  private readonly contact=new Track();
+  readonly tracks=Array.from({length:4},()=>new Track());
+  reset(){this.contact.reset();for(const t of this.tracks)t.reset();}
+  observe(e:Airframe,target:Airframe,time:number){
+    this.tracks[e.id-1].observe(target,time);
+    if(time-this.contact.last>.065)this.contact.observe(target,time);
   }
-  if(move===Tactic.Formation){
-    const breadth=side*(240+e.role*13),offset=345-e.role*47;
-    point.copyFrom(lead.position).addInPlaceFromFloats(lead.forward.x*offset-lead.forward.z*breadth,51+e.role*35,lead.forward.z*offset+lead.forward.x*breadth);
-    c.throttle=.76;return;
+  read(e:Airframe,leader:Airframe,time:number){
+    const known=this.tracks[e.id-1];
+    if(time-known.last<1.5)return known;
+    if(leader.alive&&leader!==e&&Vector3.DistanceSquared(leader.position,e.position)<2200**2&&time-this.contact.last<1.1)return this.contact;
+    return known;
   }
-  const seconds=Math.min(2.32,range/(Math.max(90,e.speed)+victim.speed*.62))*(.72+e.experience*.105);
-  point.copyFrom(victim.position).addInPlaceFromFloats(victim.velocity.x*seconds,victim.velocity.y*seconds,victim.velocity.z*seconds);
-  if(move===Tactic.Flank){
-    const edge=side*Math.min(410,range*.23);
-    point.addInPlaceFromFloats(-victim.forward.z*edge,90+e.role*42,victim.forward.x*edge);
+}
+export class TacticalPilot {
+  private readonly point=new Vector3();
+  private readonly forecast=new Vector3();
+  private readonly candidate=new Vector3();
+  private readonly path=new Vector3();
+  private next=-Infinity;
+  private maneuver=Maneuver.Lead;
+  private lastTactic=Tactic.Search;
+  private throttle=.76;
+  private boost=false;
+  planned=0;
+  reset(){this.next=-Infinity;this.maneuver=Maneuver.Lead;this.lastTactic=Tactic.Search;this.planned=0;}
+
+  private branch(e:Airframe,leader:Airframe,sinceWave:number,range:number,time:number,pressure:number,sensed:boolean){
+    if(e.evadeUntil>time)return Tactic.Evade;
+    if(e.phase===Tactic.Extend&&time-e.atStage<1.4+pressure*.74)return Tactic.Extend;
+    const trim=e.speed/Math.max(1,e.type.trim);
+    if(range<155+pressure*70||range<1100&&trim<.62||
+      e.ace&&e.hp<e.maxHp*.30&&trim<.91&&range<1400)return Tactic.Extend;
+    if(e!==leader&&leader.alive&&sinceWave<1.22+e.role*.42)return Tactic.Formation;
+    if(!sensed)return Tactic.Search;
+    return e.role>0&&range>630&&range<3100&&pressure>.25?Tactic.Flank:Tactic.Intercept;
   }
-  else if(range>2100)point.addInPlaceFromFloats(side*115*e.role,e.role*69,0);
-  c.throttle=range<340?.52:range<1450?.84:1;c.boost=range>2530;
+  private intercept(e:Airframe,track:Track,terrain:Terrain,range:number,time:number,pressure:number,flank:boolean){
+    const bossPhase=e.ace?(e.hp<e.maxHp*.35?3:e.hp<e.maxHp*.68?2:1):0;
+    const horizon=3+Math.min(3,pressure*2.45+bossPhase*.27),count=Math.min(8,4+Math.round(pressure*3)+Number(bossPhase>=2));
+    const turn=Math.min(horizon,Math.max(.45,range/Math.max(95,e.speed+track.velocity.length()*.48)));
+    const mag=Math.hypot(track.velocity.x,track.velocity.z)||1;
+    const flankX=track.velocity.z/mag,flankZ=-track.velocity.x/mag,side=e.role%2?1:-1;
+    const energy=e.speed/e.type.trim,room=Math.min(680,range*.28);
+    let cost=Infinity;
+    for(let i=0;i<count;i++){
+      const horizonShift=[0,-.52,.31,.24,.46,.48,.75,.79][i];
+      const lateral=[0,0,side*.19,side*.13,side*.68,-side*.57,0,side][i]*room;
+      const altitude=[0,0,room*.62,-room*.38,room*.22,room*.29,room*.85,room*.52][i];
+      track.extrapolate(time+Math.max(.2,turn+horizonShift),this.forecast);
+      this.candidate.copyFrom(this.forecast).addInPlaceFromFloats(flankX*lateral,altitude+(bossPhase===2?56:0),flankZ*lateral);
+      const floor=terrain.field(this.candidate.x,this.candidate.z)+155;
+      this.candidate.y=Math.max(floor,this.candidate.y);
+      this.candidate.subtractToRef(e.position,this.path);
+      const distance=this.path.length(),alignment=Vector3.Dot(e.forward,this.path)/Math.max(1,distance);
+      let clearance=0;
+      for(let step=1;step<=3;step++){
+        const proportion=Math.min(1,e.speed*horizon*step/(3*Math.max(distance,1)));
+        const h=terrain.field(e.position.x+this.path.x*proportion,e.position.z+this.path.z*proportion)+120;
+        clearance=Math.max(clearance,h-(e.position.y+this.path.y*proportion));
+      }
+      const climb=Math.max(0,this.path.y)/Math.max(100,distance);
+      const separation=flank?Math.max(0,Math.abs(lateral)-room*.21)*-.00072:Math.abs(lateral)*.00046;
+      const turns=(1-alignment)*(1.20-Math.min(1,pressure)*.17);
+      const vertical=(energy<.81?1.8:.49)*climb+(i===Maneuver.Lag&&range>650?.16:0);
+      const bias=i===this.maneuver?-.045:0;
+      const phase=bossPhase>=2&&i===Maneuver.Vertical&&energy>.92?-.29:0;
+      const penalty=turns+clearance*.037+separation+vertical+bias+phase+Math.abs(horizonShift)*.074;
+      if(penalty<cost){cost=penalty;this.point.copyFrom(this.candidate);this.maneuver=i;}
+    }
+    this.throttle=range<330?.55:range<1450?.86:1;
+    this.boost=range>2500||bossPhase===3&&energy<1.08;
+  }
+  command(e:Airframe,leader:Airframe,victim:Airframe,sensed:boolean,range:number,pressure:number,time:number,during:number,terrain:Terrain,board:SquadronBlackboard,point:Vector3,c:Controls){
+    const tactic=this.branch(e,leader,time-during,range,time,pressure,sensed);
+    if(tactic!==e.phase){e.phase=tactic;e.atStage=time;}
+    if(time>=this.next||tactic!==this.lastTactic){
+      this.next=time+1/(2+3*Math.min(1,pressure));this.lastTactic=tactic;this.planned++;
+      if(sensed)board.observe(e,victim,time);
+      const track=board.read(e,leader,time),side=e.role%2?1:-1;
+      this.boost=false;
+      if(tactic===Tactic.Evade||tactic===Tactic.Extend){
+        const lateral=tactic===Tactic.Evade?720:390;
+        this.point.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*440+e.forward.z*lateral*side,
+          (tactic===Tactic.Evade?92:132)+e.role*24,e.forward.z*440-e.forward.x*lateral*side);
+        this.throttle=1;this.boost=tactic===Tactic.Evade&&e.speed>e.type.stall;
+      }else if(tactic===Tactic.Formation){
+        const breadth=side*(230+e.role*18),back=345-e.role*53;
+        this.point.copyFrom(leader.position).addInPlaceFromFloats(leader.forward.x*back-leader.forward.z*breadth,47+e.role*44,leader.forward.z*back+leader.forward.x*breadth);
+        this.throttle=.81;
+      }else if(tactic!==Tactic.Search){
+        this.intercept(e,track,terrain,range,time,pressure,tactic===Tactic.Flank);
+      }else if(time-track.last<4.2){
+        track.extrapolate(time+1.4,this.point);this.point.y+=55;this.throttle=.83;
+      }else{
+        const scan=Math.sin(time*.39+e.role*1.14)*.57;
+        this.point.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*960+e.forward.z*840*scan,62,e.forward.z*960-e.forward.x*840*scan);
+        this.throttle=.76;
+      }
+    }
+    point.copyFrom(this.point);c.throttle=this.throttle;c.boost=this.boost;
+    return tactic;
+  }
 }
 
 export const enemyProfiles=[

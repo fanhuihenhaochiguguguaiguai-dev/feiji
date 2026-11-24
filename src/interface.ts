@@ -587,7 +587,7 @@ export class Interface {
   settings(){
     const ctx=this.p.settings;
     const options=(key:string,caption:string,items:[string,string][])=>'<label>'+caption+'<select data-setting="'+key+'">'+items.map(([id,name])=>'<option value="'+id+'"'+selected(ctx[key as keyof typeof ctx]===id)+'>'+name+'</option>').join('')+'</select></label>';
-    return '<div class="panel-scroll settings-grid"><article class="glass"><h3>画面与设备</h3><p id="backend-status">当前后端 '+(el('application').dataset.backend==='gpu'?'WebGPU':'WebGL2')+'</p>'+
+    return '<div class="panel-scroll settings-grid"><article class="glass"><h3>画面与设备</h3><p id="backend-status">Babylon.js 8.56.2 · '+(el('application').dataset.backend==='gpu'?'WebGPU':'WebGL2')+'</p>'+
       options('backend','渲染方式',[['auto','自动 · 优先 WebGPU'],['gpu','优先 WebGPU'],['gl','使用 WebGL2']])+
       options('quality','渲染品质',[['auto','自动画质'],['high','精细'],['medium','均衡'],['low','流畅']])+
       '<label>渲染比例<input type="range" data-setting="renderScale" min=".65" max="1" step=".05" value="'+ctx.renderScale+'"></label><label>仪表大小<input type="range" data-setting="hud" min=".8" max="1.23" step=".03" value="'+ctx.hud+'"></label></article>'+
@@ -595,7 +595,7 @@ export class Interface {
       '<label><input type="checkbox" data-setting="invert" '+(ctx.invert?'checked':'')+'>反转俯仰</label>'+
       '<label><input type="checkbox" data-setting="mute" '+(ctx.mute?'checked':'')+'>静音</label>'+
       '<label>滑屏灵敏度<input type="range" data-setting="sensitivity" min=".45" max="1.55" step=".05" value="'+ctx.sensitivity+'"></label><button data-export-save>导出飞行员存档</button>'+
-      '<details><summary>飞行操作</summary><p>手机在空白区域滑动转向或升降，另一根手指可同时操作武器。左侧反制键会根据威胁选择热诱饵、箔条或电子干扰。</p><p>方向键或 W/A/S/D 操纵。Q/E 偏航，R/V 调油门，Shift 加力。空格航炮，F 导弹，B 炸弹，X 切武器，回车使用已选武器，T 选目标，Z 反制，G 起落架，C 切视角。</p></details></article></div>';
+      '<details><summary>飞行操作</summary><p>手机在空白区域滑动转向或升降，另一根手指可同时操作武器。左侧反制键会根据威胁选择热诱饵、箔条或电子干扰。</p><p>方向键或 W/A/S/D 操纵。Q/E 偏航，R/V 调油门，Shift 加力。空格航炮，F 导弹，B 炸弹，X 切武器，回车使用已选武器，T 选目标，Z 反制，G 起落架，C 切视角。</p></details><p><a href="./licenses/aviation-audio.md" target="_blank" rel="noopener">航空录音来源</a></p></article></div>';
   }
   flight(s:Sortie){
     this.presentation.clear();

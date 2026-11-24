@@ -1,6 +1,6 @@
-# 苍穹锋刃 · WORLD-FORGE V18
+# 苍穹锋刃 · WORLD-FORGE V19
 
-单机空战网页游戏。使用 PlayCanvas 2.24.2 和 TypeScript，优先启用 WebGPU，回退到 WebGL2。战役、每日任务、装备和战绩保存在当前浏览器中，已兼容旧版存档并写入 IndexedDB。
+单机空战网页游戏。使用 Babylon.js 8.56.2 和 TypeScript，优先启用 WebGPU，回退到 WebGL2。战役、每日任务、装备和战绩保存在当前浏览器中，已兼容旧版存档并写入 IndexedDB。
 
 ## 操作
 
@@ -19,6 +19,13 @@
 - 战斗结算按命中战果、目标进度、胜负和难度结算经验。晋升奖励和首胜奖励随同一存档写入。
 - 玩家战机的耐久由机型决定，最低为 2000。护甲升级降低伤害，耐久耗尽会结束出击。
 - 战役按关卡顺序解锁。飞行经验保留并继续用于机型、升级和军需解锁。在「游戏设置」可以导出飞行员存档。
+
+## 运行体系
+
+- Babylon.js 管理右手坐标场景、GLB 动画、PBR 与 HDR IBL。级联阴影和后处理按画质预算启用。海面与分层天空分别运行原生 WGSL 或 GLSL。
+- 90 Hz 权威飞行模拟与插值渲染共享同一位置、时间、伤害和战斗事件。敌机从传感器和编队黑板获取目标趋势，按威胁、能量与编队层级规划接战。通常以 2–5 Hz 在 3–6 秒窗口评估候选飞行动作。
+- 保留三张手工战场，超出已制作地貌后按种子生成外海地形。四叉树按航速预判分割、合并及卸载地形。原有 Worker 海浪、PN 制导、CCD 命中和 Havok 残骸继续使用。
+- 机坪和地表纹理使用自托管 KTX2 解码。发动机音层采用航空录音及合成辅层，战斗声效随声源方位和距离变化。录音出处及许可见 `public/licenses/aviation-audio.md`。
 
 ## 构建与部署
 
@@ -52,12 +59,12 @@ python art/impact_sprites.py
 
 ## 验证
 
-`qa/world-forge-v18/` 包含低空尾流、第三章无人机群和存档迁移的截图及测试记录。此前的战役、武器、准星和海岸飞行记录保留在相应版本目录。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
+`qa/world-forge-v19/` 保存 Babylon.js 双后端的运行截图与迁移验收。`qa/world-forge-v18/` 保留升级前基线。此前的战役、武器、准星和海岸飞行记录保留在相应版本目录。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
 
 ```sh
 python -m pip install playwright
 VITE_GAME_QA=1 npx vite build --outDir /tmp/cangqiong-qa
-python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gl --backend gl --quick --water-drone --all-air --airframe j20
-python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gpu --backend gpu --quick --water-drone --all-air --airframe j20
+python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gl --backend gl --quick --water-drone --all-air --migration --airframe j20
+python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gpu --backend gpu --quick --water-drone --all-air --migration --airframe j20
 python tests/visual_reference.py qa/reference /tmp/cangqiong-gl /tmp/cangqiong-comparison
 ```

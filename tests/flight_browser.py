@@ -17,6 +17,7 @@ parser.add_argument("--coast",action="store_true")
 parser.add_argument("--sights",action="store_true")
 parser.add_argument("--all-air",action="store_true")
 parser.add_argument("--water-drone",action="store_true")
+parser.add_argument("--migration",action="store_true")
 parser.add_argument("--command-map",action="store_true")
 parser.add_argument("--lobby-baseline",action="store_true")
 parser.add_argument("--gallery",action="store_true")
@@ -70,7 +71,14 @@ with sync_playwright() as p:
     page=ctx.new_page()
     errors=[]
     page.on("pageerror",lambda e:(errors.append(str(e)),print("pageerror",str(e),flush=True)))
-    page.on("console",lambda m:(errors.append(m.text),print("console",m.text[:3200],flush=True)) if m.type=="error" else None)
+    def console(message):
+        if message.type=="error":
+            errors.append(message.text)
+            print("console",message.text[:3200],flush=True)
+        elif message.type=="warning" and ('WebGPU' in message.text or 'shader' in message.text.lower()):
+            print('warning',message.text[:1800],flush=True)
+            if 'WebGPU uncaptured error' in message.text: errors.append(message.text)
+    page.on('console',console)
     page.add_init_script("""if(!sessionStorage.getItem('qa-no-journal')&&!localStorage.getItem("pixel-sky-af-v4"))localStorage.setItem("pixel-sky-af-v4",JSON.stringify({
       credits:2600,unlocked:['j20','f16','hornet','dr1','a10','j10','spitfire'],records:[],campaign:%s,selected:%s,
       settings:{backend:%s,quality:'medium',mute:true} }));""" % (30 if args.water_drone else 10 if args.all_air else 3 if args.armory else 4,json.dumps(args.airframe or ("j20" if args.armory else "f16")),json.dumps(args.backend)))
@@ -78,9 +86,22 @@ with sync_playwright() as p:
     ready(page,"home")
     assert page.locator("#application").get_attribute("data-backend")==args.backend
     print("backend",args.backend,page.evaluate("""()=>({canvas:[document.querySelector('canvas').width,document.querySelector('canvas').height],
-         platform:navigator.userAgent, adapter:flightQA.engine.graphicsDevice.adapterInfo})"""),flush=True)
+         platform:navigator.userAgent, adapter:flightQA.engine.device.getGlInfo?.()??flightQA.engine.device.description})"""),flush=True)
     outcomes={}
     record(page,"a-lobby",outcomes)
+    if args.migration:
+        assert page.evaluate("flightQA.engine.device.constructor.Version")=='8.56.2'
+        quality=page.evaluate("""()=>{
+            const g=flightQA;g.qualityOverride='high';
+            return {textures:g.world.assets.estimatedTextureBytes(),ktx2:g.world.assets.compressedCount(),gl:!g.engine.device.isWebGPU};
+        }""")
+        assert quality['ktx2']==2,quality
+        page.wait_for_timeout(1500)
+        page.screenshot(path=OUT/'hangar-high.png',timeout=70000)
+        page.touchscreen.tap(400,190)
+        page.evaluate("()=>{flightQA.qualityOverride=null;flightQA.audio.activate()}")
+        page.wait_for_function("flightQA.audio.stats().recordedLayers===2",timeout=30000)
+        print('migration PBR and sampled audio',quality,flush=True)
     if args.water_drone:
         page.wait_for_function("""()=>new Promise(resolve=>{
             const db=indexedDB.open('cangqiong-pilot',1);
@@ -158,6 +179,26 @@ with sync_playwright() as p:
         assert '战机被击落' in page.locator('.debrief-title').inner_text()
         print('enemy fire ended the sortie',loss,flush=True)
         page.locator('[data-do="leave"]').tap()
+        ready(page,'home')
+    if args.migration:
+        page.evaluate("()=>flightQA.begin('free',0,false,{region:0,weather:1,lighting:1})")
+        ready(page,'flight')
+        outside=page.evaluate("""()=>{
+            const g=flightQA,s=g.sortie,p=s.player,t=s.world;
+            g.state='pause';g.input.on=false;s.time+=4;
+            let pos;
+            for(let i=0;i<65;i++){
+                const x=27700+i*421,z=-17800+i*688;
+                if(t.field(x,z)>80){pos=[x,t.field(x,z),z];break;}
+            }
+            p.reset(pos[0],pos[1]+2900,pos[2],.54,p.type.trim);g.world.cameraReset=true;
+            return {position:pos,t:s.time};
+        }""")
+        assert outside['position'][0]>24000 and outside['position'][1]>80,outside
+        page.wait_for_function("()=>[...flightQA.world.terrainTiles.values()].some(tile=>tile.x>=1024)",timeout=35000)
+        page.screenshot(path=OUT/'generated-terrain.png',timeout=70000)
+        print('generated terrain',outside,page.evaluate('flightQA.world.terrainStats()'),flush=True)
+        page.evaluate("()=>flightQA.leave()")
         ready(page,'home')
     if args.armory:
         page.locator('.sortie-action').tap()
@@ -583,7 +624,7 @@ with sync_playwright() as p:
         fleet_dir.mkdir(exist_ok=True)
         for subject in subjects:
             page.locator('[data-air="'+subject+'"]').click()
-            page.wait_for_function("id=>flightQA.pilot.loaded===id && flightQA.pilot.pivot.enabled",arg=subject,timeout=40000)
+            page.wait_for_function("id=>flightQA.pilot.loaded===id && flightQA.pilot.pivot.isEnabled()",arg=subject,timeout=40000)
             await_lod=page.evaluate("""()=>new Promise(resolve=>flightQA.engine.once('postrender',()=>resolve(flightQA.pilot.lod)))""")
             assert await_lod==0
             page.screenshot(path=fleet_dir/(subject+".png"),clip={"x":185,"y":62,"width":425,"height":230},timeout=70000)

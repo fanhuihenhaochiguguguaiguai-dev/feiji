@@ -33,6 +33,7 @@ async function start(){
     }
   } catch(error) {
     if(activeBackend==='gpu'&&!blocked()){
+      console.warn('WebGPU 场景初始化失败，尝试 WebGL2',String(error));
       try {sessionStorage.setItem('pixel-sky-webgpu-fallback','1');location.reload();return;}catch{/* Report below. */}
     }
     console.error(error);

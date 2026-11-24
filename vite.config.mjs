@@ -9,7 +9,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/@babylonjs/core/')) return 'flight-math';
+          if (id.includes('/@babylonjs/core/Maths/')) return 'flight-math';
         }
       }
     }

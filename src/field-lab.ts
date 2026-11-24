@@ -14,6 +14,6 @@ export function openFieldLab(game:Game){
   dialog.querySelector<HTMLSelectElement>('.surface-inspection')!.onchange=e=>game.world.inspectTerrain(Number((e.target as HTMLSelectElement).value));
   quality.onchange=()=>{game.qualityOverride=quality.value as 'low'|'medium'|'high';};
   game.engine.on('postrender',()=>{
-    const d=game.engine.graphicsDevice;stats.textContent=d.deviceType+' · '+d.width+' × '+d.height+' · '+Math.round(game.budget.fps)+' 帧 · 敌机 LOD '+game.foes.filter(v=>v.pivot.enabled).map(v=>v.lod).join('/');
+    const d=game.engine.device;stats.textContent=game.entry.backend+' · '+d.getRenderWidth()+' × '+d.getRenderHeight()+' · '+Math.round(game.budget.fps)+' 帧 · 敌机 LOD '+game.foes.filter(v=>v.pivot.isEnabled()).map(v=>v.lod).join('/');
   });
 }

@@ -7,7 +7,7 @@ const vectorNames=new Set(['eye','sunDir','horizon','zenith','sunColor','sea']);
 export function environmentSource(gpu:boolean,ocean:boolean){
   const v2=gpu?'vec2f':'vec2',v3=gpu?'vec3f':'vec3',v4=gpu?'vec4f':'vec4',f=gpu?'f32':'float';
   const m4=gpu?'mat4x4f':'mat4';
-  const u=(name:string)=>gpu?'uniform.'+name:name;
+  const u=(name:string)=>gpu?'uniforms.'+name:name;
   const type=(name:string)=>vectorNames.has(name)?v3:f;
   const let_=(name:string,t:string,value:string,mutable=false)=>gpu?
     (mutable?'var ':'let ')+name+':'+t+'='+value+';':t+' '+name+'='+value+';';
@@ -29,25 +29,23 @@ export function environmentSource(gpu:boolean,ocean:boolean){
       `point.y+=sin(w${i})*${w.height}*${u('waveHeight')};point.x+=cos(w${i})*${num(w.height*w.steepness*w.x/mag)}*${u('waveHeight')};`+
       `point.z+=cos(w${i})*${num(w.height*w.steepness*w.z/mag)}*${u('waveHeight')};`;
   }).join('');
-  const pos=gpu?'input.position':'position',world=u('matrix_model'),vp=u('matrix_viewProjection');
+  const pos=gpu?'vertexInputs.position':'position',world=u('world'),vp=u('viewProjection');
   const vertexBody=let_('point',v3,pos,true)+(ocean?let_('p',v2,`(${world}*${v4}(point,1.)).xz`)+waveCode+
     let_('surface',v4,sample('spectrumTex',bandCoords('p'),'0.'))+
     let_('localWave',v4,sample('pressureTex',pressureCoords('p',u('pressureOrigin')),'0.'))+
     `point.y+=${height('surface.r')}*${u('waveHeight')}+${height('localWave.r')}*${u('pressureOrigin')}.z;`:'')+
-    (gpu?'output.vWorld':'vWorld')+`=(${world}*${v4}(point,1.)).xyz;`+
-    (gpu?'output.position':'gl_Position')+`=${vp}*${world}*${v4}(point,1.);`;
+    (gpu?'vertexOutputs.vWorld':'vWorld')+`=(${world}*${v4}(point,1.)).xyz;`+
+    (gpu?'vertexOutputs.position':'gl_Position')+`=${vp}*${world}*${v4}(point,1.);`;
   const vertex=gpu?`
     attribute position:${v3};
-    uniform matrix_model:${m4};
-    uniform matrix_viewProjection:${m4};
+    uniform world:${m4};
+    uniform viewProjection:${m4};
     ${ocean?'uniform clock:f32;\n    uniform waveHeight:f32;\n    uniform pressureOrigin:vec3f;'+textures(waterSamplers):''}
     varying vWorld:${v3};
-    @vertex fn vertexMain(input:VertexInput)->VertexOutput{
-      var output:VertexOutput;
+    @vertex fn main(input:VertexInputs)->FragmentInputs{
       ${vertexBody}
-      return output;
     }`:
-    `precision highp float;attribute ${v3} position;uniform ${m4} matrix_model;uniform ${m4} matrix_viewProjection;
+    `precision highp float;attribute ${v3} position;uniform ${m4} world;uniform ${m4} viewProjection;
     ${ocean?'uniform float clock;uniform float waveHeight;uniform vec3 pressureOrigin;'+textures(waterSamplers):''}varying ${v3} vWorld;void main(){${vertexBody}}`;
   const samplers=ocean?['weatherTex','depthTex','waveTex',...waterSamplers]:['weatherTex','deckDome'];
   const declarations=textures(samplers)+(ocean?(gpu?'uniform pressureOrigin:vec3f;\nuniform washCenter:vec4f;\nuniform washTrack:vec2f;':
@@ -189,7 +187,7 @@ export function environmentSource(gpu:boolean,ocean:boolean){
   const shade=fn('renderWorld',args,v4,ocean?seaBody:skyBody);
   const params=[gpu?'input.vWorld':'vWorld',...shared.map(u)].join(',');
   const head=gpu?'varying vWorld:'+v3+';\n':'precision highp float;varying vec3 vWorld;';
-  const main=gpu?`@fragment fn fragmentMain(input:FragmentInput)->FragmentOutput{var output:FragmentOutput;output.color=renderWorld(${params});return output;}`:
+  const main=gpu?`@fragment fn main(input:FragmentInputs)->FragmentOutputs{fragmentOutputs.color=renderWorld(${params});}`:
     `void main(){gl_FragColor=renderWorld(${params});}`;
-  return {vertex,fragment:head+declarations+floatHead+sky+tone+(ocean?'':cloud)+shade+main,samplers};
+  return {uniforms:['world','viewProjection',...shared,...ocean?['pressureOrigin','washCenter','washTrack']:[]],vertex,fragment:head+declarations+floatHead+sky+tone+(ocean?'':cloud)+shade+main,samplers};
 }

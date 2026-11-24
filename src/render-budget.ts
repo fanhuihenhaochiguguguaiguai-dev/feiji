@@ -1,10 +1,10 @@
-import type { GraphicsDevice } from 'playcanvas';
+import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine';
 import type { Quality } from './profile';
 
 const display={
-  high:{detail:1.15,ratio:1.75,pixels:3650000,target:90},
+  high:{detail:1.15,ratio:1.75,pixels:3650000,target:60},
   medium:{detail:.95,ratio:1.30,pixels:2730000,target:60},
-  low:{detail:.69,ratio:1.05,pixels:1670000,target:60}
+  low:{detail:.69,ratio:1.05,pixels:1670000,target:30}
 } as const;
 
 export class RenderBudget {
@@ -20,7 +20,7 @@ export class RenderBudget {
   fps=0;
   onePercentLow=0;
   target=60;
-  constructor(readonly device:GraphicsDevice,readonly touch:boolean){}
+  constructor(readonly device:AbstractEngine,readonly touch:boolean){}
   apply(mode:Quality,dt:number,manualScale:number){
     if(mode!==this.active){this.active=mode;this.stage=this.sinceChange=this.index=this.samples=this.time=0;}
     const preset=display[mode==='auto'?(this.touch?'medium':'high'):mode];
@@ -47,7 +47,7 @@ export class RenderBudget {
     const ratio=Math.max(.61,Math.min(devicePixelRatio,cap,Math.sqrt(preset.pixels/Math.max(1,innerWidth*innerHeight)))*manualScale);
     const width=Math.round(innerWidth*ratio),height=Math.round(innerHeight*ratio);
     if(width!==this.width||height!==this.height){
-      this.width=width;this.height=height;this.device.setResolution(width,height);
+      this.width=width;this.height=height;this.device.setSize(width,height,true);
     }
     return detail;
   }
