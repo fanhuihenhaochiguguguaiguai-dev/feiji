@@ -385,10 +385,13 @@ input{accent-color:#e9b665}
   transform:scaleX(var(--cool,0));transform-origin:left;background:#efb973;pointer-events:none;
 }
 .flight-actions small,.combat-controls .fire small{color:#e0c391;font-size:clamp(.44rem,1.65dvh,.59rem)}
-.flight-actions #counter{border-radius:7px;min-width:0;min-height:0}
+.flight-actions #counter{border-radius:7px;min-width:0;min-height:0;padding:2px}
+.flight-actions #counter span{white-space:nowrap;font-size:clamp(.53rem,1.95dvh,.7rem)}
+.combat-controls .fire :is(span,b,small){white-space:nowrap}
 #counter-state.control-status{white-space:normal;min-height:1em;font-size:.62rem}
 @media(max-height:400px) and (orientation:landscape){
   .flight-controls,.combat-controls{gap:4px}
   .flight-actions{gap:3px}
-  .flight-actions button,.combat-controls .fire{--cell:clamp(34px,10.9dvh,45px)}
+  .flight-actions button,.combat-controls .fire{--cell:clamp(43px,12.7dvh,49px)}
+  #missile-art:not([hidden]){height:14px;width:23px}
 }
