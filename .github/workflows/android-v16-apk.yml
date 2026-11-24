@@ -38,8 +38,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .android-v16-build/app/src/main/java/com/cangqiong/fengren/v16
-          mkdir -p .android-v16-build/app/src/main/assets/www
-          cp -a dist/. .android-v16-build/app/src/main/assets/www/
+          mkdir -p .android-v16-build/app/src/main/assets
+          cp -a dist/. .android-v16-build/app/src/main/assets/
           cat > .android-v16-build/settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement {
@@ -130,7 +130,7 @@ jobs:
                       View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                   );
                   WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
-                      .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this,"www"))
+                      .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this))
                       .build();
                   game = new WebView(this);
                   game.setBackgroundColor(0xFF0A1220);
