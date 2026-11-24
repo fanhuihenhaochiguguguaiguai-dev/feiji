@@ -25,6 +25,7 @@ import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator'
 import { SSAO2RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline';
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
+import { ColorCurves } from '@babylonjs/core/Materials/colorCurves';
 import { HDRCubeTexture } from '@babylonjs/core/Materials/Textures/hdrCubeTexture';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
@@ -42,10 +43,11 @@ import { OceanRender } from './ocean-render';
 import { wakeCeiling } from './ocean-solver';
 import { Terrain, clamp, chunkCells, gridStep, noise, worldExtent } from './terrain';
 import { rotate,type OpenEngine } from './scene-runtime';
+import { asset,deadline } from './startup';
 export { openEngine,type OpenEngine } from './scene-runtime';
 export { material } from './world-material';
 
-export const asset=(path:string)=>new URL(path,document.baseURI).href;
+export { asset } from './startup';
 MeshoptCompression.Configuration.decoder.url=asset(decoderUrl);
 KhronosTextureContainer2.DefaultNumWorkers=1;
 Object.assign(KhronosTextureContainer2.URLConfig,{
@@ -63,7 +65,7 @@ export class Assets {
   private loadedTextureBytes=0;
   private readonly compressed=new Set<string>();
   private pinnedFleet:ReadonlySet<string>=new Set();
-  constructor(readonly scene:Scene){}
+  constructor(readonly scene:Scene,readonly safe:boolean){}
   private reuse<T>(cache:Map<string,Promise<T>>,key:string,load:()=>Promise<T>){
     let pending=cache.get(key);
     cache.delete(key);
@@ -83,15 +85,19 @@ export class Assets {
     return {root,animations:result.animationGroups};
   }
   texture(path:string){
-    const choice=compressedTexture.get(path);
+    const choice=this.safe?undefined:compressedTexture.get(path);
     if(!choice)return this.readTexture(path);
     return this.readTexture(choice).catch(()=>this.readTexture(path));
   }
   private readTexture(path:string){
-    return this.reuse(this.textures,path,()=>new Promise<Texture>((resolve,reject)=>{
-      const t=new Texture(asset(path),this.scene,{noMipmap:path.startsWith('world/'),invertY:false,
+    return this.reuse(this.textures,path,()=>{
+      let t:Texture,expired=false;
+      const loading=new Promise<Texture>((resolve,reject)=>{
+        t=new Texture(asset(path),this.scene,{noMipmap:path.startsWith('world/'),invertY:false,
+        forcedExtension:path.endsWith('.ktx2')?'.ktx2':undefined,
         samplingMode:path.startsWith('world/')?Texture.NEAREST_SAMPLINGMODE:Texture.TRILINEAR_SAMPLINGMODE,
         onLoad:()=>{
+          if(expired)return;
           const {width,height}=t.getSize();
           const bytes=Math.ceil(width*height*4*(path.startsWith('world/')?1:4/3));
           this.loadedTextureBytes+=bytes;this.textureFootprints.set(t,bytes);
@@ -99,7 +105,9 @@ export class Assets {
           t.onDisposeObservable.addOnce(()=>{this.loadedTextureBytes-=this.textureFootprints.get(t)??0;});
           resolve(t);
         },onError:reason=>{t.dispose();reject(Error(reason??path));}});
-    }));
+      });
+      return deadline(loading,path.endsWith('.ktx2')?6500:19000,'材质读取超时 · '+path,()=>{expired=true;t?.dispose();});
+    });
   }
   estimatedTextureBytes(){return this.loadedTextureBytes;}
   compressedCount(){return this.compressed.size;}
@@ -162,7 +170,7 @@ class Camera {
   }
 }
 
-const palette=[[49,80,52],[46,63,58],[46,68,57]];
+const palette=[[43,76,61],[48,65,65],[39,60,58]];
 const skyVectors=(t:(typeof theatres)[number])=>({horizon:new Float32Array(t.horizon),zenith:new Float32Array(t.sky),
   sunDir:new Float32Array(t.sun),sunColor:new Float32Array(t.light),sea:new Float32Array(t.sea)});
 type Tile={x:number;z:number;layout:string;entity:TransformNode;triangles:number};
@@ -180,8 +188,8 @@ export class WorldView {
   readonly sun:DirectionalLight;
   readonly rim:DirectionalLight;
   private readonly fill:HemisphericLight;
-  private readonly shadows:ShadowGenerator;
-  private readonly pipeline:DefaultRenderingPipeline;
+  private readonly shadows:ShadowGenerator|null;
+  private readonly pipeline:DefaultRenderingPipeline|null;
   private ambientOcclusion:SSAO2RenderingPipeline|null=null;
   private readonly terrainMaterial:PBRMaterial;
   private readonly ridgeMaterial:PBRMaterial;
@@ -220,37 +228,48 @@ export class WorldView {
     const group=(name:string)=>{const node=new TransformNode(name,scene);node.parent=app.root;return node;};
     this.hangar=group('前沿机库');this.field=group('机场设施');this.effects=group('战场特效');
     this.vehicles=group('作战载具');this.props=group('训练目标');this.terrainRoot=group('海岸地貌');
-    this.assets=new Assets(scene);
+    this.assets=new Assets(scene,app.safe);
     this.terrainMaterial=material(scene,'分层地表','#ffffff',0,.91);
     this.ridgeMaterial=material(scene,'临海岩壁','#ffffff',.04,.86);
     this.rock=new RockSurface(this.terrainMaterial);this.ridge=new RockSurface(this.ridgeMaterial);
     const native=new FreeCamera('主镜头',Vector3.Zero(),scene);
     native.maxZ=100000;native.minZ=.15;scene.activeCamera=native;
     this.camera=new Camera(native,canvas);
-    scene.clearColor=new Color4(.13,.22,.31,1);
+    scene.clearColor=new Color4(.038,.080,.124,1);
     scene.fogMode=Scene.FOGMODE_EXP2;
     scene.imageProcessingConfiguration.toneMappingEnabled=true;
     scene.imageProcessingConfiguration.toneMappingType=ImageProcessingConfiguration.TONEMAPPING_ACES;
-    this.pipeline=new DefaultRenderingPipeline('航空成像',true,scene,[native]);
-    // The sky and sea already apply the same film curve in their own shaders.
-    this.pipeline.imageProcessingEnabled=false;
-    this.pipeline.bloomThreshold=.84;this.pipeline.bloomWeight=.14;this.pipeline.bloomKernel=24;
-    this.pipeline.samples=app.device.getCaps().maxMSAASamples>=2?2:1;
-    this.pipeline.fxaaEnabled=this.pipeline.samples===1;
+    const grading=new ColorCurves();
+    grading.shadowsHue=196;grading.shadowsDensity=19;grading.shadowsExposure=5;
+    grading.midtonesHue=204;grading.midtonesDensity=6;grading.midtonesSaturation=7;
+    grading.highlightsHue=37;grading.highlightsDensity=6;grading.highlightsSaturation=-7;
+    scene.imageProcessingConfiguration.colorCurves=grading;
+    scene.imageProcessingConfiguration.colorCurvesEnabled=true;
+    scene.imageProcessingConfiguration.contrast=1.07;
+    const caps=app.device.getCaps(),hdr=caps.textureHalfFloatRender||caps.textureFloatRender;
+    this.pipeline=app.safe?null:new DefaultRenderingPipeline('航空成像',hdr,scene,[native]);
+    if(this.pipeline){
+      // World shaders grade their own HDR light before sending pixels to the display.
+      this.pipeline.imageProcessingEnabled=false;
+      this.pipeline.bloomThreshold=.87;this.pipeline.bloomWeight=.11;this.pipeline.bloomKernel=24;
+      this.pipeline.samples=app.backend==='gpu'?1:caps.maxMSAASamples>=2?2:1;
+      this.pipeline.fxaaEnabled=this.pipeline.samples===1;
+    }
     this.sun=new DirectionalLight('太阳主光',new Vector3(.88,-.43,-.22),scene);
     this.sun.shadowMinZ=1;this.sun.shadowMaxZ=250;
     this.rim=new DirectionalLight('机库轮廓光',new Vector3(-.57,-.32,.75),scene);
-    this.rim.diffuse.set(.52,.68,.91);this.rim.intensity=1.22;
+    this.rim.diffuse.set(.51,.73,.96);this.rim.intensity=1.34;
     this.fill=new HemisphericLight('天空与地面补光',new Vector3(.1,1,.15),scene);
-    this.fill.groundColor.set(.22,.25,.32);this.fill.intensity=.72;
-    if(CascadedShadowGenerator.IsSupported){
+    this.fill.groundColor.set(.19,.24,.28);this.fill.intensity=.72;
+    if(app.safe)this.shadows=null;
+    else if(CascadedShadowGenerator.IsSupported){
       const csm=new CascadedShadowGenerator(1024,this.sun);
       csm.numCascades=2;csm.shadowMaxZ=110;csm.lambda=.61;csm.usePercentageCloserFiltering=true;
       this.shadows=csm;
     }else this.shadows=new ShadowGenerator(1024,this.sun);
-    this.shadows.normalBias=.045;this.shadows.bias=.0007;
-    const hangarFloor=material(scene,'水磨混凝土','#c4b9a9',.11,.47);
-    hangarFloor.clearCoat.isEnabled=true;hangarFloor.clearCoat.intensity=.47;hangarFloor.clearCoat.roughness=.18;
+    if(this.shadows){this.shadows.normalBias=.045;this.shadows.bias=.0007;}
+    const hangarFloor=material(scene,'水磨混凝土','#a3acb0',.11,.55);
+    hangarFloor.clearCoat.isEnabled=true;hangarFloor.clearCoat.intensity=.25;hangarFloor.clearCoat.roughness=.29;
     primitive(this.hangar,'整体现浇机坪','plane',hangarFloor,0,0,23,140,1,191).receiveShadows=true;
     const shadowMap=new DynamicTexture('机库接触遮蔽',128,scene,false);
     shadowMap.hasAlpha=true;
@@ -290,11 +309,11 @@ export class WorldView {
         hangarFloor.useAmbientOcclusionFromMetallicTextureRed=true;
         hangarFloor.useRoughnessFromMetallicTextureGreen=true;hangarFloor.useRoughnessFromMetallicTextureAlpha=false;
         hangarFloor.useMetallnessFromMetallicTextureBlue=true;
-        norm.level=.29;hangarFloor.bumpTexture=norm;hangarFloor.emissiveTexture=lamps;hangarFloor.emissiveColor.set(.74,.74,.74);
+        norm.level=.29;hangarFloor.bumpTexture=norm;hangarFloor.emissiveTexture=lamps;hangarFloor.emissiveColor.set(.55,.51,.46);
         const runway=facilities.runway;
         runway.albedoTexture=color.clone();runway.bumpTexture=norm.clone();runway.albedoColor.set(.65,.64,.62);
         for(const t of [runway.albedoTexture,runway.bumpTexture] as Texture[]){t.uScale=3;t.vScale=19;}
-      }),
+      }).catch(error=>console.warn('机坪细节材质未载入',error)),
       this.assets.model('studio/hangar-dusk.glb').then(({root,animations})=>{
         root.parent=this.hangar;root.position.set(34,0,44);
         for(const part of root.getChildMeshes())part.receiveShadows=true;
@@ -306,20 +325,21 @@ export class WorldView {
       this.assets.texture('world/sundown-surface.png').then(t=>{this.edgeDepth=t;this.seaMat.setTexture('depthTex',t);}),
       this.assets.texture('surface/rock-grain.png').then(t=>{t.anisotropicFilteringLevel=8;this.rock.grain=this.ridge.grain=t;}),
       this.assets.texture('surface/terrain-normal.png').then(t=>{t.anisotropicFilteringLevel=8;t.level=.34;
-        this.terrainMaterial.bumpTexture=this.ridgeMaterial.bumpTexture=t;}),
-      this.lightingProbe('deck'),
+        this.terrainMaterial.bumpTexture=this.ridgeMaterial.bumpTexture=t;}).catch(error=>console.warn('地形细节法线未载入',error)),
     ]).then(()=>undefined);
     this.showDeck(true);
   }
-  castShadow(mesh:Mesh){this.shadows.addShadowCaster(mesh,false);}
-  dropShadow(mesh:Mesh){this.shadows.removeShadowCaster(mesh,false);}
+  castShadow(mesh:Mesh){this.shadows?.addShadowCaster(mesh,false);}
+  dropShadow(mesh:Mesh){this.shadows?.removeShadowCaster(mesh,false);}
   private lightingProbe(name:string){
     this.probeName=name;
     let pending=this.probes.get(name);
     if(!pending){
       pending=new Promise<HDRCubeTexture>((resolve,reject)=>{
         const file=name==='deck'?'airbase-atlas':name,scene=this.entry.app.scene;
-        const t=new HDRCubeTexture(asset('surface/probe-'+file+'.hdr'),scene,64,false,true,false,true,()=>resolve(t),
+        const caps=this.entry.app.device.getCaps();
+        const prefilter=!this.entry.app.safe&&(caps.textureHalfFloatRender||caps.textureFloatRender);
+        const t=new HDRCubeTexture(asset('surface/probe-'+file+'.hdr'),scene,64,false,true,false,prefilter,()=>resolve(t),
           reason=>{t.dispose();reject(Error(reason??file));});
       });
       this.probes.set(name,pending);
@@ -394,34 +414,35 @@ export class WorldView {
     const sunHeight=lighting===1?.57:lighting===2?.076:lighting===3?-.085:vector.sunDir[1];
     vector.sunDir[1]=sunHeight;
 
-    if(lighting===1){vector.horizon.set([.57,.70,.80]);vector.zenith.set([.16,.38,.66]);vector.sunColor.set([1,.95,.81]);}
-    if(lighting===2){vector.horizon.set([.78,.45,.30]);vector.zenith.set([.17,.24,.39]);vector.sunColor.set([1,.70,.43]);}
+    if(lighting===1){vector.horizon.set([.47,.65,.77]);vector.zenith.set([.105,.29,.53]);vector.sunColor.set([1,.95,.81]);}
+    if(lighting===2){vector.horizon.set([.74,.45,.31]);vector.zenith.set([.117,.215,.38]);vector.sunColor.set([1,.70,.43]);}
     if(lighting===3||weather===7){vector.horizon.set([.17,.24,.38]);vector.zenith.set([.057,.103,.21]);vector.sunColor.set([.36,.54,.84]);vector.sea.set([.047,.119,.201]);}
     const dim=weather>=2&&weather<=6;
     if(dim){vector.horizon[0]*=.81;vector.zenith[2]*=.83;}
     if(this.indoors){
-      vector.sunDir.set([-.93,.19,.37]);vector.horizon.set([.89,.52,.37]);
-      vector.zenith.set([.22,.33,.61]);vector.sunColor.set([1,.72,.49]);
+      vector.sunDir.set([-.93,.19,.37]);vector.horizon.set([.82,.49,.35]);
+      vector.zenith.set([.14,.26,.47]);vector.sunColor.set([1,.75,.54]);
     }
     const n=Math.hypot(...vector.sunDir);vector.sunDir.forEach((v,i)=>vector.sunDir[i]=v/n);
     this.sun.direction.set(-vector.sunDir[0],-vector.sunDir[1],-vector.sunDir[2]);
     this.sun.diffuse.set(vector.sunColor[0],vector.sunColor[1],vector.sunColor[2]);
-    this.sun.intensity=this.indoors?2.35:lighting===3?.27:sunlight*.90;
-    this.sun.shadowEnabled=this.indoors;
+    this.sun.intensity=this.indoors?2.28:lighting===3?.30:sunlight*.88;
+    this.sun.shadowEnabled=!!this.shadows&&this.indoors;
     this.rim.setEnabled(this.indoors);
-    scene.environmentIntensity=this.indoors?.91:dim?.56:.72;
+    scene.environmentIntensity=this.indoors?.91:dim?.64:.79;
+    scene.imageProcessingConfiguration.exposure=this.indoors?.97:lighting===3||weather===7?1.16:.97;
     const probe=this.indoors?'deck':lighting===3||weather===7?'night':dim?'storm':lighting===1||this.theme.id==='frost'?'day':'dusk';
     if(probe!==this.probeName)void this.lightingProbe(probe);
     scene.fogDensity=this.indoors?.00040:this.climateDensities[weather]??.000045;
-    scene.fogColor.set(vector.horizon[0]*.87,vector.horizon[1]*.91,vector.horizon[2]*.96);
-    this.fill.diffuse.set(this.indoors?.51:.62,this.indoors?.59:.71,this.indoors?.79:.85);
-    this.fill.intensity=this.indoors?.66:dim?.81:.72;
+    scene.fogColor.set(vector.horizon[0]**2*.79,vector.horizon[1]**2*.85,vector.horizon[2]**2*.95);
+    this.fill.diffuse.set(this.indoors?.53:.59,this.indoors?.70:.73,this.indoors?.87:.9);
+    this.fill.intensity=this.indoors?.66:dim?.77:.70;
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
     for(const m of [this.skyMat,this.seaMat]){
       for(const [key,value] of Object.entries(vector))m.setParameter(key,value);
       m.setParameter('cover',this.indoors?-.115:cover);
       m.setParameter('cloudBase',this.indoors?325:930);
-      m.setParameter('exposure',this.indoors?1.02:dim?1.07:1.09);
+      m.setParameter('exposure',this.indoors?1.02:dim?1.03:lighting===3?1.12:1.0);
       m.setParameter('waveHeight',this.waveHeight);
     }
   }
@@ -438,7 +459,7 @@ export class WorldView {
     this.seaFields.advance({time,x,z,altitude,speed:plane.speed,water:altitude<wakeCeiling&&this.terrain.classify(x,z)==='water'},plane.forward.x,plane.forward.z);
   }
   resetMarkers(){for(const m of [...this.targets,...this.rings])m.setEnabled(false);}
-  setAwardLighting(on:boolean){this.rim.intensity=on?1.55:1.22;}
+  setAwardLighting(on:boolean){this.rim.intensity=on?1.57:1.34;}
   preview(plane:PlaneSpec,t:number,mode:string,zoom=1){
     const hero=mode==='home',size=Math.max(plane.length,plane.span);
     const yaw=this.orbit+(hero?.09:0)+Math.sin(t*.19)*.016;
@@ -458,18 +479,19 @@ export class WorldView {
     this.look.set(at.x,at.y-.62,at.z);this.camera.setTarget(this.look);this.camera.fov=.84;
   }
   flight(plane:Airframe,dt:number,time:number,target:Airframe|null,pose?:import('./flight').FlightPose){
+    const recenter=this.cameraReset;
     this.pose.position=this.camera.position;
     this.camera.target=null;
     this.rig.update(this.pose,plane,target,this.terrain,dt,time,this.view===1,this.cameraReset,pose);
     this.camera.upVector.copyFrom(this.pose.upVector);
     if(this.pose.rotationQuaternion)this.camera.rotationQuaternion.copyFrom(this.pose.rotationQuaternion);
     this.camera.fov=this.pose.fov;this.camera.minZ=this.pose.minZ;this.cameraReset=false;
-    this.followEnvironment(time,plane.velocity.x*3.5,plane.velocity.z*3.5);
+    this.followEnvironment(plane.velocity.x*3.5,plane.velocity.z*3.5,recenter);
   }
-  private followEnvironment(time:number,leadX:number,leadZ:number){
+  private followEnvironment(leadX:number,leadZ:number,recenter=false){
     const p=this.camera.position;
     this.sea.position.set(Math.round(p.x/16)*16,0,Math.round(p.z/16)*16);
-    this.updateTiles(p.x,p.z,time,leadX,leadZ);
+    this.updateTiles(p.x,p.z,performance.now()/1000,leadX,leadZ,recenter);
   }
   private tile(parent:TransformNode,x:number,z:number,step:number,size=chunkCells){
     const p:number[]=[],c:number[]=[],uv:number[]=[],idx:number[]=[],normals:number[]=[];
@@ -497,9 +519,9 @@ export class WorldView {
       const snow=this.theme.id==='frost'?clamp((h-920+vegetation*710+erosion*160)/455,0,.97)*(1-clamp((slope-.47)*.71,0,.74)):0;
       const sunSlope=clamp((sz-sx)/(gridStep*6),-.26,.26);
       const meadow=noise(px*.003,pz*.004);
-      [142,137,111].forEach((sand,k)=>{
+      [132,130,111].forEach((sand,k)=>{
         const soil=baseColor[k]+meadow*17+erosion*19+sunSlope*[13,14,5][k]+(canopy-.53)*[16,29,3][k];
-        const r=soil*(1-rock)+([117,120,122][k]+strata*39+erosion*15)*rock;
+        const r=soil*(1-rock)+([100,111,119][k]+strata*42+erosion*15)*rock;
         c.push(Math.round((r*(1-valley)*(1-beach)+sand*beach)*(1-snow)+[208,224,230][k]*snow));
       });
       c.push(255);
@@ -507,8 +529,8 @@ export class WorldView {
     for(let z=0;z<count-1;z++)for(let x=0;x<count-1;x++){const a=z*count+x;idx.push(a,a+count,a+1,a+1,a+count,a+count+1);}
     return meshEntity(parent,'高程块 '+x+' '+z,p,idx,this.terrainMaterial,normals,c,uv);
   }
-  private updateTiles(x:number,z:number,time:number,leadX:number,leadZ:number){
-    if(time-this.tileClock<.34&&time>=this.tileClock)return;
+  private updateTiles(x:number,z:number,time:number,leadX:number,leadZ:number,recenter=false){
+    if(!recenter&&time-this.tileClock<.34)return;
     this.tileClock=time;
     const initial=this.terrainTiles.size===0,detail=Math.max(.78,this.level);
     const blocks=streamBlocks(x,z,leadX,leadZ,this.terrain.blocks).map(block=>{
@@ -521,9 +543,13 @@ export class WorldView {
       const key=keyOf(block.x,block.z),tile=this.terrainTiles.get(key);
       if(next>(tile?40500:37500))continue;
       active.add(key);
-      if(built>=(initial?24:5))continue;
+      // Give visible landmarks a coarse mesh before spending the remaining budget on subdivisions.
+      const infill=(initial||recenter)&&!tile&&next<18500&&built<62;
+      if(!infill&&built>=(initial?16:5))continue;
       const split=(tile?.layout.includes('|')?4200:3650)*detail;
-      const patches=next<split?partition(block,x+leadX,z+leadZ,2400*detail):[{...block,size:chunkCells,stride:range<10500*detail?2:4}];
+      const coarse=infill&&built>=9;
+      const patches=!coarse&&next<split?partition(block,x+leadX,z+leadZ,2400*detail):
+        [{...block,size:chunkCells,stride:!coarse&&range<10500*detail?2:4}];
       const layout=patches.map(p=>`${p.x},${p.z},${p.stride}`).join('|');
       if(tile?.layout===layout)continue;
       const parent=new TransformNode('地貌区块 '+key,this.entry.app.scene);parent.parent=this.terrainRoot;
@@ -546,14 +572,14 @@ export class WorldView {
   }
   applyQuality(level:number){
     const enhanced=level>=1.07;
-    const ambient=enhanced&&this.indoors&&SSAO2RenderingPipeline.IsSupported;
+    const ambient=enhanced&&this.indoors&&!!this.pipeline&&SSAO2RenderingPipeline.IsSupported;
     if(ambient&&!this.ambientOcclusion){
       const ao=new SSAO2RenderingPipeline('机库接触遮蔽',this.entry.app.scene,{ssaoRatio:.45,blurRatio:.55},[this.camera.native],true);
       ao.radius=.85;ao.totalStrength=.55;ao.samples=8;ao.maxZ=100;this.ambientOcclusion=ao;
     }else if(!ambient&&this.ambientOcclusion){this.ambientOcclusion.dispose(true);this.ambientOcclusion=null;}
-    if(this.pipeline.bloomEnabled!==enhanced)this.pipeline.bloomEnabled=enhanced;
-    this.shadows.filteringQuality=enhanced?ShadowGenerator.QUALITY_HIGH:ShadowGenerator.QUALITY_MEDIUM;
-    this.sun.shadowEnabled=this.indoors||enhanced;
+    if(this.pipeline&&this.pipeline.bloomEnabled!==enhanced)this.pipeline.bloomEnabled=enhanced;
+    if(this.shadows)this.shadows.filteringQuality=enhanced?ShadowGenerator.QUALITY_HIGH:ShadowGenerator.QUALITY_MEDIUM;
+    this.sun.shadowEnabled=!!this.shadows&&(this.indoors||enhanced);
   }
   updateShaders(time:number,ambientTime=time){
     this.camera.commit();

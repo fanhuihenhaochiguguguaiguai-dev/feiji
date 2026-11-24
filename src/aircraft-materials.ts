@@ -3,7 +3,7 @@ import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { clamp } from './terrain';
 
 const calibrated=new WeakSet<PBRMaterial>();
-const coldShadow=Color3.FromHexString('#2d2b29');
+const coldShadow=Color3.FromHexString('#272c2f');
 export function calibrateAircraft(source:PBRMaterial,maxAnisotropy:number){
   if(calibrated.has(source))return;
   calibrated.add(source);
@@ -14,11 +14,11 @@ export function calibrateAircraft(source:PBRMaterial,maxAnisotropy:number){
     if(source.bumpTexture)source.bumpTexture.level=.51;
     source.clearCoat.isEnabled=true;
     source.clearCoat.intensity=category.includes('belly')?.10:.24;
-    source.clearCoat.roughness=.24;
-    source.environmentIntensity=.91;
+    source.clearCoat.roughness=.29;
+    source.environmentIntensity=.98;
   }else if(/glass/.test(category)){
     source.clearCoat.isEnabled=true;source.clearCoat.intensity=.66;
-    source.clearCoat.roughness=.09;source.environmentIntensity=.89;
+    source.clearCoat.roughness=.11;source.environmentIntensity=.94;
   }else if(/titanium/.test(category)){
     source.metallic=Math.max(.71,source.metallic??0);
     source.roughness=Math.min(.51,source.roughness??.51);

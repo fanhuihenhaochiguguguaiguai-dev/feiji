@@ -45,10 +45,12 @@ export function loadTerrain(seed:number,url:string){
   if(sources.has(seed))return Promise.resolve();
   let pending=requests.get(seed);
   if(!pending){
-    pending=fetch(url).then(r=>{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),18000);
+    pending=fetch(url,{signal:controller.signal}).then(r=>{
       if(!r.ok)throw new Error('地貌资产载入失败 · '+r.status);
       return r.arrayBuffer();
-    }).then(b=>registerTerrain(seed,b)).finally(()=>requests.delete(seed));
+    }).then(b=>registerTerrain(seed,b)).finally(()=>{clearTimeout(timer);requests.delete(seed);});
     requests.set(seed,pending);
   }
   return pending;

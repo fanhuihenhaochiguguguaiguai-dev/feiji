@@ -100,7 +100,8 @@ export class AircraftView {
     this.center.copyFrom(bounds.min).addInPlace(bounds.max).scaleInPlace(.5);
     this.lod=0;root.parent=this.pivot;
     for(const mesh of root.getChildMeshes()){
-      if(mesh instanceof Mesh&&this.slot===0)this.world.castShadow(mesh);
+      if(!(mesh instanceof Mesh))continue;
+      if(this.slot===0)this.world.castShadow(mesh);
       const m=mesh.material;
       if(!(m instanceof PBRMaterial))continue;
       calibrateAircraft(m,this.world.entry.app.device.getCaps().maxAnisotropy);

@@ -1,29 +1,43 @@
-import './style.css';
-import './v7-ui.css';
 declare const __FLAGSHIP_QA__:boolean;
 import { Game, openEngine } from './engine';
-import { el } from './interface';
+import { GraphicsFailure,type OpenEngine } from './scene-runtime';
 import { loadPersistentProfile } from './profile';
 import { loadTerrain } from './terrain';
 import { theatres } from './data';
+import { asset,deadline,recoveryUrl,startupFailure,startupStatus } from './startup';
 
 async function start(){
-  let activeBackend='';
-  const blocked=()=>{try{return sessionStorage.getItem('pixel-sky-webgpu-fallback')==='1';}catch{return false;}};
+  const params=new URL(location.href).searchParams,mode=params.get('graphics');
+  const safe=mode==='safe',compat=safe||mode==='compat';
+  let entry:OpenEngine|undefined,phase='assets',recovering=false;
+  const recover=(error:unknown)=>{
+    if(recovering)return;
+    recovering=true;
+    if(safe){startupFailure('WebGL2 安全模式也无法出图。你可以重新连接，或换用支持硬件加速的浏览器。',error);return;}
+    console.warn('正在恢复图形设备',error);
+    startupStatus('图形设备已中断，正在切换兼容模式');
+    const retry=()=>location.replace(recoveryUrl(entry?.backend==='gpu'?'compat':'safe'));
+    if(document.hidden){
+      const visible=()=>{if(!document.hidden){document.removeEventListener('visibilitychange',visible);retry();}};
+      document.addEventListener('visibilitychange',visible);
+    }else setTimeout(retry,0);
+  };
   try {
     const profile=await loadPersistentProfile();
-    const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()?'gl':profile.settings.backend);
-    activeBackend=entry.backend;
     const initial=theatres[0];
-    await loadTerrain(initial.seed,new URL('world/'+initial.id+'.height',document.baseURI).href);
-    const game=new Game(entry,profile);
+    await deadline(loadTerrain(initial.seed,asset('world/'+initial.id+'.height')),20000,'首张地貌资产读取超时');
+    phase='device';startupStatus('正在连接图形设备');
+    entry=await openEngine(document.getElementById('scene') as HTMLCanvasElement,compat?'gl':profile.settings.backend,safe);
+    entry.app.onGraphicsFailure(recover);
+    const game=new Game(entry,profile,recover);
+    phase='assets';startupStatus('正在载入机库和战机');
     if(__FLAGSHIP_QA__){
       const {instrument}=await import('./qa-instrumentation');
       Object.defineProperty(window,'flightQA',{value:game});
       Object.defineProperty(window,'flightProfile',{value:instrument(game,performance.now())});
     }
     await game.init();
-    if((import.meta.env.DEV||__FLAGSHIP_QA__)&&new URL(location.href).searchParams.has('world-forge')){
+    if((import.meta.env.DEV||__FLAGSHIP_QA__)&&params.has('world-forge')){
       const {openFieldLab}=await import('./field-lab');
       openFieldLab(game);
     }
@@ -32,14 +46,9 @@ async function start(){
       void navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     }
   } catch(error) {
-    if(activeBackend==='gpu'&&!blocked()){
-      console.warn('WebGPU 场景初始化失败，尝试 WebGL2',String(error));
-      try {sessionStorage.setItem('pixel-sky-webgpu-fallback','1');location.reload();return;}catch{/* Report below. */}
-    }
-    console.error(error);
-    el('boot-text').textContent='游戏无法启动';
-    const box=el('boot-error');box.hidden=false;
-    box.textContent='请使用支持 WebGL2 的 Chrome 或 Edge，开启图形加速后重新载入。';
+    entry?.app.stop();
+    if(phase==='device'||error instanceof GraphicsFailure){recover(error);return;}
+    startupFailure('机库或地貌文件未能载入。重新连接可获取当前发布的完整资源。',error);
   }
 }
 void start();

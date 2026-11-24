@@ -1,14 +1,14 @@
 :root {
-  --midnight:#081c36;
-  --graphite:#2a3141;
-  --silver:#c7cfd9;
-  --gold:#e6c57a;
-  --ice:#2ed3ff;
+  --midnight:#091a29;
+  --graphite:#26333b;
+  --silver:#d1dde4;
+  --gold:#e8c78c;
+  --ice:#91e9e8;
   --danger:#ff4b4b;
   --bevel:polygon(10px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 10px);
 }
 .reference-crest {background:transparent url('/ui-v7/crest.webp') center/contain no-repeat;border:0;width:64px;clip-path:none}
-#navigation {grid-template-columns:repeat(3,minmax(0,1fr)) minmax(74px,1.34fr) repeat(3,minmax(0,1fr));overflow:visible;background:linear-gradient(180deg,#182c42f7,#081320fe);box-shadow:0 8px 19px #02050acf}
+#navigation {grid-template-columns:repeat(3,minmax(0,1fr)) minmax(74px,1.34fr) repeat(3,minmax(0,1fr));overflow:visible;background:linear-gradient(180deg,#1d343ff7,#0b1922fe);box-shadow:0 8px 19px #02070bcf}
 #navigation button {font-weight:780;min-height:53px}
 #navigation .sortie-action {min-height:100%;transform:scaleY(1.08);clip-path:polygon(12% 0,88% 0,100% 100%,0 100%);font-size:1.2rem;background:linear-gradient(179deg,#faf0c7,#deae61 49%,#8f5b2e);box-shadow:inset 0 2px #fff0cb,inset 0 -2px #684327}
 .nav-art {width:clamp(21px,3vw,40px);aspect-ratio:1.28;background-size:contain;background-repeat:no-repeat;background-position:center}
@@ -21,7 +21,7 @@
 .quick button,.brief-lines button,.asset-card,.mission-brief,.tech-detail {clip-path:var(--bevel)}
 .quick button {border-right:2px solid #9aafc263}
 .brief-lines button {min-height:32px}
-.route-page .station-heading {background:linear-gradient(117deg,#091727 8%,#223446 36%,#102138 42%,#0a1729 100%);border-bottom-color:#b1b9b582}
+.route-page .station-heading {background:linear-gradient(117deg,#0b1923 8%,#263e48 36%,#142933 42%,#0c1c26 100%);border-bottom-color:#a7bdc581}
 .route-page .station-heading h2 {font-weight:830}
 .route-intro {background-position:center;box-shadow:inset 0 1px #d5d9de33,inset 0 -1px #a89b7652}
 .route-terminal.quests .route-intro {background-position: center, center 43%}
@@ -146,11 +146,11 @@
 
 /* Shared materials apply to active menus, readouts, dialogs and transaction states. */
 :root {
-  --alloy-dark:#081625;
-  --alloy-top:#345571;
-  --alloy-rim:#b0c3d39c;
+  --alloy-dark:#0a1820;
+  --alloy-top:#365562;
+  --alloy-rim:#aacbd19c;
   --edge-gold:#efcc85;
-  --panel-matte:linear-gradient(156deg,#1c3248 0%,#102439 40%,#0c1c2f 89%);
+  --panel-matte:linear-gradient(156deg,#273c46 0%,#152b36 41%,#0d1e28 89%);
   --engraved:inset 0 1px #f3f9ff38,inset 0 0 0 2px #050d1761,0 3px 10px #030a14a0;
   --gold-plate:linear-gradient(180deg,#fff3bd 0%,#e6b971 18%,#c38d48 52%,#946025 53%,#deab63 88%,#e4bc7c 100%);
 }
@@ -229,7 +229,7 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 }
 #hit-confirm[data-strike="down"] {color:#ffe19e;border-color:#e6c57a}
 #hit-confirm[data-strike="missile"] {color:#ffdec6;border-color:#ffbca4}
-.hud-left .telemetry,.hud-left .armor {background:linear-gradient(90deg,#071729d9,#162c3d41 85%,transparent);box-shadow:inset 0 1px #c3e1ee27}
+.hud-left .telemetry,.hud-left .armor {background:linear-gradient(90deg,#0a1e28e0,#19394145 85%,transparent);box-shadow:inset 0 1px #c3e1ee30}
 #hud .combat-controls button {box-shadow:var(--engraved)}
 #hud .combat-controls .fire {background:linear-gradient(154deg,#735531e6,#3e3d3ddf 48%,#1f3345f0);border-color:#efd194d6}
 #hud .combat-controls .fire.pressed {background:linear-gradient(154deg,#ad7849,#3e3b30);box-shadow:inset 0 0 0 2px #ffe0a268}

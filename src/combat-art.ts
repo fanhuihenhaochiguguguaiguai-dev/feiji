@@ -90,7 +90,7 @@ export class CombatArt {
   constructor(readonly world:WorldView){
     const scene=world.entry.app.scene;
     this.wingWake=new WingWake(world);
-    if(GPUParticleSystem.IsSupported)void world.assets.texture('surface/water.png').then(texture=>{
+    if(!world.entry.app.safe&&GPUParticleSystem.IsSupported)void world.assets.texture('surface/water.png').then(texture=>{
       const p=new GPUParticleSystem('掠海飞沫',{capacity:128,emitRateControl:true},scene);
       p.particleTexture=texture;p.emitter=this.sprayEmitter;p.emitRate=0;
       p.minEmitBox.set(-1.4,0,-2.5);p.maxEmitBox.set(1.4,.65,2.5);

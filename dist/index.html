@@ -3,14 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a1220">
+<meta name="theme-color" content="#07121c">
 <meta name="description" content="苍穹锋刃的单机空战。驾驶战机，从落日机库进入海域、雪山和雷云。">
-<title>苍穹锋刃 · PIXEL SKY AFTERBURNER</title>
+<title>苍穹锋刃 V10 · PIXEL SKY AFTERBURNER</title>
 <link rel="icon" href="./icon.svg">
 <link rel="manifest" href="./manifest.webmanifest">
-  <script type="module" crossorigin src="./assets/index-BbT73e_h.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/flight-math-CTuwkSB0.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-qFokpOHL.css">
+<style>
+html{background:#07121c;color:#ecf4f8}body{margin:0}#boot[hidden],#boot [hidden]{display:none!important}
+#boot{position:fixed;inset:0;display:grid;place-items:center;z-index:30;background:#091722;font-family:system-ui,sans-serif;padding:16px;text-align:center}
+#boot .system-card{width:min(100%,460px);box-sizing:border-box;padding:18px}#boot-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:15px}
+#boot-actions a{color:#d7e9ef;border:1px solid #5f8794;padding:9px 13px;text-decoration:none;border-radius:3px}#boot-actions a:last-child{color:#fde1ad;border-color:#be9660}
+</style>
+  <script type="module" crossorigin src="./assets/index-CdXI_nYr.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-ChkI0O4e.css">
 </head>
 <body>
 <main id="application" data-screen="loading">
@@ -22,6 +27,7 @@
   </section>
   <canvas id="scene" aria-label="实时三维战场"></canvas>
   <div class="lens" aria-hidden="true"></div>
+  <p id="graphics-status" role="status" hidden>正在重新连接图形设备</p>
   <div id="menu" hidden>
     <header class="mast">
       <button class="identity" data-nav="home"><span class="crest reference-crest" aria-hidden="true"></span><span><strong>苍穹锋刃</strong><small>飞行指挥中心</small></span></button>
@@ -109,8 +115,21 @@
   <dialog id="purchase-confirm" aria-labelledby="purchase-title" class="acquisition"></dialog>
   <dialog id="acquisition" aria-labelledby="acquisition-title" class="acquisition"></dialog>
   <div id="status-toast" role="status" hidden></div>
-  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><div id="boot-error" hidden></div></div></section>
+  <section id="boot" class="veil" aria-label="启动状态"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃 <small>V10</small></h1><p id="boot-text" role="status">正在接通机库与渲染系统</p><div id="boot-error" hidden></div><div id="boot-actions" hidden><a id="boot-retry" href="./?fresh=10.0.0">重新连接</a><a id="boot-safe" href="./?graphics=safe&amp;fresh=10.0.0">WebGL2 安全模式</a></div></div></section>
   <noscript>请启用 JavaScript 后启动游戏。</noscript>
 </main>
+<script>
+(() => {
+  const app = document.getElementById('application');
+  const offer = () => { if (!document.getElementById('boot').hidden) document.getElementById('boot-actions').hidden = false; };
+  const unavailable = () => {
+    if (app.dataset.screen !== 'loading') return;
+    document.getElementById('boot-text').textContent = '启动文件未能载入';
+    offer();
+  };
+  addEventListener('error', event => { if (event.target instanceof HTMLScriptElement && event.target.type === 'module') unavailable(); }, true);
+  setTimeout(() => { if (app.dataset.screen === 'loading') offer(); }, 24000);
+})();
+</script>
 </body>
 </html>

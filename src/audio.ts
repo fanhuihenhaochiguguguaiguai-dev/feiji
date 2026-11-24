@@ -1,4 +1,5 @@
 import type { FlightEvent } from './sortie';
+import { asset } from './startup';
 
 export type FeedbackTone='supply'|'rare'|'ceremony'|'install'|'research'|'calibrate'|'denied';
 type ToneKind=FeedbackTone|'gun'|'missile'|'blast'|'scrape'|'fracture'|'water'|'lock'|'warn'|'wave'|'switch'|'victory'|'counter'|'deflected'|'near';
@@ -50,7 +51,7 @@ export class FlightAudio {
   }
   private async loadLayer(context:AudioContext,bus:GainNode,key:'jet'|'reheat'){
     try{
-      const response=await fetch(new URL('audio/'+key+'.ogg',document.baseURI));
+      const response=await fetch(asset('audio/'+key+'.ogg'));
       if(!response.ok)return;
       const clip=await context.decodeAudioData(await response.arrayBuffer());
       const player=context.createBufferSource(),gain=context.createGain();

@@ -1,6 +1,8 @@
-# 苍穹锋刃 · WORLD-FORGE V19
+# 苍穹锋刃 V10
 
 单机空战网页游戏。使用 Babylon.js 8.56.2 和 TypeScript，优先启用 WebGPU，回退到 WebGL2。战役、每日任务、装备和战绩保存在当前浏览器中，已兼容旧版存档并写入 IndexedDB。
+
+V10 延续 V19.0.2 的空战和存档架构，增加图形设备超时、首帧验证、运行期恢复及版本化离线缓存。碰到图形故障时，游戏先尝试 WebGL2，随后尝试 WebGL2 安全模式。可从启动提示直接进入安全模式，也可通过设置重新选择渲染后端。需要重启页面的恢复会返回机库，已提交的战果和升级会保留。
 
 ## 操作
 
@@ -34,8 +36,8 @@
 ```sh
 npm ci
 npm run check
-npm test
 npm run build
+npm test
 npm run test:assets
 npm run preview -- --host 127.0.0.1
 ```
@@ -59,11 +61,12 @@ python art/impact_sprites.py
 
 ## 验证
 
-`qa/world-forge-v19/` 保存 Babylon.js 双后端的运行截图与迁移验收。`qa/world-forge-v18/` 保留升级前基线。此前的战役、武器、准星和海岸飞行记录保留在相应版本目录。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
+`qa/v10-stability/` 保存 V10 的故障恢复、构建验证和同机位实拍。`qa/world-forge-v19/` 保存 Babylon.js 双后端迁移基线。此前的战役、武器、准星和海岸飞行记录保留在相应版本目录。全球地貌资料来源见 `art/geodata/SOURCE.md`。测试构建可访问 `/?world-forge=1`，读取后端、画质、分辨率、帧率和敌机 LOD，并独立切换云层、海面和地形。
 
 ```sh
 python -m pip install playwright
 VITE_GAME_QA=1 npx vite build --outDir /tmp/cangqiong-qa
+python tests/stability_browser.py /tmp/cangqiong-qa /tmp/cangqiong-recovery gpu-stall
 python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gl --backend gl --quick --water-drone --all-air --migration --airframe j20
 python tests/flight_browser.py /tmp/cangqiong-qa /tmp/cangqiong-gpu --backend gpu --quick --water-drone --all-air --migration --airframe j20
 python tests/visual_reference.py qa/reference /tmp/cangqiong-gl /tmp/cangqiong-comparison

@@ -18,9 +18,9 @@ export const fleet:PlaneSpec[]=catalogue.map(plane=>{
 export const byAircraft=(id:string)=>fleet.find(p=>p.id===id)??fleet.find(p=>p.id==='j20')!;
 export const eras:Record<string,string>={ww1:'一战',ww2:'二战',early:'早期喷气',cold:'冷战',modern:'现代',stealth:'第五代',support:'支援'};
 export const theatres=[
-  {id:'sundown',name:'南海前哨',weather:'日落',seed:413,sky:[.24,.40,.62],horizon:[.91,.65,.46],light:[1,.79,.54],sea:[.055,.159,.291],sun:[.69,.135,-.73],snow:false},
-  {id:'frost',name:'雪线走廊',weather:'高空晴间云',seed:704,sky:[.21,.35,.57],horizon:[.61,.71,.85],light:[1,.88,.69],sea:[.055,.15,.23],sun:[-.50,.31,-.75],snow:true},
-  {id:'storm',name:'远雷海峡',weather:'多云',seed:116,sky:[.115,.182,.29],horizon:[.41,.47,.55],light:[.80,.87,1],sea:[.041,.096,.14],sun:[.51,.17,-.84],snow:false}
+  {id:'sundown',name:'南海前哨',weather:'日落',seed:413,sky:[.14,.29,.52],horizon:[.61,.51,.48],light:[1,.79,.54],sea:[.05,.17,.28],sun:[.69,.135,-.73],snow:false},
+  {id:'frost',name:'雪线走廊',weather:'高空晴间云',seed:704,sky:[.15,.31,.55],horizon:[.51,.66,.79],light:[1,.88,.69],sea:[.052,.16,.24],sun:[-.50,.31,-.75],snow:true},
+  {id:'storm',name:'远雷海峡',weather:'多云',seed:116,sky:[.10,.20,.31],horizon:[.33,.43,.53],light:[.80,.87,1],sea:[.043,.14,.19],sun:[.51,.17,-.84],snow:false}
 ];
 export interface FreeFlightPlan { region:number; weather:number; lighting:number }
 export interface Operation {

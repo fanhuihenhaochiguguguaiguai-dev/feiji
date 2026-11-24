@@ -5,6 +5,7 @@ import { baseModules, byAircraft, difficulties, eras, fleet, operation, operatio
 import { buyItem, buyUpgrade, claimRewards, combatConfiguration, detachWeapon, equipItem, purchaseBlock, sortieBlock, firstClearLoot, requirements, research, resetGear, rewardStatus, saveProfile, unlockAircraft, upgradeCompatible, upgradeLevel, type Save } from './profile';
 import { cannonID, compatible, gearSlot, slotName, gears, itemById, items, missiles, missileDamage, rewards, technologies, type RewardDefinition, type GearSlot } from './items';
 import { cannonFor, guidedStrike, gunDamage, gunCycle, gunSight, missileCycle } from './ordnance';
+import { recoveryUrl } from './startup';
 import { icon, icons } from './icons';
 import type { Debrief,FlightEvent,Sortie } from './sortie';
 import type { WorldView } from './renderer';
@@ -230,7 +231,7 @@ export class Interface {
       }
       const key=node.dataset.setting;
       if(!key)return;
-      if(key==='backend'){p.settings.backend=node.value as Save['settings']['backend'];saveProfile(p);try{sessionStorage.removeItem('pixel-sky-webgpu-fallback');}catch{}location.reload();return;}
+      if(key==='backend'){p.settings.backend=node.value as Save['settings']['backend'];saveProfile(p);location.replace(recoveryUrl());return;}
       if(key==='quality')p.settings.quality=node.value as Save['settings']['quality'];
       if(key==='assist'||key==='invert'||key==='mute')p.settings[key]=(node as HTMLInputElement).checked;
       if(key==='sensitivity'||key==='hud'||key==='renderScale')p.settings[key]=Number(node.value);
