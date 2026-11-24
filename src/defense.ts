@@ -122,7 +122,6 @@ export class CountermeasureSystem {
       chaff:modern?4+grade+pod:era==='cold'?3+grade+pod:0,ecm:modern?grade:0};
     this.stocks={...this.capacity};
   }
-  canReplenish(){return this.stocks.flare<this.capacity.flare||this.stocks.chaff<this.capacity.chaff;}
   replenish(){
     this.stocks.flare=Math.min(this.capacity.flare,this.stocks.flare+2);
     this.stocks.chaff=Math.min(this.capacity.chaff,this.stocks.chaff+2);

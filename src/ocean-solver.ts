@@ -31,23 +31,34 @@ function fftLine(re:Float32Array,im:Float32Array,start:number,stride:number){
 }
 
 const random=(x:number,z:number)=>{const n=Math.sin(x*124.17+z*513.47)*43758.5453;return n-Math.floor(n);};
+function spectralModes(){
+  const modes:{i:number;j:number;phase:number;omega:number;amplitude:number}[]=[];
+  for(let z=0;z<oceanSize/2;z++)for(let x=-oceanSize/2+1;x<oceanSize/2;x++){
+    if(z===0&&x<=0)continue;
+    const k=Math.hypot(x,z)*2*Math.PI/swellPeriod;
+    const direction=(x*.81+z*.59)/Math.hypot(x,z);
+    const broad=.011*Math.exp(-(((k-.102)/.056)**2))*(.27+.73*direction**2);
+    const wind=.0031*Math.exp(-(((k-.213)/.085)**2))*(.40+.60*direction**2);
+    const energy=(broad+wind)*(.36+random(x+302,z-19)*.90);
+    if(energy<.00012)continue;
+    const i=(x+oceanSize)%oceanSize+z*oceanSize;
+    const j=(oceanSize-x)%oceanSize+(oceanSize-z)%oceanSize*oceanSize;
+    modes.push({i,j,phase:random(x,z)*Math.PI*2,omega:Math.sqrt(9.81*k),amplitude:energy*.5});
+  }
+  return modes;
+}
+
 export class OceanSpectrum {
   private readonly re=new Float32Array(total);
   private readonly im=new Float32Array(total);
-  private readonly modes:{i:number;j:number;phase:number;omega:number;amplitude:number}[]=[];
-  constructor(){
-    for(let z=0;z<oceanSize/2;z++)for(let x=-oceanSize/2+1;x<oceanSize/2;x++){
-      if(z===0&&x<=0)continue;
-      const k=Math.hypot(x,z)*2*Math.PI/swellPeriod;
-      const direction=(x*.81+z*.59)/Math.hypot(x,z);
-      const broad=.011*Math.exp(-(((k-.102)/.056)**2))*(.27+.73*direction**2);
-      const wind=.0031*Math.exp(-(((k-.213)/.085)**2))*(.40+.60*direction**2);
-      const energy=(broad+wind)*(.36+random(x+302,z-19)*.90);
-      if(energy<.00012)continue;
-      const i=(x+oceanSize)%oceanSize+z*oceanSize;
-      const j=(oceanSize-x)%oceanSize+(oceanSize-z)%oceanSize*oceanSize;
-      this.modes.push({i,j,phase:random(x,z)*Math.PI*2,omega:Math.sqrt(9.81*k),amplitude:energy*.5});
+  private readonly modes=spectralModes();
+  coefficients(){
+    const packed=new Float32Array(total*4);
+    for(const {i,j,phase,omega,amplitude} of this.modes){
+      packed.set([phase,omega,amplitude,1],i*4);
+      packed.set([phase,omega,amplitude,-1],j*4);
     }
+    return packed;
   }
   sample(time:number,out:Uint8Array){
     this.re.fill(0);this.im.fill(0);

@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
+const release=JSON.parse(readFileSync(new URL('./package.json',import.meta.url),'utf8')).version;
 export default defineConfig({
   base: './',
-  define: { __FLAGSHIP_QA__: JSON.stringify(process.env.VITE_GAME_QA==='1') },
+  define: { __GAME_RELEASE__:JSON.stringify(release), __FLAGSHIP_QA__: JSON.stringify(process.env.VITE_GAME_QA==='1') },
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,

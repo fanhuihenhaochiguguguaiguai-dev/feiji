@@ -107,7 +107,7 @@ with sync_playwright() as p:
             return {kind:s.op.kind,ground:s.targetPoints.length,missiles:s.player.missiles,
               enemies:s.enemies.flatMap((e,i)=>e.alive?[{type:e.type.id,hp:e.hp,model:g.foes[i].loaded}]:[])};
         }""")
-        assert contact['kind']=='air' and contact['ground']==0 and contact['missiles']>=10,contact
+        assert contact['kind']=='air' and contact['ground']==0 and contact['missiles']==20,contact
         assert any(e['type']==e['model']=='shade-drone' and e['hp']>=487 for e in contact['enemies']),contact
         page.screenshot(path=OUT/'chapter-three-drones.png',timeout=70000)
         wreck=page.evaluate("""()=>{
@@ -163,7 +163,7 @@ with sync_playwright() as p:
         page.locator('.sortie-action').tap()
         ready(page,'sortieprep')
         assert page.locator('[data-confirm-sortie]').is_enabled()
-        assert '340' in page.locator('.briefing-flight').inner_text()
+        assert '1200' in page.locator('.briefing-flight').inner_text()
         page.screenshot(path=OUT/'factory-briefing.png',timeout=70000)
         page.locator('.briefing-flight [data-configure="missile"]').tap()
         ready(page,'weapons')
@@ -189,7 +189,7 @@ with sync_playwright() as p:
         page.locator('[data-confirm-sortie]').tap()
         ready(page,'flight')
         assert page.locator('#gun').is_visible() and page.locator('#bomb').is_hidden()
-        assert page.evaluate("flightQA.sortie.player.bombs===0 && flightQA.sortie.player.missiles===10 && flightQA.sortie.enemies.some(a=>a.alive)")
+        assert page.evaluate("flightQA.sortie.player.bombs===0 && flightQA.sortie.player.missiles===20 && flightQA.sortie.enemies.some(a=>a.alive)")
         leave(page)
         page.locator('#navigation [data-nav="hangar"]').tap()
         ready(page,'hangar')
@@ -239,21 +239,21 @@ with sync_playwright() as p:
               const r=aim.getBoundingClientRect(),canvas=g.world.entry.canvas.getBoundingClientRect();
               const pose=g.playerPose,point=pose.position.clone().addInPlace(pose.forward.scale(650));
               g.world.camera.project(point,point,canvas.width,canvas.height);
-              return {width:r.width,height:r.height,position:[r.x+r.width/2,r.y+r.height/2],error:Math.hypot(r.x+r.width/2-(point.x+canvas.left),r.y+r.height/2-(point.y+canvas.top)),mode:s.weapon};
+              return {width:r.width,height:r.height,position:[r.x+r.width/2,r.y+r.height/2],error:Math.hypot(r.x+r.width/2-(point.x+canvas.left),r.y+r.height/2-(point.y+canvas.top)),locked:s.lockProgress===1};
             }"""
             sight=[]
-            for mode in ('gun','missile'):
-                page.evaluate("""mode=>new Promise(resolve=>{
-                  const g=flightQA;g.sortie.weapon=mode;
+            for locked in (False,True):
+                page.evaluate("""locked=>new Promise(resolve=>{
+                  const g=flightQA;g.sortie.lockProgress=locked?1:0;
                   g.engine.once('postrender',()=>{
                     g.ui.telemetry(g.sortie,g.world,g.targetAnchors,g.playerPose);resolve();
                   });
-                })""",mode)
+                })""",locked)
                 sight.append(page.evaluate(check_sight))
             assert all(x["error"]<.75 and x["width"]>30 and x["height"]==x["width"] for x in sight),sight
             assert len({x["width"] for x in sight})==1 and len({tuple(x["position"]) for x in sight})==1,sight
             initial=page.evaluate("""()=>{
-                const g=flightQA;g.sortie.weapon='gun';g.state='flight';g.input.on=true;return g.sortie.time;
+                const g=flightQA;g.state='flight';g.input.on=true;return g.sortie.time;
             }""")
             page.wait_for_function("t=>flightQA.sortie.time>t+.42",arg=initial,timeout=45000)
             page.locator('#gun').tap()

@@ -55,7 +55,7 @@ body=pbr("Gunmetal enamel",(.059,.082,.115),.61,.36)
 color_by_asset={
     "shorebolt":(.57,.42,.12),"xp":(.23,.43,.63),"flarewing":(.56,.14,.084),"skylance":(.29,.51,.60),"interceptor":(.39,.43,.50),
     "night":(.14,.19,.30),"navy":(.19,.33,.47),"factory":(.36,.39,.41),"sand":(.46,.37,.24),
-    "bronze-sky":(.53,.23,.10),"reserve":(.22,.40,.34),"survey":(.13,.38,.39),"veil":(.20,.30,.49),
+    "bronze-sky":(.53,.23,.10),"survey":(.13,.38,.39),"veil":(.20,.30,.49),
     "tech-signal":(.18,.45,.47),"tech-horizon":(.37,.31,.54),"tech-power":(.54,.30,.11),
     "tech-vectoring":(.22,.41,.58),"up-maneuver":(.25,.39,.59),"up-armor":(.36,.39,.44),
     "up-radar":(.20,.42,.41),"up-engine":(.57,.27,.12),"circuit":(.25,.41,.31)
@@ -132,19 +132,12 @@ def box_asset(key):
     mat=pbr(key+" painted case",col,.35,.45)
     machined_box("Cast enclosure",(0,0,.04),(2.53,1.60,.37),mat)
     machined_box("Recessed face",(0,0,.247),(2.32,1.34,.075),body)
-    if key=="reserve":
-        for x in (-.91,.91):
-            machined_box("Raised tie-down",(x,0,.28),(.23,1.69,.05),core)
-        machined_box("Redundant cartridge",(0,0,.31),(.88,.64,.09),mat)
-        machined_box("Supply crest",(0,0,.388),(.22,.57,.055),warm)
-        machined_box("Supply crest",(0,0,.389),(.53,.20,.055),warm)
-    else:
-        for x in (-.68,0,.67):
-            machined_box("Chip package",(x,.10,.34),(.49,.51,.15),mat)
-            for q in range(4):
-                machined_box("Edge contact",(x-.18+q*.12,-.39,.31),(.044,.21,.06),warm)
-        for y in (-.54,.57):
-            machined_box("Machined lug",(0,y,.290),(2.19,.065,.071),core)
+    for x in (-.68,0,.67):
+        machined_box("Chip package",(x,.10,.34),(.49,.51,.15),mat)
+        for q in range(4):
+            machined_box("Edge contact",(x-.18+q*.12,-.39,.31),(.044,.21,.06),warm)
+    for y in (-.54,.57):
+        machined_box("Machined lug",(0,y,.290),(2.19,.065,.071),core)
 
 def engine_part(key):
     axis_cylinder("Pump casing",(-1.35,0,.11),(1.32,0,.11),.61,.42,cool)
@@ -202,7 +195,7 @@ for svg in sorted((HERE/"icon-blueprints").glob("*.svg")):
     elif key in ("interceptor","flarewing","skylance","bomb"):ordnance(key,("interceptor","flarewing","skylance","bomb").index(key))
     elif key=="shorebolt":ordnance(key,2)
     elif key in ("cannon-light","cannon-jet","cannon-heavy","up-weapons"):gun(key,1 if key=="cannon-light" else 3 if key=="cannon-jet" else 5)
-    elif key in ("reserve","circuit","veil"):box_asset(key)
+    elif key in ("circuit","veil"):box_asset(key)
     elif key in ("vector","up-engine"):engine_part(key)
     else:emblem(svg)
     scene.render.filepath=str(RAW/(svg.stem+".render.png"))

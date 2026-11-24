@@ -21,8 +21,8 @@ export function planPass(e:Airframe,lead:Airframe,victim:Airframe,range:number,m
   const side=e.role%2?1:-1;
   if(move===Tactic.Extend||move===Tactic.Evade){
     const lateral=move===Tactic.Evade?745:440;
-    point.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*420+e.forward.z*lateral*side,
-      (move===Tactic.Evade?122:223)+e.role*34,e.forward.z*420-e.forward.x*lateral*side);
+    point.copyFrom(e.position).addInPlaceFromFloats(e.forward.x*420+e.forward.z*lateral*(move===Tactic.Evade?e.evadeDirection:side),
+      (move===Tactic.Evade?122:223)+e.role*34,e.forward.z*420-e.forward.x*lateral*(move===Tactic.Evade?e.evadeDirection:side));
     c.throttle=1;c.boost=move===Tactic.Evade;return;
   }
   if(move===Tactic.Formation){

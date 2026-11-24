@@ -7,6 +7,7 @@ const shapes:Record<string,string>={
   tools:'M14 3c5-1 8 3 6 7-1 2-3 3-5 3l-8 8a2 2 0 1 1-3-3l8-8c-1-3 0-6 2-7l2 4 3-1',
   tree:'M12 3v5m0 8v5M4 8h16v8H4z M4 12H2m18 0h2',pause:'M8 5h2v14H8zM14 5h2v14h-2z',
   view:'M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  evade:'M3 20 9 9l4 5 5-10m-5 0h5v5M3 13l3-3m8 11 4-4',
   boost:'m4 15 8-11 8 11m-14 5 6-7 6 7',lock:'M8 3H3v5m13-5h5v5m-5 13h5v-5m-13 5H3v-5m9-8v8m-4-4h8',
   missile:'m20 3-2 8-7 7-4-3L20 3zm-9 15-3 3-5-1 4-5m5 2 1 4 5-4 1-5M3 16l3-3',bomb:'M15 7l4-5 3 3-4 4m-3-2a7 7 0 1 0 4 7L15 7z',cross:'M6 10l6-7 6 7m-6-7v18m-7-4h14',
   switch:'M3 7h17l-4-4m5 14H4l4 4m12-14-4 4M4 17l4-4',

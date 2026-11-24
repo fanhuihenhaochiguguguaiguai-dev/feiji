@@ -15,7 +15,6 @@ export const items:ItemDefinition[]=[
   item('xp','飞行经验','currency','通过战斗结算累积，提升等级并获得飞行员嘉奖。'),
   item('alloy','结构合金','material','机身、推力、机动和挂载升级的消耗材料。'),
   item('circuit','航电板','material','火控和雷达升级的消耗材料。','rare'),
-  item('reserve','反制补给包','consumable','出击中消耗 1 份，补充已损耗的热诱饵和箔条。','rare',{price:300}),
   item('interceptor','巡星标准弹','missile','兼容机型的原厂弹。雷达制导，适合中距交战。','standard',{visual:visual('interceptor','rack-standard','amber')}),
   item('flarewing','赤尾红外弹','missile','较短锁定距离，较快捕捉与转向。','rare',{price:620,level:3,visual:visual('flarewing','rack-compact','crimson')}),
   item('skylance','苍矛远程弹','missile','雷达制导。速度和有效射程更高，转向较慢。','elite',{tech:'horizon',price:1150,level:8,visual:visual('skylance','rack-long','cyan')}),
@@ -43,7 +42,7 @@ export function gearSlot(kind:ItemKind):GearSlot|undefined{
 export const gears=items.filter(i=>gearSlot(i.kind)!==undefined);
 export const stockHooks=(plane:PlaneSpec)=>plane.bombs>0||plane.id==='j20';
 export const groundMount=(plane:PlaneSpec)=>plane.id==='j20'?[0,-.57,.55]:[plane.span*.13,-.87,.48];
-export const minimumPlayerMissiles=10;
+export const minimumPlayerMissiles=20;
 export function missileRails(plane:PlaneSpec){
   return plane.rails.length||plane.support?plane.rails:[
     [-plane.span*.19,-.36,plane.length*.045],
@@ -92,12 +91,12 @@ export interface RewardDefinition { id:string;name:string;criteria:string;period
 export const rewards:RewardDefinition[]=[
   {id:'daily-sortie',name:'今日首航',criteria:'今天结算一次出击',period:'day',threshold:1,metric:'sorties',prize:[['credits',150],['alloy',1]]},
   {id:'daily-kills',name:'今日空域清扫',criteria:'今天击毁三个任务目标',period:'day',threshold:3,metric:'kills',prize:[['credits',280],['circuit',1]]},
-  {id:'first',name:'首次升空',criteria:'完成一次出击',threshold:1,metric:'sorties',prize:[['credits',400],['alloy',3],['reserve',1]]},
+  {id:'first',name:'首次升空',criteria:'完成一次出击',threshold:1,metric:'sorties',prize:[['credits',700],['alloy',3]]},
   {id:'first-win',name:'赤尾试射许可',criteria:'完成一次任务并取胜',threshold:1,metric:'victories',prize:[['flarewing',1],['circuit',3]]},
   {id:'intercept',name:'岛链守望',criteria:'累计击落八个目标',threshold:8,metric:'kills',prize:[['survey',1],['credits',750]]},
   {id:'flight-wing',name:'编队荣誉',criteria:'取得三场任务胜利',threshold:3,metric:'victories',prize:[['air-gripen',1],['credits',470]]},
   {id:'tideline',name:'长航余晖',criteria:'累计飞行二十公里',threshold:20000,metric:'distance',prize:[['bronze-sky',1],['alloy',4]]},
   ...Array.from({length:8},(_,i):RewardDefinition=>({id:'pass-'+(i+1),name:'第 '+(i+1)+' 阶 · 空勤嘉奖',
     criteria:'达到 '+((i+1)*180)+' 飞行经验',threshold:(i+1)*180,metric:'xp',
-    prize:[['credits',245+i*85],[i%3===0?'reserve':i%3===1?'alloy':'circuit',i%2+1]]}))
+    prize:i%3===0?[['credits',245+i*85+300*(i%2+1)]]:[['credits',245+i*85],[i%3===1?'alloy':'circuit',i%2+1]]}))
 ];

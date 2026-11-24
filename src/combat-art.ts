@@ -1,9 +1,10 @@
-import { BLEND_ADDITIVE, BLEND_ADDITIVEALPHA, BLEND_NORMAL, BUFFER_DYNAMIC, CULLFACE_NONE, Entity, Mat4, Quat, Vec3, VertexBuffer, VertexFormat, type StandardMaterial } from 'playcanvas';
+import { BLEND_ADDITIVE, BLEND_ADDITIVEALPHA, BLEND_NORMAL, BUFFER_DYNAMIC, CULLFACE_NONE, Entity, Mat4, Quat, Vec3, VertexBuffer, VertexFormat, type Material } from 'playcanvas';
 import { Vector3, type Quaternion } from '@babylonjs/core/Maths/math.vector';
 import { material, primitive, type Primitive, type WorldView } from './renderer';
 import type { FlightEvent, Sortie } from './sortie';
 import type { FlightPose } from './flight';
 import { WingWake } from './wing-wake';
+import { softSprite } from './soft-sprite';
 
 const position=new Vec3(),scale=new Vec3(),direction=new Vec3(),rotation=new Quat(),matrix=new Mat4();
 const angle=new Vec3(),zAxis=new Vec3(0,0,-1);
@@ -11,7 +12,8 @@ const types={
   smoke:{life:3.9,scale:4.5,gravity:-1.3,drag:1.01},
   dust:{life:2.7,scale:4.1,gravity:-.43,drag:.79},
   mist:{life:1.8,scale:3.4,gravity:9.8,drag:.85},
-  fire:{life:.43,scale:4.9,gravity:-3.1,drag:2.2},
+  fire:{life:.56,scale:5.7,gravity:-3.1,drag:2.2},
+  flash:{life:.16,scale:2.2,gravity:0,drag:0},
   fragment:{life:3.2,scale:.65,gravity:9.81,drag:.16},
   ring:{life:1.03,scale:3.3,gravity:0,drag:0},
   scorch:{life:19,scale:4.6,gravity:0,drag:0},
@@ -23,22 +25,22 @@ type Effect=keyof typeof types;
 type Particle={x:number;y:number;z:number;dx:number;dy:number;dz:number;life:number;age:number;size:number;kind:Effect;spin:number};
 type Layer=readonly [kind:Effect,quantity:number,intensity:number];
 const patterns={
-  steel:[['sparks',6,.78],['fragment',3,.75],['smoke',2,.57]],
+  steel:[['flash',1,.74],['sparks',6,.78],['fragment',3,.75],['smoke',2,.57]],
   cannon:[['fire',1,.34],['sparks',1,.45]],
-  fuse:[['smoke',4,.9],['fire',2,1.2],['shock',1,1.2],['sparks',8,1.24],['fragment',4,.92]],
+  fuse:[['flash',1,1.7],['smoke',4,.9],['fire',3,1.3],['shock',1,1.5],['sparks',8,1.24],['fragment',4,.92]],
   hardGround:[['smoke',6,1.02],['scorch',1,.87],['fire',2,1.1],['fragment',5,1],['sparks',4,.89]],
   softGround:[['dust',8,1.23],['scorch',1,.94],['fire',2,1.02],['fragment',4,.84]],
   soilStrike:[['dust',2,.53],['fragment',2,.39]],
   rockStrike:[['dust',2,.60],['sparks',3,.51],['fragment',3,.48]],
   water:[['mist',10,1.28],['ring',2,.8]],
-  fracture:[['fire',3,1.8],['shock',1,1.5],['fragment',13,1.75],['sparks',9,1.44],['oil',4,1.5]],
+  fracture:[['flash',1,2.7],['fire',4,2.1],['shock',2,1.65],['fragment',13,1.75],['sparks',9,1.44],['oil',4,1.5]],
 } satisfies Record<string,readonly Layer[]>;
 class Batch {
   private count=0;
   private readonly data:Float32Array;
   private readonly vb:VertexBuffer;
   private readonly model:Entity;
-  constructor(world:WorldView,name:string,shape:Primitive,mat:StandardMaterial,readonly capacity:number){
+  constructor(world:WorldView,name:string,shape:Primitive,mat:Material,readonly capacity:number){
     this.model=primitive(world.effects,name,shape,mat,0,0,0,1,1,1);
     const gpu=world.entry.app.graphicsDevice;
     this.data=new Float32Array(capacity*16);
@@ -47,10 +49,12 @@ class Batch {
     this.model.render!.meshInstances[0].cull=false;
     this.model.enabled=false;
   }
-  put(x:number,y:number,z:number,w:number,h:number,l:number,q:Quat=Quat.IDENTITY){
+  put(x:number,y:number,z:number,w:number,h:number,l:number,q:Quat=Quat.IDENTITY,phase=0){
     if(this.count>=this.capacity)return;
     matrix.setTRS(position.set(x,y,z),q,scale.set(w,h,l));
-    this.data.set(matrix.data,this.count++*16);
+    const offset=this.count++*16;
+    this.data.set(matrix.data,offset);
+    this.data[offset+3]=phase;
   }
   flush(){
     this.model.enabled=this.count>0;
@@ -80,23 +84,29 @@ export class CombatArt {
   private cursor=0;
   private live=0;
   private readonly precipitation:Batch;
+  readonly ready:Promise<void>;
   weather=0;
   constructor(readonly world:WorldView){
     this.wingWake=new WingWake(world);
     const rain=tint('天气降水','#b8d4e6',.44,true);
     this.precipitation=new Batch(world,'近景雨雪','box',rain,66);
-    const smoke=tint('软边烟尘','#a9abb1',0);
-    const oil=tint('持续损伤黑烟','#6b625d',0);
-    const dust=tint('扬起的地表粉尘','#ad9377',0);
-    const mist=tint('海面雾滴','#bfe1e9',.5);
-    const flame=tint('火球辐照','#ff8b43',2.25,true);
+    const smoke=softSprite('软边烟尘',[1.08,1.05,1.10,.54],8);
+    const oil=softSprite('持续损伤黑烟',[.26,.23,.22,.71],8);
+    const dust=softSprite('扬起的地表粉尘',[1.05,.81,.55,.51],8);
+    const mist=softSprite('海面雾滴',[.84,1.02,1.14,.52],1);
+    const flame=softSprite('火球辐照',[3.5,2.23,1.34,.92],8,true);
+    this.ready=Promise.all([
+      world.assets.texture('surface/smoke-flipbook.webp').then(t=>{for(const m of [smoke,oil,dust])m.setParameter('spriteAtlas',t);}),
+      world.assets.texture('surface/fire-flipbook.webp').then(t=>flame.setParameter('spriteAtlas',t)),
+      world.assets.texture('surface/water.png').then(t=>mist.setParameter('spriteAtlas',t))
+    ]).then(()=>undefined);
     const ash=tint('砂岩飞溅','#a69578',0);
     const scorch=tint('烧灼残留','#2c2b2b',0);
     const flash=tint('高速白炽碎火','#ffe8ad',2.0,true);
     const shock=tint('空中折光冲击','#a2c6e3',.35,true);
-    for(const [m,file] of [[smoke,'soot.webp'],[oil,'soot.webp'],[dust,'soot.webp'],[mist,'water.png'],[flame,'combustion.webp'],[flash,'spark.webp'],[shock,'pressure.webp']] as const){
-      m.cull=CULLFACE_NONE;m.blendType=m===flame||m===flash?BLEND_ADDITIVEALPHA:BLEND_NORMAL;m.depthWrite=false;
-      m.opacity=m===flame?.84:m===mist?.62:m===shock?.48:.57;
+    for(const [m,file] of [[flash,'spark.webp'],[shock,'pressure.webp']] as const){
+      m.cull=CULLFACE_NONE;m.blendType=m===flash?BLEND_ADDITIVEALPHA:BLEND_NORMAL;m.depthWrite=false;
+      m.opacity=m===shock?.48:.75;
       void world.assets.texture('surface/'+file).then(t=>{
         m.diffuseMap=t;m.opacityMap=t;m.opacityMapChannel='a';m.emissiveMap=t;m.update();
       }).catch(()=>{});
@@ -107,6 +117,7 @@ export class CombatArt {
       dust:new Batch(world,'受击尘浪','plane',dust,44),
       mist:new Batch(world,'水花与雾','plane',mist,60),
       fire:new Batch(world,'爆炸火球','plane',flame,56),
+      flash:new Batch(world,'爆炸瞬时火光','sphere',tint('白炽火球核心','#ffc87e',3.6,true),14),
       fragment:new Batch(world,'抛出碎片','box',ash,64),
       ring:new Batch(world,'水面冲击环','torus',waterRing,15),
       scorch:new Batch(world,'地表焦痕','cylinder',scorch,22),
@@ -126,7 +137,7 @@ export class CombatArt {
   clear(){for(const p of this.particles)p.life=0;this.live=0;this.effectsClock.clear();this.wingWake.clear();}
   activeParticles(){return this.live;}
   burst(v:Vector3,n:number,kind:Effect,power=1,inherited?:Vector3,axis?:Vector3){
-    const spec=types[kind],fixed=kind==='ring'||kind==='shock'||kind==='scorch';
+    const spec=types[kind],fixed=kind==='ring'||kind==='shock'||kind==='scorch'||kind==='flash';
     const kick=axis?(kind==='sparks'?14:kind==='fragment'?7:kind==='dust'?2:0)*power:0;
     for(let i=0;i<n;i++){
       const p=this.particles[this.cursor++%this.particles.length],a=Math.random()*Math.PI*2;
@@ -171,7 +182,8 @@ export class CombatArt {
     this.emit(e,e.weapon==='gun'?strike:soft?patterns.softGround:patterns.hardGround,power);
   }
   private damaged(s:Sortie,eye:Vector3){
-    for(const a of [...s.enemies,s.ally]){
+    for(const a of [s.player,...s.enemies,s.ally]){
+      if(a===s.player&&this.world.view===1)continue;
       if(!(a.down||a.alive&&a.hp<a.maxHp*.66)||Vector3.DistanceSquared(a.position,eye)>4600**2)continue;
       const stage=a.down?1:1-a.hp/a.maxHp,key=a.id*10000+a.generation;
       if((this.effectsClock.get(key)??0)>s.time)continue;
@@ -206,13 +218,16 @@ export class CombatArt {
         }
         const q=particleRotation.setFromEulerAngles(p.spin*23+p.age*176,p.age*91,p.spin*51);
         batch.put(p.x,p.y,p.z,p.size,p.size*.18,p.size*1.4,q);
+      }else if(p.kind==='flash'){
+        const core=p.size*(.38+fraction*1.4)*(1-fraction);
+        batch.put(p.x,p.y,p.z,core,core,core);
       }else if(p.kind==='ring'||p.kind==='scorch'){
         const size=p.kind==='ring'?p.size*(1+fraction*9):p.size;
         batch.put(p.x,p.y+.06,p.z,size,p.kind==='ring'?.04+(1-fraction)*.05:.022,size);
       }else{
-        const grow=p.kind==='fire'?(.28+fraction*2.65)*(1-fraction):p.kind==='shock'?.65+fraction*6:p.kind==='sparks'?1-fraction:(.62+1.55*fraction)*Math.min(1,(1-fraction)*3.7);
+        const grow=p.kind==='fire'?(.62+fraction*2.65)*(1-fraction):p.kind==='shock'?.65+fraction*6:p.kind==='sparks'?1-fraction:(.62+1.55*fraction)*Math.min(1,(1-fraction)*3.7);
         const size=p.size*grow;
-        batch.put(p.x,p.y,p.z,size,1,size*(p.kind==='sparks'?2.25:1),rotation);
+        batch.put(p.x,p.y,p.z,size,1,size*(p.kind==='sparks'?2.25:1),rotation,p.kind==='sparks'||p.kind==='shock'?0:fraction);
       }
       live++;
     }
@@ -229,8 +244,10 @@ export class CombatArt {
       this.rounds[2].put(v.x,v.y,v.z,.44,p.kind==='bomb'&&!p.guidedGround?2.4:3.9,.44,q);
       if(p.kind==='missile'||p.guidedGround){
         const after=weaponRotation.setFromDirections(zAxis,direction);
-        const shape=p.guidedGround?0:p.profile.shape,long=shape===2?10:shape===1?5:7;
+        const shape=p.guidedGround?0:p.profile.shape;
+        const long=(shape===2?10:shape===1?5:7)*Math.min(1,p.age*7);
         this.rounds[3+shape].put(v.x-d.x*(2+long*.42),v.y-d.y*(2+long*.42),v.z-d.z*(2+long*.42),.58,.58,long,after);
+        this.rounds[3+shape].put(v.x-d.x*(2+long*.17),v.y-d.y*(2+long*.17),v.z-d.z*(2+long*.17),.28,.28,long*.34,after);
       }
     }
     for(const b of Object.values(this.batches))b.flush();

@@ -56,7 +56,7 @@ for(const [id,entry] of Object.entries(art)){
 }
 const credit=await readFile('dist/items/credits-wallet.webp');
 assert.equal(credit.subarray(8,12).toString(),'WEBP');
-for(const name of ['combustion','soot','pressure','spark']){
+for(const name of ['fire-flipbook','smoke-flipbook','lobby-mountains','pressure','spark']){
   const source=await readFile('public/surface/'+name+'.webp');
   assert.equal(source.subarray(8,12).toString(),'WEBP');
   assert(source.equals(await readFile('dist/surface/'+name+'.webp')));
@@ -68,7 +68,7 @@ for(const profile of ['airbase-atlas','day','dusk','storm','night']){
 }
 const cache=await readFile('dist/sw.js','utf8');
 const surface=await readdir('dist/surface');
-for(const name of ['dusk.hdr','flame.png','smoke.png']){
+for(const name of ['dusk.hdr','flame.png','smoke.png','combustion.webp','soot.webp']){
   assert(!surface.includes(name),'obsolete effect '+name);
   assert(!cache.includes('./surface/'+name),'obsolete effect cached '+name);
 }

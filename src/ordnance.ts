@@ -16,7 +16,7 @@ export const gunSight=(position:Vector3,forward:Vector3,out:Vector3)=>
   out.copyFrom(position).addInPlaceFromFloats(forward.x*gunZeroRange,forward.y*gunZeroRange,forward.z*gunZeroRange);
 export function gunDamage(air:PlaneSpec,power=1){return cannonFor(air)[3]*air.gunPower*power;}
 export const gunCycle=(air:PlaneSpec,rate=1)=>cannonFor(air)[0]/rate;
-export const roundCapacity=(air:PlaneSpec,level:number)=>air.ammo+Math.round(air.ammo*.10*level);
+export const roundCapacity=(air:PlaneSpec,level:number)=>air.guns.length&&!air.support?1200+120*level:0;
 export const missileCycle=(rate=1)=>.96/rate;
 export const guidedStrike={speed:835,damage:175};
 export const thrustDuration=.085;

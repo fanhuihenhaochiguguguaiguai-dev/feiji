@@ -1,4 +1,4 @@
-import { Application, Asset, BLEND_NORMAL, CULLFACE_NONE, Color, ContainerResource, DEVICETYPE_WEBGPU, Entity, EnvLighting, FOG_EXP2, Mesh, MeshInstance, SEMANTIC_POSITION, ShaderMaterial, StandardMaterial, Texture, TONEMAP_ACES, Vec2, Vec3, calculateNormals, createGraphicsDevice, meshoptInitialize } from 'playcanvas';
+import { Application, Asset, BLEND_NORMAL, CULLFACE_NONE, Color, ContainerResource, DEVICETYPE_WEBGPU, Entity, EnvLighting, FOG_EXP2, Mesh, MeshInstance, SEMANTIC_POSITION, ShaderMaterial, StandardMaterial, Texture, Vec2, Vec3, calculateNormals, createGraphicsDevice, meshoptInitialize } from 'playcanvas';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { airfield, base } from './airfield-layout';
@@ -7,10 +7,12 @@ import { Airframe } from './flight';
 import { FlightCamera } from './flight-camera';
 import { bindRockSurface } from './terrain-material';
 import { environmentSource } from './shading';
+import { configureFlightGraph } from './flight-render-graph';
 import { OceanRender } from './ocean-render';
 import { wakeCeiling } from './ocean-solver';
 import { Terrain, clamp, chunkCells, gridStep, noise, worldExtent } from './terrain';
 import type { Backend } from './profile';
+import type { Material } from 'playcanvas';
 
 export const asset=(path:string)=>new URL(path,document.baseURI).href;
 export interface OpenEngine { app:Application; canvas:HTMLCanvasElement; backend:'gpu'|'gl'; fallback:boolean }
@@ -19,7 +21,7 @@ meshoptInitialize({decoder:MeshoptDecoder});
 export async function openEngine(canvas:HTMLCanvasElement,mode:Backend):Promise<OpenEngine>{
   const device=await createGraphicsDevice(canvas,{
     deviceTypes:mode==='gl'||!navigator.gpu?['webgl2']:[DEVICETYPE_WEBGPU,'webgl2'],
-    antialias:true,alpha:false,stencil:false,powerPreference:'high-performance',
+    antialias:false,alpha:false,stencil:false,powerPreference:'high-performance',
   });
   if(device.deviceType!=='webgl2'&&!device.isWebGPU){
     device.destroy();
@@ -81,7 +83,7 @@ export function material(name:string,hex:string,metal=0,rough=.65){
   return m;
 }
 export type Primitive='plane'|'box'|'cone'|'torus'|'sphere'|'cylinder'|'capsule';
-export function primitive(parent:Entity,name:string,type:Primitive,mat:StandardMaterial,x:number,y:number,z:number,w:number,h:number,l:number){
+export function primitive(parent:Entity,name:string,type:Primitive,mat:Material,x:number,y:number,z:number,w:number,h:number,l:number){
   const e=new Entity(name);
   parent.addChild(e);e.setLocalPosition(x,y,z);e.setLocalScale(w,h,l);
   e.addComponent('render',{type,material:mat,castShadows:false});
@@ -155,6 +157,7 @@ export class WorldView {
   readonly skyMat:ShaderMaterial;
   readonly seaMat:ShaderMaterial;
   readonly seaFields:OceanRender;
+  private graph?:Awaited<ReturnType<typeof configureFlightGraph>>;
   terrain=new Terrain(theatres[0].seed);
   theme=theatres[0];
   level=.94;view=0;orbit=.72;tilt=.16;cameraReset=true;fixed=false;
@@ -203,8 +206,9 @@ export class WorldView {
     for(const sign of [-1,1])primitive(this.hangar,'滑入导向线','box',gold,sign*7.5,.013,3,.11,.017,114);
     for(let k=-60;k<=100;k+=8)primitive(this.hangar,'混凝土分仓缝','box',concreteSeam,0,.008,k,134,.008,.022);
     const cameraEntity=new Entity('主镜头');app.root.addChild(cameraEntity);
-    cameraEntity.addComponent('camera',{fov:56,nearClip:.15,farClip:100000,toneMapping:TONEMAP_ACES,clearColor:new Color(.13,.22,.31)});
+    cameraEntity.addComponent('camera',{fov:56,nearClip:.15,farClip:100000,clearColor:new Color(.13,.22,.31)});
     this.camera=new Camera(cameraEntity,canvas);
+    const graphReady=configureFlightGraph(app,cameraEntity.camera!);
     this.sun.addComponent('light',{type:'directional',color:new Color(1,.81,.62),intensity:2.3,castShadows:true,
       shadowDistance:95,shadowResolution:1024,normalOffsetBias:.045,shadowBias:.15});
     this.rim.addComponent('light',{type:'directional',color:new Color(.52,.68,.91),intensity:1.20});
@@ -232,6 +236,7 @@ export class WorldView {
     for(const a of airfield)primitive(this.field,a.kind,'box',facilities[a.kind],a.x,a.y,a.z,a.w,a.h,a.l);
     for(let z=base.near+48;z<base.far-40;z+=53)primitive(this.field,'中心线','box',marker,base.x,32.1,z,1.7,.09,23);
     this.ready=Promise.all([
+      graphReady.then(graph=>{this.graph=graph;}),
       Promise.all([this.assets.texture('studio/tarmac.webp'),this.assets.texture('studio/tarmac-orm.png'),
         this.assets.texture('studio/tarmac-normal.png'),this.assets.texture('studio/apron-light.webp')]).then(([color,detail,norm,lamps])=>{
         for(const t of [color,detail,norm])t.anisotropy=Math.min(12,app.graphicsDevice.maxAnisotropy);
@@ -253,6 +258,7 @@ export class WorldView {
         for(const part of e.findComponents('render'))part.receiveShadows=true;
       }),
       this.assets.texture('surface/dusk-panorama.webp').then(t=>this.skyMat.setParameter('deckDome',t)),
+      this.assets.texture('surface/lobby-mountains.webp').then(t=>this.skyMat.setParameter('deckMountains',t)),
       this.assets.texture('surface/cloud-density.png').then(t=>{this.skyMat.setParameter('weatherTex',t);this.seaMat.setParameter('weatherTex',t);}),
       this.assets.texture('surface/wave-field.png').then(t=>this.seaMat.setParameter('waveTex',t)),
       this.assets.texture('world/sundown-surface.png').then(t=>{this.edgeDepth=t;this.seaMat.setParameter('depthTex',t);}),
@@ -283,32 +289,24 @@ export class WorldView {
     });
   }
   private hangarExterior(){
-    const n=53;
+    const n=69,p:number[]=[],indices:number[]=[],colors:number[]=[],uv:number[]=[];
     this.ridgeMaterial.diffuseVertexColor=true;
     this.ridgeMaterial.update();
-    const heights=(x:number,z:number,layer:number)=>{
-      const local=layer?this.terrain.elevation(x*12+7210,(z-910)*10+5020):
-        this.terrain.elevation(x*13-12450,(z-180)*11-4880);
-      return Math.max(0,local-(layer?82:106));
-    };
-    for(const layer of [0,1]){
-      const p:number[]=[],indices:number[]=[],colors:number[]=[],uv:number[]=[];
-      for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-        const x=(i-26)*(layer?64:29),z=(layer?980:315)+j*(layer?48:16);
-        const verge=clamp(j/8,0,1)*clamp(Math.min(i,n-1-i)/8,0,1);
-        const ridge=heights(x,z,layer),slope=Math.hypot(heights(x+15,z,layer)-ridge,heights(x,z+15,layer)-ridge)/95;
-        const h=ridge*(layer?.050:.031)*verge-1.4;
-        p.push(x,h,z);uv.push(x/110,z/110);
-        const rock=clamp(.12+slope*.49+ridge*.00018,0,1);
-        const pale=clamp((ridge-(layer?1330:2400))/760,0,.92)*(1-clamp(slope*.24,0,.72));
-        const grain=(noise(x*.014,z*.019)-.50)*28;
-        colors.push(48+rock*71+pale*74+grain,57+rock*62+pale*68+grain,59+rock*70+pale*75+grain,255);
-      }
-      for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){
-        const a=j*n+i;indices.push(a,a+n,a+1,a+1,a+n,a+n+1);
-      }
-      meshEntity(this.entry.app,this.hangar,layer?'海雾外分水岭':'近岸岩脊',p,indices,this.ridgeMaterial,calculateNormals(p,indices),colors,uv);
+    const heights=(x:number,z:number)=>Math.max(0,this.terrain.elevation(x*13-12450,(z-180)*11-4880)-155);
+    for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+      const x=(i-34)*22,z=405+j*13;
+      const verge=clamp(j/12,0,1)*clamp(Math.min(i,n-1-i)/12,0,1);
+      const ridge=heights(x,z),slope=Math.hypot(heights(x+15,z)-ridge,heights(x,z+15)-ridge)/95;
+      const folded=noise(x*.032,z*.026)*.62+noise(x*.091,z*.088)*.38-.5;
+      p.push(x,(ridge*.020+folded*9)*verge-1.4,z);uv.push(x/48,z/48);
+      const rock=clamp(.16+slope*.55+ridge*.00017,0,1);
+      const grain=folded*37;
+      colors.push(44+rock*76+grain,54+rock*71+grain,65+rock*77+grain,255);
     }
+    for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){
+      const a=j*n+i;indices.push(a,a+n,a+1,a+1,a+n,a+n+1);
+    }
+    meshEntity(this.entry.app,this.hangar,'近岸山脊',p,indices,this.ridgeMaterial,calculateNormals(p,indices),colors,uv);
     const water=material('机场外侧海面','#46586c',.26,.37);
     primitive(this.hangar,'远处泊地','plane',water,0,-.98,420,1400,1,1000);
   }
@@ -388,6 +386,10 @@ export class WorldView {
   }
   showDeck(active:boolean){
     this.indoors=active;this.hangar.enabled=active;
+    if(this.graph&&this.graph.rendering.sceneDepthMap===active){
+      this.graph.rendering.sceneDepthMap=!active;
+      this.graph.update();
+    }
     this.seaFields.reset(active?null:this.terrain.bathymetry());
     this.terrain.extraWater=active?null:(x,z,scale)=>this.seaFields.height(x,z,scale);
     for(const node of [this.field,this.terrainRoot,this.props,this.sea,this.effects])node.enabled=!active;

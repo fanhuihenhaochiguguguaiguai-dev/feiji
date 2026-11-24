@@ -8,6 +8,23 @@
 <title>苍穹锋刃 · PIXEL SKY AFTERBURNER</title>
 <link rel="icon" href="./icon.svg">
 <link rel="manifest" href="./manifest.webmanifest">
+<style>
+#boot[hidden],#boot [hidden]{display:none!important}
+#boot{position:fixed;inset:0;display:grid;place-items:end center;z-index:30;overflow:auto;padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(17px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));background:#0b1d31;font-family:system-ui,sans-serif;text-align:center}
+.boot-art{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,transparent 24%,#08192b30 54%,#061320 100%),url('/loading/alpine.webp') center 17%/cover no-repeat}
+.boot-console{position:relative;width:min(46rem,82vw);color:#e2edf7;text-shadow:0 2px 9px #03101e;display:grid;justify-items:center;gap:clamp(8px,2.5vh,23px);margin-bottom:clamp(4px,3.2vh,44px)}
+.boot-mark{display:block;width:clamp(92px,17vw,212px);height:auto;margin:0 auto -5%;position:relative;z-index:1;filter:drop-shadow(0 5px 13px #061220)}
+.boot-title{margin:0;width:min(100%,32rem);padding:clamp(7px,1.8vh,17px) clamp(36px,7vw,86px);box-sizing:border-box;background:linear-gradient(130deg,#263c54,#0e233c 45%,#0b1c2c);border:1px solid #b89a62;box-shadow:inset 0 1px #87b8e7,inset 0 -2px #b08b4d,0 10px 38px #020d1b97;clip-path:polygon(4% 0,98% 0,100% 19%,96% 100%,2% 100%,0 83%)}
+.boot-title img{display:block;width:100%;height:auto;filter:drop-shadow(0 5px 8px #000c)}
+#boot-text{font-weight:570;letter-spacing:.12em;margin:0;font-size:clamp(.9rem,2.1vw,1.24rem)}
+.boot-track{width:100%;display:flex;align-items:center;gap:10px;padding:5px 12px;box-sizing:border-box;background:linear-gradient(#1b3348,#0b1725 60%);border:1px solid #ac9060;clip-path:polygon(4% 0,98% 0,100% 40%,96% 100%,2% 100%,0 60%);box-shadow:inset 0 1px #917241}
+#boot-progress{flex:1;min-width:0;width:100%;height:10px;appearance:none;border:0;background:#122335;color:#60dcff;display:block}
+#boot-progress::-webkit-progress-bar{background:#122335}#boot-progress::-webkit-progress-value{background:linear-gradient(180deg,#8de6ff,#1b74dd 72%,#3ebaee);box-shadow:0 0 10px #49d9ff}#boot-progress::-moz-progress-bar{background:linear-gradient(#8de6ff,#1b74dd 72%,#3ebaee)}
+#boot-percent{min-width:3.4ch;font-weight:760;color:#fff0c4;font-variant-numeric:tabular-nums;font-size:clamp(.92rem,2.5vw,1.31rem)}
+#boot-error{max-width:35em}#boot-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px}
+#boot-actions a{color:#d8eaf8;background:#112640;border:1px solid #6b9cb3;padding:8px 12px;text-decoration:none;border-radius:3px}#boot-actions a:last-child{color:#fde1ad;border-color:#be9660}
+@media(orientation:portrait){.boot-art{background-size:100% 100%,auto 56%;background-position:center,center top}.boot-console{align-self:center;transform:translateY(12vh);width:min(88vw,28rem);gap:clamp(17px,4vh,30px);margin:0}.boot-mark{width:min(38vw,162px);margin-bottom:-9%}.boot-title{padding:13px 10vw}.boot-track{margin-top:1.8vh}}
+</style>
 </head>
 <body>
 <main id="application" data-screen="loading">
@@ -63,6 +80,7 @@
     <div class="hud-middle"><b id="enemy-counter"></b><span id="flight-time"></span><small id="boss-health" hidden></small><output id="alerts" role="status"></output></div>
     <div class="hud-right">
       <button id="pause" class="square" data-icon="pause" aria-label="暂停"></button>
+      <button id="view" class="square" data-icon="view" aria-label="切换视角"></button>
       <button id="gear" class="square small-label" aria-label="起落架">起落架</button>
       <button id="radar-open" aria-label="打开战术雷达"><canvas id="radar" width="180" height="180"></canvas></button>
     </div>
@@ -81,20 +99,18 @@
     <div id="damage-bearing" aria-hidden="true" hidden></div>
     <div id="touch-guide">滑动空白区域控制飞行</div>
     <div class="flight-controls">
-      <div class="defense-controls">
-        <button id="counter" data-icon-label="deflect" aria-label="一键反导弹"><span>反制</span><b id="counter-count"></b></button>
-        <div><span id="counter-state"></span><button id="assist" aria-label="飞行辅助开关">飞行辅助</button><button id="spares" hidden>补给 <b id="spare-count"></b></button></div>
+      <div class="flight-actions">
+        <button id="counter" data-icon-label="deflect" aria-label="反导弹" aria-describedby="counter-state"><span>反导弹</span><b id="counter-count"></b></button>
+        <button id="boost" data-icon-label="boost">加速</button>
+        <button id="evade" data-icon-label="evade" aria-label="躲避，向左或向右滑动选择方向"><span>躲避</span><small id="evade-ready" hidden></small></button>
       </div>
+      <span id="counter-state" class="control-status"></span>
       <div class="power-control"><label for="power">油门 <b id="throttle"></b><em id="burn"></em></label><input type="range" id="power" min="12" max="100" value="74"></div>
     </div>
     <div class="combat-controls">
-      <button id="view" data-icon-label="view">视角</button>
-      <button id="boost" data-icon-label="boost">加力</button>
-      <button id="next-target" data-icon-label="lock">锁定</button>
-      <button id="weapon-mode" data-icon-label="switch"><small>切换</small><b id="weapon-display"></b></button>
-      <button id="bomb" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b></button>
-      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b></button>
-      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b></button>
+      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b><small id="gun-ready"></small></button>
+      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b><small id="missile-ready"></small></button>
+      <button id="bomb" class="fire" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b><small id="bomb-ready"></small></button>
     </div>
   </section>
   <dialog id="tactical" class="tactical" aria-labelledby="tactical-name">
@@ -106,7 +122,16 @@
   <dialog id="purchase-confirm" aria-labelledby="purchase-title" class="acquisition"></dialog>
   <dialog id="acquisition" aria-labelledby="acquisition-title" class="acquisition"></dialog>
   <div id="status-toast" role="status" hidden></div>
-  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><div id="boot-error" hidden></div></div></section>
+  <section id="boot" aria-label="启动状态">
+    <div class="boot-art" aria-hidden="true"></div>
+    <div class="boot-console">
+      <img class="boot-mark" src="./loading/wings.webp" alt="">
+      <h1 class="boot-title"><img src="./loading/title.webp" alt="苍穹锋刃"></h1>
+      <p id="boot-text" role="status">正在加载游戏程序</p>
+      <div class="boot-track"><progress id="boot-progress" max="100" value="0" aria-label="加载进度"></progress><span id="boot-percent" aria-hidden="true">0%</span></div>
+      <div id="boot-error" hidden></div><div id="boot-actions" hidden><a id="boot-retry" href="./">重新连接</a><a id="boot-safe" href="./?graphics=safe">WebGL2 安全模式</a></div>
+    </div>
+  </section>
   <noscript>请启用 JavaScript 后启动游戏。</noscript>
 </main>
 <script type="module" src="/src/main.ts"></script>

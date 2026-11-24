@@ -2,6 +2,14 @@ import { clamp } from './terrain';
 import type { Controls } from './flight';
 
 const resolved={pitch:0,roll:0,yaw:0,vertical:0};
+
+export function envelopePitch(request:number,nose:number,alpha:number,normalG:number,energyMargin:number){
+  if(request<=0)return request;
+  const control=1-.55*clamp((alpha-.37)/.34,0,1);
+  const load=1-.32*clamp((normalG-4.9)/1.8,0,1);
+  const reserve=clamp(.81+energyMargin*.18,.82,1);
+  return Math.min(request*control*load*reserve,(1.31-nose)*3.7,2.08);
+}
 export function flightAssist(input:Controls,up:number,right:number,bank:number,nose:number,
   verticalSpeed:number,trimSpeed:number,airborne:boolean){
   const stable=input.assist&&up>.22;

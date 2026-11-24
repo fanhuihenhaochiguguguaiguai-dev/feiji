@@ -6,16 +6,23 @@ import { el } from './interface';
 import { loadPersistentProfile } from './profile';
 import { loadTerrain } from './terrain';
 import { theatres } from './data';
+import { asset } from './renderer';
+import { deadline,startupFailure,startupStatus } from './startup';
 
 async function start(){
   let activeBackend='';
   const blocked=()=>{try{return sessionStorage.getItem('pixel-sky-webgpu-fallback')==='1';}catch{return false;}};
   try {
+    startupStatus('正在读取飞行员档案',12);
     const profile=await loadPersistentProfile();
-    const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()?'gl':profile.settings.backend);
-    activeBackend=entry.backend;
+    startupStatus('正在载入首张地貌',23);
     const initial=theatres[0];
-    await loadTerrain(initial.seed,new URL('world/'+initial.id+'.height',document.baseURI).href);
+    await deadline(loadTerrain(initial.seed,asset('world/'+initial.id+'.height')),20000,'首张地貌资产读取超时');
+    startupStatus('正在连接图形设备',36);
+    const mode=new URL(location.href).searchParams.get('graphics');
+    const entry=await openEngine(el<HTMLCanvasElement>('scene'),blocked()||mode==='safe'||mode==='compat'?'gl':profile.settings.backend);
+    activeBackend=entry.backend;
+    startupStatus('正在载入机库和战机',50);
     const game=new Game(entry,profile);
     if(__FLAGSHIP_QA__){
       const {instrument}=await import('./qa-instrumentation');
@@ -35,10 +42,7 @@ async function start(){
     if(activeBackend==='gpu'&&!blocked()){
       try {sessionStorage.setItem('pixel-sky-webgpu-fallback','1');location.reload();return;}catch{/* Report below. */}
     }
-    console.error(error);
-    el('boot-text').textContent='游戏无法启动';
-    const box=el('boot-error');box.hidden=false;
-    box.textContent='请使用支持 WebGL2 的 Chrome 或 Edge，开启图形加速后重新载入。';
+    startupFailure('机库、图形设备或地貌文件未能载入。请尝试重新连接或使用 WebGL2。',error);
   }
 }
 void start();
