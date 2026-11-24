@@ -65,7 +65,7 @@ export class Interface {
   private readonly leadPoint=new Vector3();
   private readonly focusPoint=new Vector3();
   private readonly projectionPoint=new Vector3();
-  private readonly cooldownButtons=(['counter','turn','boost','evade','missile','bomb'] satisfies CooldownAction[])
+  private readonly cooldownButtons=(['counter','boost','evade','missile','bomb'] satisfies CooldownAction[])
     .map(id=>({id,node:el(id),last:-1}));
   private targetView:{world:WorldView;w:number;h:number;radius:number;visible:boolean}|null=null;
   private readonly measureZone=(position:Vector3)=>{
@@ -545,7 +545,7 @@ export class Interface {
       '<label><input type="checkbox" data-setting="invert" '+(ctx.invert?'checked':'')+'>反转俯仰</label>'+
       '<label><input type="checkbox" data-setting="mute" '+(ctx.mute?'checked':'')+'>静音</label>'+
       '<label>滑屏灵敏度<input type="range" data-setting="sensitivity" min=".45" max="1.55" step=".05" value="'+ctx.sensitivity+'"></label><button data-export-save>导出飞行员存档</button>'+
-      '<details><summary>飞行操作</summary><p>手机在空白区域滑动转向或升降，另一根手指可同时操作武器。左侧反制键会根据威胁选择热诱饵、箔条或电子干扰。</p><p>方向键或 W/A/S/D 操纵。Q/E 偏航，R/V 调油门，Shift 加力。空格航炮，F 导弹，B 炸弹，U 掉头，J/K/L 向左/自动/向右躲避，Z 反制，G 起落架，C 切视角。</p></details></article></div>';
+      '<details><summary>飞行操作</summary><p>手机在空白区域滑动转向或升降，另一根手指可同时操作武器。左侧反制键会根据威胁选择热诱饵、箔条或电子干扰。</p><p>方向键或 W/A/S/D 操纵。Q/E 偏航，R/V 调油门，Shift 加力。空格航炮，F 导弹，B 炸弹，J/K/L 向左/自动/向右躲避，Z 反制，G 起落架，C 切视角。</p></details></article></div>';
   }
   flight(s:Sortie){
     this.presentation.clear();

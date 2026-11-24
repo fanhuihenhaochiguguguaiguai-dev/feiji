@@ -105,7 +105,7 @@ export class Game {
     this.root.addEventListener('click',event=>{
       if(this.state==='home'&&(event.target as Element).closest('button'))this.audio.play('switch');
     });
-    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['counter','counter'],['turn','turn']]){
+    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['counter','counter']]){
       const button=el(id);
       button.addEventListener('pointerdown',e=>{
         if(e.pointerType==='mouse')return;
@@ -250,8 +250,8 @@ export class Game {
       this.ui.toast(['跟随视角','第一人称座舱'][this.world.view]);this.audio.play('switch');
     }
     if(name==='counter')this.sortie.counter();
-    if(name==='turn'||name==='evade'||name==='evade-left'||name==='evade-right'){
-      this.sortie.maneuver(name==='turn'?'turn':'evade',name==='evade-left'?1:name==='evade-right'?-1:0);
+    if(name==='evade'||name==='evade-left'||name==='evade-right'){
+      this.sortie.maneuver('evade',name==='evade-left'?1:name==='evade-right'?-1:0);
     }
     if(name==='gear'){
       if(this.sortie.player.gearChange())this.ui.toast(this.sortie.player.gearTarget?'起落架放下':'起落架收起');

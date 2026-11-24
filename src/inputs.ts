@@ -66,7 +66,7 @@ export class FlightInput {
       if(e.code==='KeyF')this.missile=true;
       if(e.code==='KeyB')this.bomb=true;
       if(e.code==='ShiftLeft'||e.code==='ShiftRight')this.boost=true;
-      const commands:Record<string,string>={KeyC:'view',KeyG:'gear',KeyU:'turn',KeyZ:'counter',KeyJ:'evade-left',KeyK:'evade',KeyL:'evade-right'};
+      const commands:Record<string,string>={KeyC:'view',KeyG:'gear',KeyZ:'counter',KeyJ:'evade-left',KeyK:'evade',KeyL:'evade-right'};
       if(commands[e.code])this.action(commands[e.code]);
     });
     addEventListener('keyup',e=>this.keys.delete(e.code));addEventListener('blur',()=>this.reset(false));

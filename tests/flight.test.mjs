@@ -742,7 +742,7 @@ test('third chapter only spawns airborne targets and every reinforcement has an 
   }
 });
 
-test('banked maneuvers distinguish a short evasion from a reciprocal turn',()=>{
+test('banked evasion remains available in both directions without a dedicated turn action',()=>{
   const run=(kind,direction,frames)=>{
     const game=new Sortie(operation('free'),byAircraft('j20'),loadout,()=>{});
     game.player.reset(0,3800,2600,0);
@@ -753,8 +753,11 @@ test('banked maneuvers distinguish a short evasion from a reciprocal turn',()=>{
   };
   assert(run('evade',1,95).position.x<-10);
   assert(run('evade',-1,95).position.x>10);
-  const head=run('turn',1,520).heading();
-  assert(head>153&&head<209,head);
+  const game=new Sortie(operation('free'),byAircraft('j20'),loadout,()=>{});
+  game.player.reset(0,3800,2600,0);
+  assert.equal(game.maneuver('turn',1),false);
+  assert(!('turn' in game.readyAt));
+  assert(game.maneuver('evade',1));
 });
 
 test('high fidelity reference scale and render cadence remain deterministic',()=>{
