@@ -61,9 +61,10 @@ export class Game {
     this.root.dataset.backend=entry.backend;this.root.dataset.touch=String(small());
     this.world=new WorldView(entry);
     this.art=new CombatArt(this.world);
-    this.pilot=new AircraftView(this.world,0);
-    this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i));
-    this.support=new AircraftView(this.world,5);
+    const detached:ConstructorParameters<typeof AircraftView>[2]=(...part)=>this.art.detachPanel(...part);
+    this.pilot=new AircraftView(this.world,0,detached);
+    this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i,detached));
+    this.support=new AircraftView(this.world,5,detached);
     this.preview=byAircraft(this.p.selected);
     this.budget=new RenderBudget(this.engine.graphicsDevice,small());
     this.input=new FlightInput(entry.canvas,command=>this.action(command));
@@ -105,7 +106,7 @@ export class Game {
     this.root.addEventListener('click',event=>{
       if(this.state==='home'&&(event.target as Element).closest('button'))this.audio.play('switch');
     });
-    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['counter','counter'],['turn','turn']]){
+    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['counter','counter']]){
       const button=el(id);
       button.addEventListener('pointerdown',e=>{
         if(e.pointerType==='mouse')return;
@@ -250,8 +251,8 @@ export class Game {
       this.ui.toast(['跟随视角','第一人称座舱'][this.world.view]);this.audio.play('switch');
     }
     if(name==='counter')this.sortie.counter();
-    if(name==='turn'||name==='evade'||name==='evade-left'||name==='evade-right'){
-      this.sortie.maneuver(name==='turn'?'turn':'evade',name==='evade-left'?1:name==='evade-right'?-1:0);
+    if(name==='evade'||name==='evade-left'||name==='evade-right'){
+      this.sortie.maneuver('evade',name==='evade-left'?1:name==='evade-right'?-1:0);
     }
     if(name==='gear'){
       if(this.sortie.player.gearChange())this.ui.toast(this.sortie.player.gearTarget?'起落架放下':'起落架收起');

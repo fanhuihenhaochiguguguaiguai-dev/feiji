@@ -174,6 +174,9 @@ export class WorldView {
   level=.94;view=0;orbit=.72;tilt=.16;cameraReset=true;fixed=false;
   clouds=true;ocean=true;ground=true;
   private weather=0;
+  private cloudCover=0;
+  private airspeed=0;
+  private readonly hotAir=new Vector3();
   private lighting=0;
   private indoors=true;
   private readonly rig=new FlightCamera();
@@ -286,6 +289,7 @@ export class WorldView {
       this.assets.texture('surface/cloud-density.png').then(t=>{
         this.skyMat.setParameter('weatherTex',t);this.seaMat.setParameter('weatherTex',t);
         this.terrainMaterial.setParameter('terrainWeather',t);this.ridgeMaterial.setParameter('terrainWeather',t);
+        this.graph.pressure.setWeatherTexture(t);
       }),
       this.assets.texture('surface/wave-field.png').then(t=>this.seaMat.setParameter('waveTex',t)),
       this.assets.texture('world/sundown-surface.png').then(t=>{this.edgeDepth=t;this.seaMat.setParameter('depthTex',t);}),
@@ -360,7 +364,7 @@ export class WorldView {
       vertexGLSL:gl.vertex,fragmentGLSL:gl.fragment,vertexWGSL:gpu.vertex,fragmentWGSL:gpu.fragment});
     m.cull=CULLFACE_NONE;m.depthWrite=name==='sea';
     for(const [key,v] of Object.entries(skyVectors(this.theme)))m.setParameter(key,v);
-    for(const [key,v] of Object.entries({quality:.94,cover:0,clouds:1,exposure:1.04,clock:0,eye:this.eye,waveHeight:1}))m.setParameter(key,v);
+    for(const [key,v] of Object.entries({quality:.94,cover:0,clouds:1,exposure:1.04,clock:0,atmosphereClock:0,eye:this.eye,waveHeight:1}))m.setParameter(key,v);
     return m;
   }
   private buildSea(){
@@ -422,6 +426,7 @@ export class WorldView {
     if(!this.indoors)scene.ambientLight.set(dim?.40:.43,dim?.46:.49,dim?.55:.57);
     else scene.ambientLight.set(.32,.40,.54);
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
+    this.cloudCover=cover;
     this.terrainMaterial.setParameter('terrainCloudCover',cover);
     this.ridgeMaterial.setParameter('terrainCloudCover',-.115);
     for(const m of [this.skyMat,this.seaMat]){
@@ -466,11 +471,11 @@ export class WorldView {
     const yaw=this.orbit+(hero?.15:0)+Math.sin(t*.19)*.016;
     const aspect=this.entry.canvas.clientWidth/Math.max(1,this.entry.canvas.clientHeight);
     const fit=hero?clamp(1.91/aspect,.86,1.25):1;
-    const d=Math.max(hero?10:15,size*(hero?.92:mode==='reveal'?1.19:1.28)*fit*zoom);
+    const d=Math.max(hero?10:15,size*(hero?.99:mode==='reveal'?1.19:1.28)*fit*zoom);
     const y=plane.gearClearance||1.45;
     this.contact.setLocalScale(plane.span*.91,1,plane.length*.96);
     this.camera.position.set(Math.sin(yaw)*d,y+d*((hero?.073:.110)+this.tilt*.25),-Math.cos(yaw)*d);
-    this.look.set(hero?-1.05:0,y+(hero?.76:.43),0);
+    this.look.set(hero?1.05:0,y+(hero?.76:.43),0);
     this.camera.fov=hero?.80:.91;this.camera.minZ=.14;this.camera.setTarget(this.look);
   }
 
@@ -486,6 +491,13 @@ export class WorldView {
     this.camera.upVector.copyFrom(this.pose.upVector);
     if(this.pose.rotationQuaternion)this.camera.rotationQuaternion.copyFrom(this.pose.rotationQuaternion);
     this.camera.fov=this.pose.fov;this.camera.minZ=this.pose.minZ;this.cameraReset=false;
+    this.airspeed=plane.speed;
+    const nozzle=plane.type.engine[0],visual=pose??plane;
+    if(nozzle&&plane.alive&&this.view===0&&plane.throttle>.65){
+      const length=4+plane.boost*10;
+      this.hotAir.set(0,nozzle[1],nozzle[2]+length*.63).rotateByQuaternionToRef(visual.orientation,this.hotAir).addInPlace(visual.position);
+      this.graph.pressure.exhaust(this.hotAir,length,plane.throttle*.28+plane.boost*.52);
+    }else this.graph.pressure.exhaust(this.hotAir,0,0);
     this.followEnvironment(time,plane.velocity.x*3.5,plane.velocity.z*3.5);
   }
   private followEnvironment(time:number,leadX:number,leadZ:number){
@@ -590,7 +602,8 @@ export class WorldView {
       this.camUp.set(0,1,0).rotateByQuaternionToRef(this.camera.rotationQuaternion,this.camUp);
       this.camForward.set(0,0,-1).rotateByQuaternionToRef(this.camera.rotationQuaternion,this.camForward);
       this.graph.pressure.collect(step,p,this.camRight,this.camUp,this.camForward,this.camera.fov,
-        this.entry.canvas.width/Math.max(1,this.entry.canvas.height),this.camera.minZ,this.camera.entity.camera!.farClip);
+        this.entry.canvas.width/Math.max(1,this.entry.canvas.height),this.camera.minZ,this.camera.entity.camera!.farClip,
+        time,this.weather,this.view===1,this.cloudCover,this.clouds,this.airspeed);
       if(this.impactLamp.enabled){
         const remain=this.glowEnds-time;
         this.impactLamp.enabled=remain>0;
@@ -602,7 +615,8 @@ export class WorldView {
     this.eye.set([p.x,p.y,p.z]);
     for(const mat of [this.terrainMaterial,this.ridgeMaterial])mat.setParameter('terrainClock',ambientTime);
     for(const m of [this.skyMat,this.seaMat]){
-      m.setParameter('clock',m===this.seaMat?time:ambientTime);m.setParameter('quality',this.level);m.setParameter('clouds',this.clouds?1:0);
+      m.setParameter('clock',m===this.seaMat?time:ambientTime);m.setParameter('atmosphereClock',ambientTime);
+      m.setParameter('quality',this.level);m.setParameter('clouds',this.clouds?1:0);
     }
   }
 }

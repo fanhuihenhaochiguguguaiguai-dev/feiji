@@ -14,9 +14,9 @@ const delta=new Vector3(),local=new Vector3(),orientation=Quaternion.Identity(),
 const spreadVector=new Vector3(),leftToRight=new Vector3(),eventAt=new Vector3(),tipNow=new Vector3(),tipBefore=new Vector3(),shotStart=new Vector3(),shotEnd=new Vector3(),localStrike=new Vector3();
 const distance=(a:Vector3,b:Vector3)=>Vector3.Distance(a,b);
 
-type PlayerManeuver='turn'|'evade';
+type PlayerManeuver='evade';
 export type CooldownAction=PlayerManeuver|'boost'|'counter'|'missile'|'bomb';
-const maneuverCooldown={turn:7,evade:2.6,boost:5.2};
+const maneuverCooldown={evade:2.6,boost:5.2};
 export type ProjectileKind='gun'|'missile'|'bomb';
 export type Surface='water'|'sand'|'rock'|'soil'|'grass'|'runway'|'structure';
 export type FlightEvent={kind:'gun'|'missile'|'bomb'|'trail'|'hit'|'breakup'|'impact'|'lock'|'warn'|'wave'|'counter';at:Vector3;side:number;scale?:number;surface?:Surface;weapon?:ProjectileKind|'crash';track?:number;target?:Airframe;strike?:Vector3;terminal?:boolean;direction?:Vector3;profile?:MissileProfile;defense?:DefenseKind;cue?:DefenseCue};
@@ -98,8 +98,8 @@ export class Sortie {
   private readonly campaignRoster:readonly string[];
   private readonly thirdChapter:boolean;
   private readonly maneuverControl:Controls={...idle};
-  private activeManeuver:{kind:PlayerManeuver;sign:number;ends:number;start:number;travel:number}|null=null;
-  readonly readyAt={turn:0,evade:0,boost:0};
+  private activeManeuver:{sign:number;ends:number}|null=null;
+  readonly readyAt={evade:0,boost:0};
   private boostUntil=0;
   private boostHeld=false;
   constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void,world?:Terrain,public wreckPhysics:WreckPhysics|null=null){
@@ -252,7 +252,7 @@ export class Sortie {
     if(command.boost)command.throttle=Math.max(input.throttle,.98);
     const resolved=this.resolveManeuver(command);
     const target=this.targeting.target;
-    if(!this.targeting.inside||!target?.alive||this.activeManeuver||!input.assist||command.boost||p.grounded||
+    if(!this.targeting.inside||!target?.alive||this.activeManeuver||input.manual||!input.assist||command.boost||p.grounded||
       p.stall>.15||p.speed<p.type.stall*1.22||input.throttle<.45)return resolved;
     const activity=Math.max(Math.abs(input.pitch),Math.abs(input.roll),Math.abs(input.yaw),Math.abs(input.steering??0));
     const authority=clamp(1-activity*4,0,1);
@@ -272,27 +272,26 @@ export class Sortie {
   }
   maneuver(kind:PlayerManeuver,sign=0){
     const p=this.player,t=this.time,threat=this.warning.threat;
-    if(!this.active||this.activeManeuver||!p.alive||p.grounded||p.speed<p.type.stall*1.1||t<this.readyAt[kind])return false;
+    if(kind!=='evade'||!this.active||this.activeManeuver||!p.alive||p.grounded||p.speed<p.type.stall*1.1||t<this.readyAt.evade)return false;
     const bearing=threat?(threat.position.x-p.position.x)*-p.forward.z+(threat.position.z-p.position.z)*p.forward.x:0;
-    this.activeManeuver={kind,sign:sign||Math.sign(bearing)||1,ends:t+(kind==='turn'?5.6:.98),start:p.heading(),travel:0};
-    this.readyAt[kind]=t+maneuverCooldown[kind];
+    this.activeManeuver={sign:sign||Math.sign(bearing)||1,ends:t+.98};
+    this.readyAt.evade=t+maneuverCooldown.evade;
     return true;
   }
   private resolveManeuver(input:Controls){
     const active=this.activeManeuver;
     if(!active)return input;
-    const p=this.player,t=this.time,turn=active.kind==='turn',heading=p.heading();
-    active.travel+=(heading-active.start+540)%360-180;active.start=heading;
-    const remaining=180-Math.abs(active.travel);
-    if(t>=active.ends||Math.abs(input.roll)>.8||Math.abs(input.pitch)>.8||turn&&remaining<8){
+    const p=this.player,t=this.time;
+    const override=Math.max(Math.abs(input.roll),Math.abs(input.pitch),Math.abs(input.steering??0),Math.abs(input.yaw));
+    if(t>=active.ends||override>.75||input.manual&&override>.28){
       this.activeManeuver=null;return input;
     }
     const command=Object.assign(this.maneuverControl,input),bank=rightTilt(p);
     above.rotateByQuaternionToRef(p.orientation,local);
-    const strength=turn?clamp(remaining/42,.24,1):clamp((active.ends-t)*3.4,0,1);
+    const strength=clamp((active.ends-t)*3.4,0,1);
     const yaw=active.sign*.92*strength*clamp((p.speed/p.type.stall-1)*1.55,.25,1);
     const clearance=p.position.y-this.world.at(p.position.x+p.forward.x*220,p.position.z+p.forward.z*220,t);
-    const pitch=clamp((clearance<100?.27:turn?.04:.14)-p.forward.y*1.52,-.49,.64);
+    const pitch=clamp((clearance<100?.27:.14)-p.forward.y*1.52,-.49,.64);
     command.roll=clamp((active.sign*.66*strength-bank)*2.55,-.91,.91);
     command.yaw=clamp(yaw*local.y-pitch*bank,-1,1);
     command.pitch=clamp((yaw*bank+pitch*local.y)*p.type.yaw/p.type.pitch,-.82,.82);

@@ -14,7 +14,7 @@ export class RenderBudget {
   private refresh=1000/60;
   private elapsed=0;
   private summed=0;
-  private slowest=0;
+  private readonly slowSamples=new Float64Array(90);
   private frames=0;
   private scale=1;
   private active:Quality='auto';
@@ -28,7 +28,7 @@ export class RenderBudget {
 
   sampleFrame(now:number,interval:number,target:60|90){
     this.refresh+=(Math.min(45,interval*1000)-this.refresh)*.12;
-    if(target!==this.target||now-this.rendered>350){this.next=0;this.rendered=0;}
+    if(target!==this.target){this.next=0;this.rendered=0;}
     this.target=target;
     const cap=1000/target;
     if(this.refresh<cap-.9&&now+this.refresh*.26<this.next)return 0;
@@ -41,16 +41,23 @@ export class RenderBudget {
   apply(mode:Quality,dt:number,manualScale:number){
     const settings=preset[mode==='auto'?'high':mode];
     if(mode!==this.active){
-      this.active=mode;this.elapsed=this.summed=this.slowest=this.frames=0;this.scale=1;
+      this.active=mode;this.elapsed=this.summed=this.frames=0;this.scale=1;
     }
-    if(dt>.002&&dt<.8){
-      this.elapsed+=dt;this.summed+=dt;this.frames++;this.slowest=Math.max(this.slowest,dt);
-      if(this.elapsed>=1.1){
-        this.fps=this.frames/this.summed;this.onePercentLow=1/this.slowest;
-        const attainable=Math.min(this.target,1000/this.refresh);
-        if(this.fps<attainable*.78)this.scale=Math.max(.50,this.scale-.07);
-        else if(this.fps>attainable*.94&&this.onePercentLow>attainable*.64)this.scale=Math.min(1,this.scale+.022);
-        this.elapsed=this.summed=this.slowest=this.frames=0;
+    if(dt>.002){
+      // A suspended tab can resume with a long gap. Treat it as a new sampling window.
+      if(dt>4){
+        this.elapsed=this.summed=this.frames=0;
+      }else{
+        this.elapsed+=dt;this.summed+=dt;this.slowSamples[this.frames++]=dt;
+        if(this.elapsed>=1.25&&this.frames>=3||this.frames===this.slowSamples.length){
+          this.fps=this.frames/this.summed;
+          const ordered=this.slowSamples.slice(0,this.frames).sort();
+          this.onePercentLow=1/ordered[Math.ceil(ordered.length*.99)-1];
+          const attainable=Math.min(this.target,Math.max(40,1000/this.refresh));
+          if(this.fps<attainable*.78)this.scale=Math.max(.50,this.scale-.07);
+          else if(this.fps>attainable*.94&&this.onePercentLow>attainable*.64)this.scale=Math.min(1,this.scale+.022);
+          this.elapsed=this.summed=this.frames=0;
+        }
       }
     }
     const ratio=Math.max(1,innerWidth)/Math.max(1,innerHeight);

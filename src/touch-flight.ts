@@ -10,6 +10,7 @@ export class TouchFlightController {
   private turn=0;
   private pitch=0;
   readonly axis={heading:0,pitch:0};
+  get engaged(){return this.pointer!==null&&this.distance>=2.4;}
   constructor(readonly surface:HTMLCanvasElement,readonly flying:()=>boolean){
     surface.addEventListener('pointerdown',e=>{
       if(!flying()||this.pointer!==null||e.pointerType==='mouse')return;
@@ -42,7 +43,7 @@ export class TouchFlightController {
   }
   read(dt:number,sensitivity:number){
     const scale=Math.max(138,Math.min(this.surface.clientWidth,this.surface.clientHeight));
-    const drag=Math.exp(-dt*(this.pointer===null?7.35:4.38));
+    const drag=Math.exp(-dt*(this.pointer===null?9.4:4.38));
     this.turn=clamp(this.turn*drag-this.pendingX*5.16*sensitivity/scale,-1.42,1.42);
     const pitchDecay=Math.exp(-dt*(this.pointer===null?5.25:3.90));
     this.pitch=clamp(this.pitch*pitchDecay-this.pendingY*4.82*sensitivity/scale,-2.15,2.15);

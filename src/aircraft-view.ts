@@ -1,4 +1,4 @@
-import { ADDRESS_CLAMP_TO_EDGE, Color, Entity, FILTER_LINEAR, PIXELFORMAT_RGBA8, Quat, StandardMaterial, Texture, Vec3, type ContainerResource, type AnimTrack } from 'playcanvas';
+import { ADDRESS_CLAMP_TO_EDGE, BLEND_ADDITIVEALPHA, Color, Entity, FILTER_LINEAR, PIXELFORMAT_RGBA8, Quat, StandardMaterial, Texture, Vec3, type ContainerResource, type AnimTrack, type MeshInstance } from 'playcanvas';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { PlaneSpec } from './data';
 import { Airframe, FlightPose, above } from './flight';
@@ -8,6 +8,8 @@ import { groundMount } from './items';
 import { calibrateAircraft,finishAirframe,type AirframeFinish } from './aircraft-materials';
 import { material, primitive, type WorldView } from './renderer';
 import { targetPixels } from './screen-scale';
+import { missileCycle } from './ordnance';
+import { AircraftLod, configureLodMaterial, screenLod } from './aircraft-lod';
 
 const zero=new Vec3();
 const tones=['#f0b77f','#f09251','#90e0fa','#c9ac68','#d2a550'];
@@ -36,7 +38,10 @@ export class AircraftView {
   private readonly center=new Vec3();
   private readonly projectedCenter=new Vec3();
   readonly anchor=new Vector3();
-  lod=0;
+  get lod(){return this.lodTransition.current;}
+  private readonly lodTransition=new AircraftLod();
+  private lodGroups:{node:Entity;instances:MeshInstance[];gate:number;entering:boolean}[]=[];
+  private readonly lodMaterials=new Map<StandardMaterial,StandardMaterial>();
   private visualScale=1;
   private visualTime=-1;
   private visualGeneration=-1;
@@ -49,6 +54,7 @@ export class AircraftView {
   private low:Entity|null=null;
   private cockpit:Entity|null=null;
   private animated:Entity[]=[];
+  private ailerons:Entity[]=[];
   private readonly gears:{node:Entity;stowed:Quat;down:Quat}[]=[];
   private readonly gearPose=new Quat();
   private stand:Airframe|null=null;
@@ -65,14 +71,15 @@ export class AircraftView {
   private nextInstrument=0;
   private readonly damageMarks:Entity[]=[];
   private markCursor=0;
+  private readonly lostControls=new Set<Entity>();
   private markGeneration=-1;
   private readonly surfaceHit=new Vector3();
   private readonly hullInverse=new Quaternion();
   private readonly markRotation=new Quat();
-  constructor(readonly world:WorldView,readonly slot:number){
+  constructor(readonly world:WorldView,readonly slot:number,private readonly detach:(at:Vec3,orientation:Quat,velocity:Vector3,size:number,side:number)=>void){
     (slot===0?world.entry.app.root:world.vehicles).addChild(this.pivot);
-    const fire=material('高温喷焰外层','#bd6942',0,.5);fire.useLighting=false;fire.emissive.set(1.78,.44,.15);fire.update();
-    const core=material('喷焰白炽核心','#e1b7ff',0,.4);core.useLighting=false;core.emissive.set(2.8,1.53,2.85);core.update();
+    const fire=material('高温喷焰外层','#bd6942',0,.5);fire.useLighting=false;fire.emissive.set(1.26,.30,.10);fire.blendType=BLEND_ADDITIVEALPHA;fire.opacity=.60;fire.depthWrite=false;fire.update();
+    const core=material('喷焰白炽核心','#e1b7ff',0,.4);core.useLighting=false;core.emissive.set(2.16,1.37,1.90);core.blendType=BLEND_ADDITIVEALPHA;core.opacity=.78;core.depthWrite=false;core.update();
     this.rotors=Array.from({length:4},()=>{
       const plume=new Entity('加力喷口');this.pivot.addChild(plume);
       primitive(plume,'扩散喷焰','cone',fire,0,0,0,1,1,1);
@@ -96,6 +103,9 @@ export class AircraftView {
     const high=group('Exterior'),combat=group('Combat'),low=group('LOD'),cockpit=group('Cockpit');
     if(!high||!combat||!low){root.destroy();throw new Error('机型 LOD 缺失 '+spec.id);}
     this.root?.destroy();
+    this.lostControls.clear();
+    for(const material of this.lodMaterials.values())material.destroy();
+    this.lodMaterials.clear();
     for(const mark of this.damageMarks)mark.enabled=false;this.markGeneration=-1;
     for(const {material} of this.paints.values())material.destroy();
     for(const g of this.gauges){g.texture.destroy();g.material.destroy();}
@@ -107,7 +117,8 @@ export class AircraftView {
       if(bounds)bounds.add(mesh.aabb);else bounds=mesh.aabb.clone();
     }
     this.center.copy(bounds?.center??zero);
-    this.lod=0;
+    this.lodTransition.update(0,0,true);
+    this.lodGroups=[high,combat,low].map(node=>({node,instances:node.findComponents('render').flatMap(render=>render.meshInstances),gate:0,entering:false}));
     this.pivot.addChild(root);
     for(const mesh of root.findComponents('render')){
       mesh.castShadows=this.slot===0;
@@ -126,6 +137,16 @@ export class AircraftView {
         }
       }
     }
+    if(this.slot>0)for(const {instances} of this.lodGroups)for(const instance of instances){
+      const source=instance.material;
+      if(!(source instanceof StandardMaterial))continue;
+      let clone=this.lodMaterials.get(source);
+      if(!clone){
+        clone=source.clone();configureLodMaterial(clone);
+        this.lodMaterials.set(source,clone);
+      }
+      instance.material=clone;
+    }
     const displayNames=/^(Display_|Gauge_)/;
     if(cockpit){
       cockpit.setLocalPosition(spec.eye[0],spec.eye[1],spec.eye[2]);
@@ -133,6 +154,7 @@ export class AircraftView {
       if(this.slot===0)for(const display of cockpit.find(n=>displayNames.test(n.name)) as Entity[])this.instrument(display);
     }
     this.animated=high.find(n=>/^(Aileron|Elevator|Canard|Rudder\d|Gear_|Prop_|Bay_|Store_|RadarSpin)/.test(n.name)) as Entity[];
+    this.ailerons=this.animated.filter(node=>node.name.startsWith('Aileron'));
     for(const n of this.animated)this.originalPoses.set(n,n.getLocalEulerAngles().clone());
     this.gears.length=0;
     for(const {resource:clip} of (resource.animations as {resource:AnimTrack}[]|undefined)??[]){
@@ -166,6 +188,7 @@ export class AircraftView {
   }
   dispose(){
     for(const {material} of this.paints.values())material.destroy();
+    for(const material of this.lodMaterials.values())material.destroy();
     for(const g of this.gauges){g.texture.destroy();g.material.destroy();}
     this.pivot.destroy();
   }
@@ -186,7 +209,7 @@ export class AircraftView {
 
     const range=Vector3.Distance(at,this.world.camera.position);
     const height=this.world.entry.canvas.clientHeight;
-    const camera=this.world.camera.position,drawable=Math.max(p.type.span,p.type.length);
+    const camera=this.world.camera.position;
     const viewScale=height/(2*Math.max(1,range)*Math.tan(this.world.camera.fov*.5));
     this.projectedCenter.set(camera.x-at.x,camera.y-at.y,camera.z-at.z).normalize();
     const axial=Math.abs(this.projectedCenter.x*this.pose.forward.x+this.projectedCenter.y*this.pose.forward.y+this.projectedCenter.z*this.pose.forward.z);
@@ -195,19 +218,31 @@ export class AircraftView {
     const covered=enemy&&this.world.terrain.terrainMasks(camera.x,camera.y,camera.z,at.x,at.y,at.z);
     const scale=enemy&&!covered&&range>45?Math.max(1,targetPixels(range,height)/Math.max(1,projected*viewScale)):1;
     const elapsed=Math.max(0,Math.min(.19,time-this.visualTime));
-    if(p.generation!==this.visualGeneration||!enemy||covered)this.visualScale=scale;
+    const generationChanged=p.generation!==this.visualGeneration;
+    if(generationChanged)this.lostControls.clear();
+    if(generationChanged||!enemy||covered)this.visualScale=scale;
     else this.visualScale+=(scale-this.visualScale)*(1-Math.exp(-elapsed*13));
     this.visualGeneration=p.generation;this.visualTime=time;
     this.pivot.setLocalScale(this.visualScale,this.visualScale,this.visualScale);
     this.pivot.getWorldTransform().transformPoint(this.center,this.projectedCenter);
     this.anchor.set(this.projectedCenter.x,this.projectedCenter.y,this.projectedCenter.z);
-    const pixels=drawable*viewScale*this.visualScale;
-    const exterior=range<220&&(pixels>(this.lod===0?52:66));
-    const combat=pixels>(this.lod===1?23:29)&&range<1800;
-    this.lod=preview||this.slot===0||exterior?0:combat?1:2;
+    const physicalPixels=projected*viewScale*360/Math.max(1,height);
+    const desired=preview||this.slot===0?0:screenLod(physicalPixels*this.visualScale,physicalPixels,this.lod);
+    this.lodTransition.update(desired,elapsed,generationChanged||covered||inside||preview);
+    const {current,incoming,progress}=this.lodTransition;
     if(covered)this.pivot.enabled=false;
-    const high=this.lod===0,mid=this.lod===1;
-    this.high.enabled=high&&!inside;this.combat.enabled=mid&&!inside;this.low.enabled=!high&&!mid&&!inside;
+    const high=current===0||progress<1&&incoming===0;
+    for(const [level,group] of this.lodGroups.entries()){
+      const entering=progress<1&&level===incoming;
+      group.node.enabled=!inside&&(level===current||entering);
+      const gate=progress===1?0:progress;
+      if(this.slot===0||!group.node.enabled||group.gate===gate&&group.entering===entering)continue;
+      group.gate=gate;group.entering=entering;
+      for(const instance of group.instances){
+        instance.setParameter('lodCut',gate);
+        instance.setParameter('lodIn',entering?1:0);
+      }
+    }
     if(this.cockpit)this.cockpit.enabled=inside;
     if(this.markGeneration!==p.generation){
       this.markGeneration=-1;this.markCursor=0;
@@ -219,7 +254,11 @@ export class AircraftView {
     if(paint!==this.oldPaint||Math.abs(wear-this.lastDamage)>.04){
       this.oldPaint=paint;this.lastDamage=wear;
       const tint=paint?new Color().fromString(paint):null;
-      for(const surface of this.paints.values())finishAirframe(surface,tint,wear);
+      for(const surface of this.paints.values()){
+        finishAirframe(surface,tint,wear);
+        const fade=this.lodMaterials.get(surface.material);
+        if(fade){fade.diffuse.copy(surface.material.diffuse);fade.clearCoat=surface.material.clearCoat;fade.gloss=surface.material.gloss;fade.update();}
+      }
     }
     if(this.slot===0&&style!==this.style){
       this.style=style;
@@ -238,12 +277,21 @@ export class AircraftView {
       }
       const [x,y,z]=groundMount(p.type);this.payload.setLocalPosition(x,y,z);this.payload.enabled=true;
     }else if(this.payload)this.payload.enabled=false;
+    if(!preview&&!inside&&range<480&&(p.down>1.07||Math.max(p.damage.left,p.damage.right)>.65)){
+      for(const node of this.ailerons){
+        const left=node.name.endsWith('L'),damage=left?p.damage.left:p.damage.right;
+        const separates=p.down>1.07&&(left?p.damage.left>=p.damage.right:p.damage.right>p.damage.left);
+        if(this.lostControls.has(node)||damage<=.65&&!separates)continue;
+        this.lostControls.add(node);
+        this.detach(node.getPosition(),node.getRotation(),p.velocity,p.type.span*.205,left?-1:1);
+      }
+    }
     if(high)for(const g of this.gears)g.node.setLocalRotation(this.gearPose.slerp(g.stowed,g.down,p.gear));
     if(high)for(const node of this.animated){
       const n=node.name,pose=this.originalPoses.get(node)??zero;
       if(n.startsWith('Aileron')){
         const left=n.endsWith('L'),integrity=1-(left?p.damage.left:p.damage.right);
-        node.enabled=!(p.down>1.12&&integrity<.33);
+        node.enabled=!this.lostControls.has(node);
         node.setLocalEulerAngles(pose.x+p.controls.roll*(left?21:-21)*integrity,pose.y,pose.z);
       }
       else if(n.startsWith('Elevator')||n.startsWith('Canard'))node.setLocalEulerAngles(pose.x+p.controls.pitch*20,pose.y,pose.z);
@@ -251,7 +299,7 @@ export class AircraftView {
       else if(n.startsWith('Prop_'))node.setLocalEulerAngles(pose.x,pose.y,pose.z+time*(390+p.throttle*8050));
       else if(/^Store_\d+$/.test(n))node.enabled=p.side===0?(preview||!sortie||sortie.time>=p.missileAt-.32):p.missiles>Number(n.slice(6));
       else if(n.startsWith('Bay_')&&sortie){
-        const fromMissile=sortie.time-p.missileAt+1.05;
+        const fromMissile=sortie.time-p.missileAt+missileCycle();
         const fromGround=sortie.time-p.bombAt+(sortie.groundWeapon==='shorebolt'?1.45:.61);
         const t=Math.min(fromMissile>=0?fromMissile:1,fromGround>=0?fromGround:1);
         node.setLocalEulerAngles(pose.x,pose.y,pose.z+(t>0&&t<.59?Math.sin(t/.59*Math.PI)*43*Math.sign(node.getLocalPosition().x):0));
@@ -300,7 +348,7 @@ export class AircraftView {
         }
       }else{
         c.fillText('SPD '+Math.round(p.speed*3.6),12,29);c.fillText('ALT '+Math.round(p.position.y),12,53);
-        c.fillText('THR '+Math.round(p.throttle*100)+'%',12,77);c.fillText('MSL '+p.missiles,12,101);
+        c.fillText('THR '+Math.round(p.throttle*100)+'%',12,77);c.fillText(s.weapons.includes('missile')?'MSL AUTO':'MSL SAFE',12,101);
       }
       g.texture.upload();
     }

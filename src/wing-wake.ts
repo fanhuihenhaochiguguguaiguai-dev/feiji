@@ -3,10 +3,11 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { FlightPose } from './flight';
 import type { WorldView } from './renderer';
 import type { Sortie } from './sortie';
+import { highContrail, humidityFor, machFor } from './aero-vapor';
 
 const samples=34;
 const lanes=3;
-const lifetime=1.08;
+
 
 export class WingWake {
   private readonly history=new Float32Array(samples*7);
@@ -19,6 +20,7 @@ export class WingWake {
   private head=0;
   private used=0;
   private time=-1;
+  private lasting=false;
 
   constructor(world:WorldView){
     this.mesh=new Mesh(world.entry.app.graphicsDevice);
@@ -51,21 +53,24 @@ export class WingWake {
     this.entity.enabled=false;
   }
 
-  clear(){this.head=this.used=0;this.time=-1;this.entity.enabled=false;}
+  clear(){this.head=this.used=0;this.time=-1;this.lasting=false;this.entity.enabled=false;}
 
   update(s:Sortie,pose:FlightPose,eye:Vector3,step:number,show:boolean,weather:number){
     const p=s.player,time=s.time;
     if(!p.alive){this.clear();return;}
-    const mach=p.speed/Math.max(300,340-p.position.y*.0024);
-    const moisture=[.72,.46,.79,.94,1,.64,.83,.59][weather]??.65;
-    const maneuver=Math.max(0,Math.abs(p.loadG)-1.06)*.24+Math.min(.8,Math.abs(p.alpha)*1.47);
-    const cold=Math.min(1,Math.max(0,(p.position.y-1900)/5500));
-    const strength=Math.max(0,Math.min(1,(mach*.39+maneuver+p.boost*.29)*moisture+cold*.4));
-    if(step>0&&time-this.time>=.035){
+    const mach=machFor(p),moisture=humidityFor(weather),ice=highContrail(p);
+    const maneuver=Math.max(0,Math.abs(p.loadG)-1.1)*.28+Math.abs(p.alpha)*1.47;
+    const strength=Math.min(1,Math.max(ice*.84,(maneuver+(mach-.60)*.27)*moisture));
+    const contrail=ice>(this.lasting?.20:.38),lifetime=contrail?4.7:1.08;
+    if(contrail!==this.lasting){this.used=0;this.time=-1;this.lasting=contrail;}
+    if(step>0&&time-this.time>=(contrail?.145:.035)){
       const cell=this.head*7;
       this.history[cell]=time;
       for(let side=0;side<2;side++){
-        this.tip.set((side?1:-1)*p.type.span*.478,.018,p.type.length*.115).rotateByQuaternionToRef(pose.orientation,this.tip);
+        const nozzle=contrail?p.type.engine[Math.min(side,p.type.engine.length-1)]:null;
+        if(nozzle)this.tip.set(nozzle[0]+(p.type.engine.length===1?(side?1:-1)*.35:0),nozzle[1],nozzle[2]+1.8);
+        else this.tip.set((side?1:-1)*p.type.span*.478,.018,p.type.length*.115);
+        this.tip.rotateByQuaternionToRef(pose.orientation,this.tip);
         this.tip.addInPlace(pose.position);
         this.tip.toArray(this.history,cell+1+side*3);
       }
@@ -85,13 +90,13 @@ export class WingWake {
       const vx=eye.x-x,vy=eye.y-y,vz=eye.z-z;
       const nx=dy*vz-dz*vy,ny=dz*vx-dx*vz,nz=dx*vy-dy*vx;
       const elapsed=time-this.history[offset];
-      const halfWidth=(.23+Math.min(lifetime,elapsed)*.64)*Math.max(.66,p.type.span/12)/Math.max(.001,Math.hypot(nx,ny,nz));
+      const halfWidth=(.17+Math.min(lifetime,elapsed)*(contrail?.93:.58))*Math.max(.66,p.type.span/12)/Math.max(.001,Math.hypot(nx,ny,nz));
       const opacity=i>=this.used?0:Math.round(210*strength*Math.max(0,1-elapsed/lifetime)**1.65);
       for(let lane=0;lane<lanes;lane++){
         const vertex=(side*samples+i)*lanes+lane,across=(lane-1)*halfWidth;
-        this.vertices[vertex*3]=x+nx*across;
+        this.vertices[vertex*3]=x+nx*across+elapsed*(contrail?3.9:1.6);
         this.vertices[vertex*3+1]=y+ny*across;
-        this.vertices[vertex*3+2]=z+nz*across;
+        this.vertices[vertex*3+2]=z+nz*across+elapsed*1.1;
         this.colors[vertex*4+3]=lane===1?opacity:0;
       }
     }

@@ -136,6 +136,8 @@ export class Terrain {
     return 1.01;
   }
   terrainMasks(ax:number,ay:number,az:number,bx:number,by:number,bz:number){
+    // Include the micro-tile residual above the general terrain ceiling.
+    if(Math.min(ay,by)>this.flightCeiling+40)return false;
     const x=bx-ax,z=bz-az,y=by-ay;
     const steps=clamp(Math.ceil(Math.hypot(x,z)/52),4,128);
     for(let q=1;q<steps;q++){

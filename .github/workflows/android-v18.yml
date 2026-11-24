@@ -28,6 +28,9 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:assets
       - run: npm run build
       - name: Prepare Android wrapper
         run: |
