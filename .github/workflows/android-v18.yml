@@ -70,7 +70,12 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          sed -i 's/networkTimeout=10000/networkTimeout=120000/;s/8.11.1-all.zip/8.11.1-bin.zip/' gradle/wrapper/gradle-wrapper.properties
+          for attempt in 1 2 3; do
+            if ./gradlew --no-daemon assembleDebug; then exit 0; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 5
+          done
       - name: Verify APK signature and archive
         run: |
           mkdir output
