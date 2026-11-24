@@ -86,6 +86,8 @@ export class FlightInput {
     r.yaw=clamp(axes('KeyQ','KeyE')+r.steering*.89,-1,1);
     const delta=axes('KeyR','KeyV');
     if(delta){this.throttle=clamp(this.throttle+delta*dt*.57,.12,1);this.slider.value=String(Math.round(this.throttle*100));}
+    r.manual=this.touch.engaged||axes('KeyS','KeyW')!==0||axes('ArrowDown','ArrowUp')!==0||
+      r.roll!==0||axes('KeyQ','KeyE')!==0;
     r.throttle=this.throttle;r.assist=true;
     r.boost=this.boost;
     r.gun=this.gun||this.keys.has('Space');

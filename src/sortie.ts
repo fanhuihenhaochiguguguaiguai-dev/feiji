@@ -252,7 +252,7 @@ export class Sortie {
     if(command.boost)command.throttle=Math.max(input.throttle,.98);
     const resolved=this.resolveManeuver(command);
     const target=this.targeting.target;
-    if(!this.targeting.inside||!target?.alive||this.activeManeuver||!input.assist||command.boost||p.grounded||
+    if(!this.targeting.inside||!target?.alive||this.activeManeuver||input.manual||!input.assist||command.boost||p.grounded||
       p.stall>.15||p.speed<p.type.stall*1.22||input.throttle<.45)return resolved;
     const activity=Math.max(Math.abs(input.pitch),Math.abs(input.roll),Math.abs(input.yaw),Math.abs(input.steering??0));
     const authority=clamp(1-activity*4,0,1);
@@ -282,7 +282,8 @@ export class Sortie {
     const active=this.activeManeuver;
     if(!active)return input;
     const p=this.player,t=this.time;
-    if(t>=active.ends||Math.abs(input.roll)>.8||Math.abs(input.pitch)>.8){
+    const override=Math.max(Math.abs(input.roll),Math.abs(input.pitch),Math.abs(input.steering??0),Math.abs(input.yaw));
+    if(t>=active.ends||override>.75||input.manual&&override>.28){
       this.activeManeuver=null;return input;
     }
     const command=Object.assign(this.maneuverControl,input),bank=rightTilt(p);

@@ -61,9 +61,10 @@ export class Game {
     this.root.dataset.backend=entry.backend;this.root.dataset.touch=String(small());
     this.world=new WorldView(entry);
     this.art=new CombatArt(this.world);
-    this.pilot=new AircraftView(this.world,0);
-    this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i));
-    this.support=new AircraftView(this.world,5);
+    const detached:ConstructorParameters<typeof AircraftView>[2]=(...part)=>this.art.detachPanel(...part);
+    this.pilot=new AircraftView(this.world,0,detached);
+    this.foes=[1,2,3,4].map(i=>new AircraftView(this.world,i,detached));
+    this.support=new AircraftView(this.world,5,detached);
     this.preview=byAircraft(this.p.selected);
     this.budget=new RenderBudget(this.engine.graphicsDevice,small());
     this.input=new FlightInput(entry.canvas,command=>this.action(command));

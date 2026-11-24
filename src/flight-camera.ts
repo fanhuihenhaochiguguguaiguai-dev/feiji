@@ -38,7 +38,7 @@ export class FlightCamera {
     const level=this.levelForward,trail=Math.max(.43,horizontal);
     const shock=reset?0:Math.max(0,1-(time-plane.hitTime)*5)*plane.hitIntensity;
     const manual=Math.max(Math.abs(plane.controls.pitch),Math.abs(plane.controls.roll),Math.abs(plane.controls.yaw));
-    const tracking=target?.alive&&!plane.grounded&&!plane.controls.boost?clamp(1-manual*1.8,0,1):0;
+    const tracking=target?.alive&&!plane.controls.manual&&!plane.grounded&&!plane.controls.boost?clamp(1-manual*1.8,0,1):0;
     const offset=tracking*clamp(span*.091,.52,1.3);
     this.shoulder=reset?offset:this.shoulder+(offset-this.shoulder)*(1-Math.exp(-dt*3.4));
     this.goal.set(p.x-level.x*trail*dist-level.z*this.shoulder,p.y-normal.y*dist*.77+ride,p.z-level.z*trail*dist+level.x*this.shoulder);

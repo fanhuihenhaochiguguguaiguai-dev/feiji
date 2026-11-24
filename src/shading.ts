@@ -1,7 +1,7 @@
 import { waves } from './wave-field';
 import { heightPerByte, oceanSize, swellPeriod, wakeExtent } from './ocean-solver';
 
-const shared=['eye','sunDir','horizon','zenith','sunColor','sea','clock','cover','cloudBase','quality','clouds','exposure','waveHeight'] as const;
+const shared=['eye','sunDir','horizon','zenith','sunColor','sea','clock','cover','atmosphereClock','cloudBase','quality','clouds','exposure','waveHeight'] as const;
 const vectorNames=new Set(['eye','sunDir','horizon','zenith','sunColor','sea']);
 
 export function environmentSource(gpu:boolean,ocean:boolean){
@@ -97,13 +97,8 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     }
     return ${v4}(result,optical);
   `);
-  const skyBody=`
-    ${let_('dir',v3,'normalize(coords-eye)')}
-    if(cloudBase<600.){
-      ${let_('heading',f,gpu?'atan2(dir.z,dir.x)':'atan(dir.z,dir.x)')}
-      ${let_('panorama',v2,`${v2}(fract(heading*.159154943+1.),.5-asin(clamp(dir.y,-1.,1.))*.318309886)`)}
-      return ${v4}(pow(${sample('deckDome','panorama')}.rgb,${v3}(2.2)),1.);
-    }
+  const atmosphere=fn('atmosphereLight',[['dir',v3],['eye',v3],['sunDir',v3],['horizon',v3],['zenith',v3],['sunColor',v3],
+    ['clock',f],['cover',f],['cloudBase',f],['quality',f],['clouds',f]],v3,`
     ${let_('height',f,'dir.y')}
     ${let_('toward',f,'clamp(dot(dir,sunDir),0.,1.)')}
     ${let_('lit',v3,'airRadiance(dir,sunDir,horizon,zenith,sunColor)',true)}
@@ -120,7 +115,16 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     if(clouds>.5){volume=cloudVolume(dir,eye,sunDir,sunColor,clock,cover,cloudBase,quality);}
     lit+=sunColor*sunColor*(disk*3.2);
     lit=lit*(1.-volume.a)+volume.rgb;
-    return ${v4}(lit*exposure,1.);
+    return lit;
+  `);
+  const skyBody=`
+    ${let_('dir',v3,'normalize(coords-eye)')}
+    if(cloudBase<600.){
+      ${let_('heading',f,gpu?'atan2(dir.z,dir.x)':'atan(dir.z,dir.x)')}
+      ${let_('panorama',v2,`${v2}(fract(heading*.159154943+1.),.5-asin(clamp(dir.y,-1.,1.))*.318309886)`)}
+      return ${v4}(pow(${sample('deckDome','panorama')}.rgb,${v3}(2.2)),1.);
+    }
+    return ${v4}(atmosphereLight(dir,eye,sunDir,horizon,zenith,sunColor,clock,cover,cloudBase,quality,clouds)*exposure,1.);
   `;
   const slope=waves.map((w,i)=>
     let_('wave'+i,f,`cos(dot(p,${v2}(${num(w.x)},${num(w.z)}))-clock*${w.rate})`)+
@@ -177,7 +181,12 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     ${let_('airWash',f,`${u('washTrack')}.x*exp(-max(0.,clock-${u('washTrack')}.y)*2.1)*smoothstep(.3,2.6,depth)*rippleFade*(pressureRings*.78*brokenCrests+slipstream*.73)`)}
     ${let_('foamLit',v3,`water+${v3}(.48,.70,.84)*(wakeFoam*.88+airWash*.67)+${v3}(.30,.43,.50)*spectrum.g*detail*.24`)}
     ${let_('veil',f,'(1.-exp(-range*.000043))*(1.-smoothstep(400.,4900.,eye.y)*.38)')}
-    return ${v4}(mix(foamLit,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil)*exposure,1.);
+    ${let_('coast',v3,'mix(foamLit,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil)',true)}
+    if(range>24700.){
+      ${let_('air',v3,'atmosphereLight(-view,eye,sunDir,horizon,zenith,sunColor,atmosphereClock,cover,cloudBase,quality,clouds)')}
+      coast=mix(coast,air,smoothstep(24700.,52000.,range));
+    }
+    return ${v4}(coast*exposure,1.);
   `;
   const args:[string,string][]=[['coords',v3],...shared.map(n=>[n,type(n)] as [string,string])];
   const shade=fn('renderWorld',args,v4,ocean?seaBody:skyBody);
@@ -185,5 +194,5 @@ export function environmentSource(gpu:boolean,ocean:boolean){
   const head=gpu?'varying vWorld:'+v3+';\n':'precision highp float;varying vec3 vWorld;';
   const main=gpu?`@fragment fn fragmentMain(input:FragmentInput)->FragmentOutput{var output:FragmentOutput;output.color=renderWorld(${params});return output;}`:
     `void main(){gl_FragColor=renderWorld(${params});}`;
-  return {vertex,fragment:head+declarations+floatHead+sky+(ocean?'':cloud)+shade+main,samplers};
+  return {vertex,fragment:head+declarations+floatHead+sky+cloud+atmosphere+shade+main,samplers};
 }

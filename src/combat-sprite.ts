@@ -27,7 +27,8 @@ function vertex(gpu:boolean){
     attribute vec3 position;
     attribute vec2 uv;
     attribute vec4 basisX,basisY,basisZ,translation;
-    uniform mat4 matrix_view,matrix_viewProjection;
+    uniform mat4 matrix_view;
+    uniform mat4 matrix_viewProjection;
     varying vec2 spriteUv,spriteData;
     void main(){
       vec4 world=mat4(vec4(basisX.xyz,0.),basisY,basisZ,translation)*vec4(position,1.);
@@ -45,8 +46,6 @@ function shading(gpu:boolean){
   const sample=(frame:string)=>gpu?`textureSample(spriteFrames,spriteFramesSampler,frameUv(${uv},${frame}))`:
     `texture2D(spriteFrames,frameUv(${uv},${frame}))`;
   return `
-    #define SCENE_DEPTHMAP_LINEAR
-    #define SCENE_DEPTHMAP_RECIPROCAL
     #include "screenDepthPS"
     ${gpu?`var spriteFrames:texture_2d<f32>;
       var spriteFramesSampler:sampler;

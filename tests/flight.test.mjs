@@ -13,6 +13,8 @@ const {outputFiles}=await build({stdin:{
     export { mapRadar } from './src/tactical-radar';
     export { OceanSpectrum, ShallowWake, oceanSize } from './src/ocean-solver';
     export { Terrain,registerTerrain,gridSize,chunkCells } from './src/terrain';
+    export { AircraftLod,screenLod } from './src/aircraft-lod';
+    export { TouchFlightController } from './src/touch-flight';
     export { targetPixels } from './src/screen-scale';
     export { TargetDirector,lockRadius } from './src/targeting';
     export { RenderBudget } from './src/render-budget';
@@ -21,7 +23,7 @@ const {outputFiles}=await build({stdin:{
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
 const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
-  Terrain, registerTerrain,gridSize,chunkCells,targetPixels,TargetDirector,lockRadius,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+  Terrain, registerTerrain,gridSize,chunkCells,targetPixels,AircraftLod,screenLod,TouchFlightController,TargetDirector,lockRadius,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=gunzipSync(await readFile('public/world/'+id+'.height'));
   registerTerrain(seed,b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));
@@ -823,4 +825,70 @@ test('cooldown masks use accepted actions and keep the original weapon firing in
   assert(game.cooldown('evade')<1);
   game.time=game.readyAt.boost+1;
   for(const id of ['missile','boost','evade'])assert.equal(game.cooldown(id),0);
+});
+
+test('screen LOD has a neutral range and can reverse a complementary fade without a jump',()=>{
+  assert.equal(screenLod(65,37,0),0);
+  assert.equal(screenLod(65,37,1),1);
+  assert.equal(screenLod(28,9,1),1);
+  assert.equal(screenLod(28,9,2),2);
+  const fade=new AircraftLod();
+  fade.update(0,0,true);
+  fade.update(1,.055,false);
+  assert.deepEqual([fade.current,fade.incoming,fade.progress],[0,1,.25]);
+  fade.update(0,0,false);
+  assert.deepEqual([fade.current,fade.incoming,fade.progress],[1,0,.75]);
+  fade.update(0,.055,false);
+  assert.deepEqual([fade.current,fade.progress],[0,1]);
+});
+
+test('manual input can interrupt an assisted evasion on the next physics step',()=>{
+  const game=new Sortie(operation('free'),byAircraft('j20'),loadout,()=>{});
+  game.player.reset(0,4100,3700,0,230);
+  assert(game.maneuver('evade',1));
+  for(let i=0;i<9;i++)game.step(dt,idle);
+  assert(game.player.controls.yaw>.8);
+  game.step(dt,{...idle,yaw:-.72,steering:-.81,manual:true});
+  assert.equal(game.player.controls.yaw,-.72);
+  game.step(dt,idle);
+  assert.equal(game.player.controls.yaw,0);
+});
+
+test('mobile horizontal sweeps retain a turn with load compensation through the banking phase',()=>{
+  const listeners=new Map();
+  const canvas={clientWidth:800,clientHeight:360,addEventListener:(kind,f)=>listeners.set(kind,f),setPointerCapture(){}};
+  const touch=new TouchFlightController(canvas,()=>true);
+  const send=(kind,x)=>listeners.get(kind)({pointerId:1,pointerType:'touch',clientX:x,clientY:180,preventDefault(){}});
+  const p=new Airframe(0,byAircraft('j20'),0),world=new Terrain(413);
+  p.reset(0,4100,3700,0);
+  send('pointerdown',400);
+  for(let i=0;i<450;i++){
+    if(i<55)send('pointermove',400+i*2.7);
+    if(i===55)send('pointerup',550);
+    const axis=touch.read(dt,1);
+    advanceFlight(p,{...idle,yaw:axis.heading*.89,steering:axis.heading,pitch:axis.pitch,manual:touch.engaged},dt,world,i*dt);
+  }
+  assert(!touch.engaged&&p.heading()>30&&p.heading()<40);
+  assert(p.position.y>4055&&p.position.y<4100);
+});
+
+test('adaptive rendering measures sustained slow frames and preserves all output resolutions',()=>{
+  const prior=Object.getOwnPropertyDescriptors(globalThis);
+  Object.assign(globalThis,{innerWidth:800,innerHeight:360});
+  try{
+    const resolutions=[];
+    const b=new RenderBudget({maxTextureSize:8192,setResolution:(w,h)=>resolutions.push([w,h])},true);
+    for(const q of ['low','medium','high','ultra'])b.apply(q,1/60,1);
+    assert.deepEqual(resolutions,[[1600,720],[2000,900],[2400,1080],[3200,1440]]);
+    for(let i=0;i<6;i++){
+      const frame=b.sampleFrame(1200*(i+1),1.2,90);
+      b.apply('ultra',frame,1);
+    }
+    assert(b.sceneScale<1&&b.fps<1&&b.onePercentLow<=b.fps+.001);
+  }finally{
+    for(const k of ['innerWidth','innerHeight']){
+      if(prior[k])Object.defineProperty(globalThis,k,prior[k]);
+      else delete globalThis[k];
+    }
+  }
 });

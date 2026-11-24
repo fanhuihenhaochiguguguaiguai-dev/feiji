@@ -4,8 +4,8 @@ import { clamp, Terrain } from './terrain';
 import { flightAssist } from './flight-assist';
 import { sectionDrag,sectionLift } from './aero-tables';
 
-export interface Controls {pitch:number; roll:number; yaw:number; throttle:number; boost:boolean; gun:boolean; missile:boolean; bomb:boolean; assist:boolean; steering?:number}
-export const idle:Controls={pitch:0,roll:0,yaw:0,throttle:.74,boost:false,gun:false,missile:false,bomb:false,assist:true};
+export interface Controls {pitch:number; roll:number; yaw:number; throttle:number; boost:boolean; gun:boolean; missile:boolean; bomb:boolean; assist:boolean; steering?:number; manual?:boolean}
+export const idle:Controls={pitch:0,roll:0,yaw:0,throttle:.74,boost:false,gun:false,missile:false,bomb:false,assist:true,steering:0,manual:false};
 export const FLIGHT_STEP=1/90;
 export const BASE_DURABILITY=2000;
 export const ahead=new Vector3(0,0,-1);
@@ -87,7 +87,7 @@ export function advanceFlight(p:Airframe,input:Controls,dt:number,world:Terrain,
   const responsiveness=(.77+.23*damage)*clamp((r-t.stall*.35)/(t.stall*.9),p.grounded?.35:.19,1)*clamp(1-(r/t.maxSpeed-.63)*.66,.62,1);
   const bank=Math.atan2(localRight.y,localUp.y);
   const incline=Math.asin(clamp(p.forward.y,-1,1));
-  const assist=flightAssist(input,localUp.y,localRight.y,bank,incline,p.velocity.y,t.trim,r>t.stall*1.13);
+  const assist=flightAssist(input,localUp.y,localRight.y,bank,incline,p.velocity.y,t.trim,r>t.stall*1.13&&!p.grounded,p.loadG);
   const inertia=clamp(.82+(t.length*t.span)/1150,.86,1.64);
   const rate=1-Math.exp(-dt*(t.support?5.9:8.65)/inertia);
   const turning=1+Math.abs(input.steering??0)*(t.support?.48:.82);
@@ -119,7 +119,8 @@ export function advanceFlight(p:Airframe,input:Controls,dt:number,world:Terrain,
   ahead.rotateByQuaternionToRef(p.orientation,p.forward);
   above.rotateByQuaternionToRef(p.orientation,localUp);
   right.rotateByQuaternionToRef(p.orientation,localRight);
-  const energyFloor=p.side===0&&input.assist&&!p.grounded&&input.pitch>.15?
+  const climbingOrBanking=input.pitch>.15||Math.abs(input.steering??0)>.23;
+  const energyFloor=p.side===0&&input.assist&&!p.grounded&&climbingOrBanking?
     clamp((1.42-r/t.stall)*1.7,0,.92):0;
   p.throttle+=(Math.max(input.throttle,energyFloor)-p.throttle)*(1-Math.exp(-dt*3.1));
   p.boost+=((input.boost&&t.boost?1:0)-p.boost)*(1-Math.exp(-dt*5.1));
