@@ -3,13 +3,16 @@ import { campaignOperations } from './campaign';
 import { icon } from './icons';
 
 // Geographic anchors for fictional operations, on a Pacific-centred WGS84 chart.
-const sectors:Record<string,[number,number]> = {
-  s01:[124,22],s02:[169,52],s03:[99,1],s04:[-133,14],
-  d01:[124,22],d02:[169,52],d03:[99,1],d05:[-133,14],
+const sectors:Record<string,[longitude:number,latitude:number,labelX:number,labelY:number]> = {
+  s01:[124,22,0,0],s02:[169,52,.85,-.28],s03:[99,1,-1,.18],s04:[-133,14,.28,.7],
 };
-export function chartPoint(id:string){
+const independentSectors:Record<string,string>={d01:'s01',d02:'s02',d03:'s03',d05:'s04'};
+function sectorFor(id:string){
   const theatre=campaignOperations.find(stage=>stage.id===id)?.region;
-  const [lon,lat]=sectors[id]??sectors[theatre===1?'s02':theatre===2?'s04':'s01'];
+  return sectors[independentSectors[id]??id]??sectors[theatre===1?'s02':theatre===2?'s04':'s01'];
+}
+export function chartPoint(id:string){
+  const [lon,lat]=sectorFor(id);
   return [((lon+390)%360)/3.6,(90-lat)/1.8] as const;
 }
 
@@ -26,6 +29,9 @@ export function campaignChart(operations:Operation[]){
 }
 export function chartMarker(m:Operation){
   const [x,y]=chartPoint(m.id);
-  return '<button type="button" class="chart-marker" data-pick="'+m.id+'" style="--x:'+x+'%;--y:'+y+'%" aria-label="'+m.name+'，'+theatres[m.region].name+'">'+
-    '<span class="pin-medal">'+icon('target')+icon('lock')+icon('check')+'</span><span class="pin-title">'+m.name+'</span></button>';
+  const [,,labelX,labelY]=sectorFor(m.id);
+  const leader=labelX||labelY?'<svg class="chart-leader" viewBox="0 0 100 100" aria-hidden="true"><line x2="'+labelX*100+'" y2="'+labelY*100+'"/></svg>':'';
+  return '<div class="chart-anchor" style="--x:'+x+'%;--y:'+y+'%;--label-x:'+labelX+';--label-y:'+labelY+'">'+leader+
+    '<button type="button" class="chart-marker" data-pick="'+m.id+'" aria-label="'+m.name+'，'+theatres[m.region].name+'">'+
+    '<span class="pin-medal">'+icon('target')+icon('lock')+icon('check')+'</span><span class="pin-title">'+m.name+'</span></button></div>';
 }

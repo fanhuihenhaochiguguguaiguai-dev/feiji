@@ -328,7 +328,7 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 .chart-world {
   width:min(100cqw,200cqh);height:min(100cqh,50cqw);position:relative;
   transform-origin:var(--focus-x,50%) var(--focus-y,50%);transition:transform .55s cubic-bezier(.23,.72,.26,.99);pointer-events:none;
-  --counter-scale:1;
+  --counter-scale:1;--marker-spread:clamp(0px,calc(49px - min(6cqw,12cqh)),34px);
 }
 .zoomed .chart-world {transform:scale(1.8);--counter-scale:.55556}
 .chart-world img,.chart-grid {position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -342,8 +342,11 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
   position:absolute;inset:0;pointer-events:none;opacity:.25;
   background:linear-gradient(transparent 0 88%,#6ccfff78 99%,#c6eeffbf);height:44%;animation:atlas-sweep 9s linear infinite;
 }
+.chart-anchor {position:absolute;left:var(--x);top:var(--y)}
+.chart-leader {position:absolute;overflow:visible;width:var(--marker-spread);height:var(--marker-spread);stroke:#bad6e4b3;stroke-width:1}
+.chart-leader line {vector-effect:non-scaling-stroke}
 .chart-marker {
-  position:absolute;z-index:1;left:calc(var(--x) - 22px);top:calc(var(--y) - 22px);transform:scale(var(--counter-scale));
+  position:absolute;z-index:1;left:calc(var(--marker-spread)*var(--label-x) - 22px);top:calc(var(--marker-spread)*var(--label-y) - 22px);transform:scale(var(--counter-scale));
   height:44px;width:44px;min-height:44px;padding:0;display:grid;place-items:center;border:0;background:none;pointer-events:auto;transition:transform .55s cubic-bezier(.23,.72,.26,.99);
   --marker-face:#294a65;--marker-rim:#a2d6f1;--marker-ink:#e3f4ff;
 }

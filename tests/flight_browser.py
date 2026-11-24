@@ -313,6 +313,11 @@ with sync_playwright() as p:
     if args.all_air:
         page.locator('#front [data-nav="missions"]').tap()
         ready(page,'missions')
+        page.locator('[data-chapter="0"]').tap()
+        for marker in ('s01','s02','s03','s04'):
+            page.locator('[data-chart-home]').tap()
+            page.locator(f'[data-pick="{marker}"]').tap()
+            assert page.locator('#mission-launch').get_attribute('data-task')==marker
         assert page.locator('[data-chapter]').count()==6
         for chapter in range(6):
             page.locator(f'[data-chapter="{chapter}"]').tap()
