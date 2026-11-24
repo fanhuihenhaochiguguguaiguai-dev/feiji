@@ -21,6 +21,15 @@ export const chunkCells=256;
 export const chunksPerAxis=(gridSize-1)/chunkCells;
 const seabed=-240;
 
+// Distance bands use hysteresis. Even the far field keeps 93.75 m geometry.
+export function terrainLodStep(range:number,level:number,current?:number){
+  const detail=clamp(level,.79,1.19);
+  if(level>.98&&range<(current===1?2500:2000)*detail)return 1;
+  if(range<(current!==undefined&&current<=2?5200:4200)*detail)return 2;
+  if(range<(current!==undefined&&current<=4?18000:16000)*detail)return 4;
+  return 8;
+}
+
 interface TerrainPatch {i:number;j:number;cells:number;detail:Int8Array}
 interface TerrainSource {heights:Int16Array; detail:Int8Array|null; patch:TerrainPatch|null; max:number; blocks:{x:number;z:number}[]}
 const sources=new Map<number,TerrainSource>();

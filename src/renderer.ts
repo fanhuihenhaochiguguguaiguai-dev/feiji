@@ -11,7 +11,7 @@ import { bindRockSurface } from './terrain-material';
 import { environmentSource } from './shading';
 import { OceanRender } from './ocean-render';
 import { wakeCeiling } from './ocean-solver';
-import { Terrain, clamp, chunkCells, gridSize, gridStep, noise, worldExtent } from './terrain';
+import { Terrain, clamp, chunkCells, gridSize, gridStep, noise, worldExtent, terrainLodStep } from './terrain';
 import type { Backend } from './profile';
 
 export const asset=(path:string)=>new URL(path,document.baseURI).href;
@@ -196,8 +196,8 @@ export class WorldView {
   private readonly climateDensities=[.000027,.000029,.000066,.000058,.000092,.000108,.000080,.000046];
   constructor(readonly entry:OpenEngine){
     const {app,canvas}=entry;
-    // Terrain visibility test: use native PBR on the combat terrain; retain hangar shading.
-    bindRockSurface(this.ridgeMaterial);
+    // Keep the visibility-tested mesh path; restore rock projection without the custom cloud sampler.
+    bindRockSurface(this.terrainMaterial,false);bindRockSurface(this.ridgeMaterial);
     this.terrainMaterial.cull=CULLFACE_NONE;
     this.terrainMaterial.depthWrite=true;
     this.assets=new Assets(app);
@@ -559,13 +559,13 @@ export class WorldView {
   prepareTerrain(){
     const patch=this.terrain.priorityArea;
     if(patch&&!this.microTile){
-      this.microTile=this.tile(patch.i,patch.j,16,patch.cells);
-      this.microTile.name='priority-16';
+      this.microTile=this.tile(patch.i,patch.j,8,patch.cells);
+      this.microTile.name='priority-8';
     }
     for(const block of this.terrain.blocks){
       const key=block.z*gridSize+block.x;
       if(this.terrainTiles.has(key))continue;
-      const step=16;
+      const step=8;
       this.terrainTiles.set(key,{...block,step,entity:this.tile(block.x,block.z,step)});
     }
     this.tileClock=-Infinity;
@@ -576,7 +576,7 @@ export class WorldView {
     const patch=this.terrain.priorityArea;
     if(patch){
       const range=Math.hypot((patch.i+32)*gridStep-worldExtent*.5-x,(patch.j+32)*gridStep-worldExtent*.5-z);
-      const step=range<1750&&this.level>.83?.5:range<6500?2:16;
+      const step=range<1750&&this.level>.83?.5:range<6500?2:range<16000?4:8;
       if(!this.microTile||this.microTile.name!=='priority-'+step){
         const replacement=this.tile(patch.i,patch.j,step,patch.cells);
         replacement.name='priority-'+step;
@@ -594,11 +594,7 @@ export class WorldView {
       const key=block.z*gridSize+block.x,tile=this.terrainTiles.get(key);
       if(tile&&range>55000&&next>51000){tile.entity.destroy();this.terrainTiles.delete(key);continue;}
       if(!tile&&next>50000)continue;
-      const detail=Math.max(.79,this.level);
-      const near=(tile?.step===2?2500:1950)*detail;
-      const mid=(tile?.step===4?7800:6700)*detail;
-      const close=next<(tile?.step===1?1590:1300)*detail&&this.level>.98;
-      const step=close?1:next<near?2:next<mid?4:next<13000?8:16;
+      const step=terrainLodStep(next,this.level,tile?.step);
       if(tile?.step===step)continue;
       if(built>=(initial?24:6))continue;
       const replacement=this.tile(block.x,block.z,step);

@@ -12,7 +12,7 @@ const {outputFiles}=await build({stdin:{
     export { CountermeasureSystem, MissileGuidance, MissileWarningSystem } from './src/defense';
     export { mapRadar } from './src/tactical-radar';
     export { OceanSpectrum, ShallowWake, oceanSize } from './src/ocean-solver';
-    export { Terrain,registerTerrain,gridSize,chunkCells } from './src/terrain';
+    export { Terrain,registerTerrain,gridSize,chunkCells,terrainLodStep } from './src/terrain';
     export { AircraftLod,screenLod } from './src/aircraft-lod';
     export { TouchFlightController } from './src/touch-flight';
     export { targetPixels } from './src/screen-scale';
@@ -23,7 +23,7 @@ const {outputFiles}=await build({stdin:{
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
 const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
-  Terrain, registerTerrain,gridSize,chunkCells,targetPixels,AircraftLod,screenLod,TouchFlightController,TargetDirector,lockRadius,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+  Terrain, registerTerrain,gridSize,chunkCells,terrainLodStep,targetPixels,AircraftLod,screenLod,TouchFlightController,TargetDirector,lockRadius,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=gunzipSync(await readFile('public/world/'+id+'.height'));
   registerTerrain(seed,b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));
@@ -889,6 +889,35 @@ test('adaptive rendering measures sustained slow frames and preserves all output
     for(const k of ['innerWidth','innerHeight']){
       if(prior[k])Object.defineProperty(globalThis,k,prior[k]);
       else delete globalThis[k];
+    }
+  }
+});
+
+
+test('terrain retains high resolution bands and at least 93.75 metre far field geometry',()=>{
+  assert.equal(terrainLodStep(1000,1.04),1);
+  assert.equal(terrainLodStep(3000,1.04),2);
+  assert.equal(terrainLodStep(13000,1.04),4);
+  assert.equal(terrainLodStep(48000,.72),8);
+  assert.equal(terrainLodStep(4500,1,2),2);
+  assert.equal(terrainLodStep(4500,1,4),4);
+  assert.equal(48000/(gridSize-1)*terrainLodStep(48000,.72),93.75);
+});
+
+test('automatic resolution keeps clarity under sustained pressure and respects explicit manual scaling',()=>{
+  const prior=Object.getOwnPropertyDescriptors(globalThis);
+  Object.assign(globalThis,{innerWidth:800,innerHeight:360});
+  try{
+    const b=new RenderBudget({maxTextureSize:8192,setResolution:()=>{}},true);
+    for(let i=0;i<90;i++)b.apply('high',.8,1);
+    assert.equal(b.sceneScale,.75);
+    b.apply('high',.8,.65);
+    assert.equal(b.sceneScale,.65);
+    b.apply('high',.8,.8);
+    assert.equal(b.sceneScale,.75);
+  }finally{
+    for(const k of ['innerWidth','innerHeight']){
+      if(prior[k])Object.defineProperty(globalThis,k,prior[k]);else delete globalThis[k];
     }
   }
 });

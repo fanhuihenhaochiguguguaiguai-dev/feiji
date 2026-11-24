@@ -1,0 +1,3 @@
+# Isolated terrain clarity candidate
+
+Preserve the visibility test prewarm and double-sided terrain. Restore dual-backend triplanar albedo, excluding the additional cloud texture sampler from combat terrain. Keep the existing 2K PBR textures, normal/response mapping and terrain assets; reduce distant macro-color wash. Far mesh step 8 (93.75 m) instead of 16 (187.5 m); extend step 2/4 bands with hysteresis. Default automatic internal scale cannot fall below 75%; the explicitly chosen manual scale can still reach 65%. Preserve output presets and AA; apply bounded CAS sharpness. Actual phone visual quality, shader compilation and frame rate remain to be checked. Increased mesh/pixel cost is expected. Official V18 branch remains unchanged.

@@ -272,7 +272,7 @@ export class FlightGraph {
   scale(value:number){
     if(this.frame.rendering.renderTargetScale===value)return;
     this.frame.rendering.renderTargetScale=value;
-    this.frame.rendering.sharpness=.15+(1-value)*.52;
+    this.frame.rendering.sharpness=Math.min(.4,.15+(1-value)*.72);
     this.frame.update();
   }
 }

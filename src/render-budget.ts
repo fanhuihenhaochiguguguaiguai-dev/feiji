@@ -1,6 +1,8 @@
 import type { GraphicsDevice } from 'playcanvas';
 import type { Quality } from './profile';
 
+// Preserve a 75% automatic clarity floor; a deliberately lower manual setting remains available.
+export const automaticClarityFloor=.75;
 const preset={
   low:{height:720,detail:.72},
   medium:{height:900,detail:.91},
@@ -54,7 +56,7 @@ export class RenderBudget {
           const ordered=this.slowSamples.slice(0,this.frames).sort();
           this.onePercentLow=1/ordered[Math.ceil(ordered.length*.99)-1];
           const attainable=Math.min(this.target,Math.max(40,1000/this.refresh));
-          if(this.fps<attainable*.78)this.scale=Math.max(.50,this.scale-.07);
+          if(this.fps<attainable*.78)this.scale=Math.max(automaticClarityFloor,this.scale-.05);
           else if(this.fps>attainable*.94&&this.onePercentLow>attainable*.64)this.scale=Math.min(1,this.scale+.022);
           this.elapsed=this.summed=this.frames=0;
         }
@@ -66,7 +68,8 @@ export class RenderBudget {
     if(width!==this.width||height!==this.height){
       this.width=width;this.height=height;this.device.setResolution(width,height);
     }
-    this.sceneScale=Math.round(Math.max(.48,this.scale*manualScale)*50)/50;
+    const manual=Math.max(.65,Math.min(1,manualScale));
+    this.sceneScale=Math.round(Math.max(Math.min(automaticClarityFloor,manual),this.scale*manual)*100)/100;
     return settings.detail*(.65+.35*this.sceneScale);
   }
 }
