@@ -30,8 +30,8 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
-      - run: npm run test:assets
       - run: npm run build
+      - run: npm run test:assets
       - name: Prepare Android wrapper
         run: |
           npm install --no-save --package-lock=false @capacitor/core@7.4.4 @capacitor/cli@7.4.4 @capacitor/android@7.4.4
