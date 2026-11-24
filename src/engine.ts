@@ -201,7 +201,7 @@ export class Game {
       loading(45,'正在打开残骸模拟');
       rigid=await openWreckPhysics(FLIGHT_STEP);
       const mission=new Sortie(op,type,{rank,runway,armor:configuration.armor,engine:0,
-      stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
+      repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
       seed:op.kind==='free'&&!lab?++this.freeSeed:undefined,diagnostics:lab
     },e=>this.event(e),this.world.terrain,rigid);
       const assets=[this.pilot.request(type),...mission.enemies.flatMap((e,i)=>e.alive?[this.foes[i].request(e.type)]:[])];
@@ -286,7 +286,7 @@ export class Game {
     this.engine.fire('sortie-event',e);
     if(e.kind==='wave'){
       const ready=this.sortie;if(!ready)return;
-      this.ui.toast(ready.endless?'第 '+ready.wave+' 波来袭 · 弹药已补给':
+      this.ui.toast(ready.endless?'第 '+ready.wave+' 波来袭':
         ready.loadout.repair?'下一批目标进入空域 · 已补充反制弹':'下一批目标进入空域');
     }
   }
@@ -351,7 +351,7 @@ export class Game {
     }else if(s&&player&&!this.world.fixed){
       const alpha=this.state==='flight'?this.acc/FLIGHT_STEP:1;
       this.playerPose.sample(player,alpha);
-      this.world.flight(player,dt,s.time,s.locked,this.playerPose);
+      this.world.flight(player,dt,s.time,s.targeting.inside?s.locked:null,this.playerPose);
       this.pilot.sync(player,this.clock,s.loadout.configuration?.paint??'',this.world.view===1,false,s,undefined,alpha);
       this.targetAnchors.clear();
       for(let i=0;i<s.enemies.length;i++){

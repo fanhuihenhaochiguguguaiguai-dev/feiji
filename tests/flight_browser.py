@@ -104,10 +104,10 @@ with sync_playwright() as p:
         ready(page,'flight')
         contact=page.evaluate("""()=>{
             const g=flightQA,s=g.sortie;
-            return {kind:s.op.kind,ground:s.targetPoints.length,missiles:s.player.missiles,
+            return {kind:s.op.kind,ground:s.targetPoints.length,missiles:s.weapons.includes('missile'),
               enemies:s.enemies.flatMap((e,i)=>e.alive?[{type:e.type.id,hp:e.hp,model:g.foes[i].loaded}]:[])};
         }""")
-        assert contact['kind']=='air' and contact['ground']==0 and contact['missiles']>=10,contact
+        assert contact['kind']=='air' and contact['ground']==0 and contact['missiles'],contact
         assert any(e['type']==e['model']=='shade-drone' and e['hp']>=487 for e in contact['enemies']),contact
         page.screenshot(path=OUT/'chapter-three-drones.png',timeout=70000)
         wreck=page.evaluate("""()=>{
@@ -163,10 +163,10 @@ with sync_playwright() as p:
         page.locator('.sortie-action').tap()
         ready(page,'sortieprep')
         assert page.locator('[data-confirm-sortie]').is_enabled()
-        assert '340' in page.locator('.briefing-flight').inner_text()
+        assert '航炮备弹' not in page.locator('.briefing-flight').inner_text()
         page.screenshot(path=OUT/'factory-briefing.png',timeout=70000)
         page.locator('.briefing-flight [data-configure="missile"]').tap()
-        ready(page,'weapons')
+        ready(page,'upgrade')
         page.locator('[data-gear="cannon"]').tap()
         assert page.locator('.cannon-spec').is_visible()
         assert page.locator('[data-buy]').count()==0
@@ -189,13 +189,13 @@ with sync_playwright() as p:
         page.locator('[data-confirm-sortie]').tap()
         ready(page,'flight')
         assert page.locator('#gun').is_visible() and page.locator('#bomb').is_hidden()
-        assert page.evaluate("flightQA.sortie.player.bombs===0 && flightQA.sortie.player.missiles===10 && flightQA.sortie.enemies.some(a=>a.alive)")
+        assert page.evaluate("flightQA.sortie.player.bombs===0 && flightQA.sortie.weapons.includes('missile') && flightQA.sortie.enemies.some(a=>a.alive)")
         leave(page)
         page.locator('#navigation [data-nav="hangar"]').tap()
         ready(page,'hangar')
-        assert '对地弹药' in page.locator('.air-spec').inner_text()
-        page.locator('#section [data-nav="weapons"]').tap()
-        ready(page,'weapons')
+        assert '战机涂装' in page.locator('.air-spec').inner_text()
+        page.locator('#section [data-nav="upgrade"][data-mod="weapons"]').tap()
+        ready(page,'upgrade')
         page.locator('[data-gear="bomb"]').tap()
         page.locator('[data-unmount="bomb"]').tap()
         page.wait_for_function("flightQA.p.inventory.bomb===1 && flightQA.p.loadouts.j20.bomb==='none'")
@@ -474,14 +474,14 @@ with sync_playwright() as p:
         ready(page,"flight")
         cdp=ctx.new_cdp_session(page)
         gun=page.locator("#gun").bounding_box()
-        before=page.evaluate("()=>({rounds:flightQA.sortie.player.cannon,pitch:flightQA.sortie.player.forward.y})")
+        before=page.evaluate("()=>({rounds:flightQA.sortie.stats.fired,pitch:flightQA.sortie.player.forward.y})")
         p1={"x":380,"y":198,"id":1}
         p2={"x":gun["x"]+gun["width"]/2,"y":gun["y"]+gun["height"]/2,"id":2}
         cdp.send("Input.dispatchTouchEvent",{"type":"touchStart","touchPoints":[p1]})
         cdp.send("Input.dispatchTouchEvent",{"type":"touchStart","touchPoints":[p1,p2]})
         cdp.send("Input.dispatchTouchEvent",{"type":"touchMove","touchPoints":[{**p1,"y":119},p2]})
-        page.wait_for_function("""prev=>flightQA.sortie.player.cannon<prev.rounds&&flightQA.sortie.player.forward.y>prev.pitch+.035""",arg=before,timeout=25000)
-        during=page.evaluate("()=>({rounds:flightQA.sortie.player.cannon,pitch:flightQA.sortie.player.forward.y})")
+        page.wait_for_function("""prev=>flightQA.sortie.stats.fired>prev.rounds&&flightQA.sortie.player.forward.y>prev.pitch+.035""",arg=before,timeout=25000)
+        during=page.evaluate("()=>({rounds:flightQA.sortie.stats.fired,pitch:flightQA.sortie.player.forward.y})")
         cdp.send("Input.dispatchTouchEvent",{"type":"touchEnd","touchPoints":[]})
         assert page.locator(".pressed").count()==0
         print("simultaneous touch pitch+fire",before,during,flush=True)
@@ -503,13 +503,11 @@ with sync_playwright() as p:
         page.screenshot(path=OUT/"result.png",timeout=70000)
         page.locator('[data-do="leave"]').click()
         ready(page,"home")
-        page.locator('#front [data-nav="quests"]').click()
+        page.locator('#navigation [data-nav="quests"]').click()
         ready(page,"quests")
-        balance=page.evaluate("flightQA.p.credits")
-        page.locator('[data-claim="daily-sortie"]').click()
-        page.wait_for_function("b=>flightQA.p.credits===b+150 && flightQA.p.daily.claimed.includes('daily-sortie')",arg=balance)
-        assert page.locator('[data-claim="daily-sortie"]').is_disabled()
-        page.screenshot(path=OUT/"daily-claim.png",timeout=70000)
+        assert page.evaluate("flightQA.p.daily.claimed.includes('daily-sortie')")
+        assert page.locator('.award-status',has_text='已发放').first.is_visible()
+        page.screenshot(path=OUT/"daily-auto-grant.png",timeout=70000)
         print("training victory and persisted daily reward",flush=True)
         page.locator('[data-back]').click()
         ready(page,"home")
@@ -517,8 +515,6 @@ with sync_playwright() as p:
         page.set_viewport_size({"width":1000,"height":450})
         page.locator('#navigation [data-nav="upgrade"]').click()
         ready(page,"upgrade")
-        page.locator('#section button[data-nav="weapons"]').click()
-        ready(page,"weapons")
         page.locator('[data-preview-missile]').first.click()
         assert page.locator('#acquisition').is_visible()
         assert page.locator('#application').get_attribute("data-reveal")=="model"

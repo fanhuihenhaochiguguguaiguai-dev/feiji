@@ -3,10 +3,11 @@ import { byAircraft, difficulties, theatres, type Operation, type PlaneSpec } fr
 import { advanceFlight, Airframe, FLIGHT_STEP, ahead, above, idle, type Controls } from './flight';
 import { base, clamp, Terrain } from './terrain';
 import { aircraftContact, ellipsoid, terrainContact } from './contact';
-import { cannonFor, guidedStrike, gunCycle, gunDamage, gunSight, missileCycle, releaseDropSpeed, roundCapacity, standardGravity, thrustDuration } from './ordnance';
-import { groundMount, missiles, missileDamage, missileRails, minimumEnemyDurability, minimumPlayerMissiles,type MissileProfile } from './items';
+import { cannonFor, guidedStrike, gunCycle, gunDamage, gunSight, missileCycle, releaseDropSpeed, standardGravity, thrustDuration } from './ordnance';
+import { groundMount, missiles, missileDamage, missileRails, minimumEnemyDurability,type MissileProfile } from './items';
 import type { CombatConfiguration } from './profile';
 import type { WreckPhysics } from './wreck-physics';
+import { TargetDirector } from './targeting';
 import { choosePass,enemyTuning,planPass,Tactic } from './tactics';
 import { CountermeasureSystem, MissileGuidance, MissileWarningSystem, type DefenseCue, type DefenseKind, type GuidedTrack } from './defense';
 const delta=new Vector3(),local=new Vector3(),orientation=Quaternion.Identity(),inverted=Quaternion.Identity();
@@ -14,6 +15,8 @@ const spreadVector=new Vector3(),leftToRight=new Vector3(),eventAt=new Vector3()
 const distance=(a:Vector3,b:Vector3)=>Vector3.Distance(a,b);
 
 type PlayerManeuver='turn'|'evade';
+export type CooldownAction=PlayerManeuver|'boost'|'counter'|'missile'|'bomb';
+const maneuverCooldown={turn:7,evade:2.6,boost:5.2};
 export type ProjectileKind='gun'|'missile'|'bomb';
 export type Surface='water'|'sand'|'rock'|'soil'|'grass'|'runway'|'structure';
 export type FlightEvent={kind:'gun'|'missile'|'bomb'|'trail'|'hit'|'breakup'|'impact'|'lock'|'warn'|'wave'|'counter';at:Vector3;side:number;scale?:number;surface?:Surface;weapon?:ProjectileKind|'crash';track?:number;target?:Airframe;strike?:Vector3;terminal?:boolean;direction?:Vector3;profile?:MissileProfile;defense?:DefenseKind;cue?:DefenseCue};
@@ -30,7 +33,7 @@ export interface Debrief {
   kills:number;accuracy:number|null;missileAccuracy:number|null;bombAccuracy:number|null;score:number;grade:string;credits:number;xp:number;types:Record<string,number>;evaded:number;
 }
 interface GroundTarget {position:Vector3;hp:number;alive:boolean}
-export interface Loadout {rank:number; armor:number; engine:number; stores:number; repair:boolean; radar:boolean; runway:boolean; configuration?:CombatConfiguration;seed?:number;diagnostics?:boolean}
+export interface Loadout {rank:number; armor:number; engine:number; repair:boolean; radar:boolean; runway:boolean; configuration?:CombatConfiguration;seed?:number;diagnostics?:boolean}
 const flightSets:Record<string,string[]>={ww1:['dr1','camel'],ww2:['p51','zero','bf109','spitfire'],early:['me262','p51','bf109'],
   cold:['mig21','g91','alphajet','me262'],modern:['j10','f16','hornet','gripen','mirage','su35'],stealth:['j10','su35','f16','j20','mirage']};
 
@@ -64,6 +67,10 @@ export class Sortie {
   private readonly shields:(CountermeasureSystem|null)[]=Array.from({length:4},()=>null);
   private readonly enemyWarning=new MissileWarningSystem();
   private readonly gunLead=new Vector3();
+  private readonly aimAssist=new Vector3();
+  private readonly pursuitPoint=new Vector3();
+  private readonly playerControl:Controls={...idle};
+  readonly targeting=new TargetDirector();
   readonly waves:readonly number[];
   readonly endless:boolean;
   readonly seed:number;
@@ -78,8 +85,10 @@ export class Sortie {
   private shotSerial=0;
   readonly gates:Vector3[]=[];
   readonly stats={kills:0,fired:0,hit:0,missile:0,missileHit:0,bomb:0,bombHit:0,distance:0,peak:0,altitude:0,types:{} as Record<string,number>};
-  time=0; wave=0; during=0; cleared=0; lost=0; gate=0; lockProgress=0;
-  total=0; active=true; win=false; reason=''; locked:Airframe|null=null;
+  time=0; wave=0; during=0; cleared=0; lost=0; gate=0;
+  total=0; active=true; win=false; reason='';
+  get locked(){return this.targeting.target;}
+  get lockProgress(){return this.targeting.progress;}
   readonly difficulty;
   readonly radar;
   readonly loadout;
@@ -90,7 +99,9 @@ export class Sortie {
   private readonly thirdChapter:boolean;
   private readonly maneuverControl:Controls={...idle};
   private activeManeuver:{kind:PlayerManeuver;sign:number;ends:number;start:number;travel:number}|null=null;
-  readonly readyAt={turn:0,evade:0};
+  readonly readyAt={turn:0,evade:0,boost:0};
+  private boostUntil=0;
+  private boostHeld=false;
   constructor(readonly op:Operation,readonly type:PlaneSpec,loadout:Loadout,readonly notify:(event:FlightEvent)=>void,world?:Terrain,public wreckPhysics:WreckPhysics|null=null){
     if(!loadout.diagnostics&&op.kind!=='air'&&op.kind!=='free')throw new Error('正式任务必须使用空战规则');
     const config=loadout.configuration;
@@ -98,9 +109,8 @@ export class Sortie {
     this.groundWeapon=config?.groundWeapon??'bomb';
     this.defense=new CountermeasureSystem(type.era,type.safety,config?.defense??0);
     this.weapons=[];
-    if(config?.rounds??type.ammo)this.weapons.push('gun');
-    const airStock=type.support?0:(config?.airMissiles??minimumPlayerMissiles+loadout.stores);
-    if(airStock)this.weapons.push('missile');
+    if(config?.hasCannon??(!type.support&&type.guns.length>0))this.weapons.push('gun');
+    if(config?.hasAirMissile??!type.support)this.weapons.push('missile');
     if(config?.groundStores??type.bombs)this.weapons.push('bomb');
     this.loadout=loadout;this.difficulty=difficulties[loadout.rank]??difficulties[1];
     this.endless=op.kind==='free'&&!loadout.diagnostics;
@@ -113,9 +123,9 @@ export class Sortie {
     this.world=world??new Terrain(theatres[op.region].seed);this.radar=config?.radar??(loadout.radar?8500:6400);
     const p=this.player=new Airframe(0,type,0);
     this.friendlies=[p,this.ally];
-    p.roundsLimit=config?.rounds??roundCapacity(type,loadout.stores);p.missilesLimit=airStock;p.bombsLimit=config?.groundStores;
+    p.bombsLimit=config?.groundStores;
     p.maxHp=type.durability;p.enginePower=config?.engine??(1+loadout.engine*.06);
-    p.handling=config?.grip??1;p.firepower=config?.gun??1;p.storesBonus=config?.stores??loadout.stores;
+    p.handling=config?.grip??1;p.firepower=config?.gun??1;
     const original=type.props.length?Math.max(128,type.trim*2.1):390;
     const h=engagement?Math.max(engagement.objective==='low'?148:original,engagement.altitude):original;
     if(op.kind==='ground'){
@@ -208,40 +218,64 @@ export class Sortie {
       e.reset(bx,altitude,bz,facing,e.type.trim*.82);
       e.cooldown=this.time+2.1-skill.pressure*.62+i*.54;e.missiles=Math.min(e.missiles,skill.magazine);
     }
-    this.locked=null;this.lockProgress=0;
+    this.targeting.reset();
     if(this.wave>1){
-      if(this.endless){
-        const rounds=p.roundsLimit??p.type.ammo;
-        const air=p.missilesLimit??p.type.missiles;
-        p.cannon=Math.min(rounds,p.cannon+Math.ceil(rounds*.54));
-        p.missiles=Math.min(air,p.missiles+Math.ceil(air*.60));
-      }
       if(this.endless||this.loadout.repair)this.defense.replenish();
       this.notify({kind:'wave',at:p.position,side:0});
     }
   }
-  acquire(){
+  private acquire(dt:number,input:Controls){
+    const jam=this.enemies.some(x=>x.alive&&x.type.id==='ea6b')?1.86:1;
+    const range=Math.min(this.radar,this.missile.range+(this.loadout.configuration?.lockRange??0));
+    const intent=Math.max(Math.abs(input.pitch),Math.abs(input.yaw),Math.abs(input.roll));
+    const threat=(this.warning.threat as WeaponTrack|null)?.owner??null;
+    if(this.targeting.update(this.player,this.enemies,this.world,range,this.missile.acquire*jam,this.time,dt,intent,threat)
+      &&this.weapons.includes('missile'))this.notify({kind:'lock',at:this.player.position,side:0});
+  }
+
+  cooldown(action:CooldownAction){
     const p=this.player;
-    let chosen:Airframe|null=null,score=.83;
-    for(const e of this.enemies){
-      if(!e.alive)continue;
-      e.position.subtractToRef(p.position,delta);
-      const range=delta.length();
-      if(range>Math.min(this.radar,this.missile.range+(this.loadout.configuration?.lockRange??0))||range<70)continue;
-      const direction=Vector3.Dot(delta,p.forward)/range;
-      const rank=direction+(e===this.locked?.085:0)-range*.000008;
-      if(direction>(e===this.locked?.747:.807)&&rank>score&&!this.world.terrainMasks(
-        p.position.x,p.position.y,p.position.z,e.position.x,e.position.y,e.position.z)){score=rank;chosen=e;}
+    const duration=action==='counter'?this.defense.totalCooldown:action==='missile'?missileCycle():
+      action==='bomb'?(this.groundWeapon==='shorebolt'?1.45:.61):maneuverCooldown[action];
+    const ready=action==='counter'?this.defense.readyAt:action==='missile'?p.missileAt:action==='bomb'?p.bombAt:this.readyAt[action];
+    return clamp((ready-this.time)/duration,0,1);
+  }
+
+  private resolvePlayer(input:Controls){
+    const p=this.player,t=this.time;
+    if(input.boost&&!this.boostHeld&&t>=this.readyAt.boost&&p.alive){
+      this.boostUntil=t+1.55;this.readyAt.boost=t+maneuverCooldown.boost;
     }
-    if(this.locked!==chosen)this.lockProgress=0;
-    this.locked=chosen;
+    this.boostHeld=input.boost;
+    const command=Object.assign(this.playerControl,input);
+    command.boost=t<this.boostUntil;
+    if(command.boost)command.throttle=Math.max(input.throttle,.98);
+    const resolved=this.resolveManeuver(command);
+    const target=this.targeting.target;
+    if(!this.targeting.inside||!target?.alive||this.activeManeuver||!input.assist||command.boost||p.grounded||
+      p.stall>.15||p.speed<p.type.stall*1.22||input.throttle<.45)return resolved;
+    const activity=Math.max(Math.abs(input.pitch),Math.abs(input.roll),Math.abs(input.yaw),Math.abs(input.steering??0));
+    const authority=clamp(1-activity*4,0,1);
+    if(!authority)return resolved;
+    const x=p.position.x+p.forward.x*220,z=p.position.z+p.forward.z*220;
+    if(p.position.y-this.world.at(x,z,t)<115||Vector3.DistanceSquared(target.position,p.position)<200**2)return resolved;
+    this.pursuitPoint.copyFrom(target.position).addInPlaceFromFloats(target.velocity.x*.40,target.velocity.y*.40,target.velocity.z*.40);
+    pursuit(p,this.pursuitPoint,resolved);
+    resolved.pitch=input.pitch+resolved.pitch*.24*authority;
+    resolved.roll=input.roll+resolved.roll*.23*authority;
+    resolved.yaw=input.yaw+resolved.yaw*.27*authority;
+    return resolved;
+  }
+
+  aimLead(out:Vector3){
+    return this.weapons.includes('gun')&&this.targeting.lead(this.player,cannonFor(this.type)[1],out);
   }
   maneuver(kind:PlayerManeuver,sign=0){
     const p=this.player,t=this.time,threat=this.warning.threat;
     if(!this.active||this.activeManeuver||!p.alive||p.grounded||p.speed<p.type.stall*1.1||t<this.readyAt[kind])return false;
     const bearing=threat?(threat.position.x-p.position.x)*-p.forward.z+(threat.position.z-p.position.z)*p.forward.x:0;
     this.activeManeuver={kind,sign:sign||Math.sign(bearing)||1,ends:t+(kind==='turn'?5.6:.98),start:p.heading(),travel:0};
-    this.readyAt[kind]=t+(kind==='turn'?7:2.6);
+    this.readyAt[kind]=t+maneuverCooldown[kind];
     return true;
   }
   private resolveManeuver(input:Controls){
@@ -307,10 +341,10 @@ export class Sortie {
   }
   fire(p:Airframe,weapon:ProjectileKind,target:Airframe|null=null){
     const t=p.type;
-    if(!p.alive)return;
-    if(weapon==='gun'&&(!p.cannon||this.time<p.gunsAt||!t.guns.length))return;
+    if(!p.alive||p.side===0&&!this.weapons.includes(weapon))return;
+    if(weapon==='gun'&&(p.side!==0&&!p.cannon||this.time<p.gunsAt||!t.guns.length))return;
     const rails=weapon==='missile'?missileRails(t):null;
-    if(rails&&(!p.missiles||!target?.alive||this.time<p.missileAt||!rails.length))return;
+    if(rails&&(p.side!==0&&!p.missiles||!target?.alive||this.time<p.missileAt||!rails.length))return;
     if(weapon==='bomb'&&(!p.bombs||this.time<p.bombAt))return;
     const guided=weapon==='bomb'&&p.side===0&&this.groundWeapon==='shorebolt';
     const ground=guided?this.groundLock():null;
@@ -328,13 +362,14 @@ export class Sortie {
     q.direction.copyFrom(p.forward);
     let hardpoint:number[];
     if(weapon==='gun'){
-      const interval=gunCycle(t,p.side===0?this.loadout.configuration?.gunRate:1)*(p.side===0?1:1.81-p.experience*.19);
-      p.gunsAt=Math.max(p.gunsAt,this.time-FLIGHT_STEP)+interval;p.cannon--;
-      hardpoint=t.guns[p.cannon%t.guns.length];q.time=1.3;
+      const interval=gunCycle(t)*(p.side===0?1:1.81-p.experience*.19);
+      p.gunsAt=Math.max(p.gunsAt,this.time-FLIGHT_STEP)+interval;
+      if(p.side!==0)p.cannon--;
+      hardpoint=t.guns[(p.side===0?this.stats.fired:p.cannon)%t.guns.length];q.time=1.3;
       if(p.side===0)this.stats.fired++;
     }else if(weapon==='missile'){
-      p.missileAt=this.time+(p.side===0?missileCycle(this.loadout.configuration?.missileRate):6.4);p.missiles--;
-      hardpoint=rails![p.missiles%rails!.length];q.time=q.profile.life;
+      p.missileAt=this.time+(p.side===0?missileCycle():6.4);if(p.side!==0)p.missiles--;
+      hardpoint=rails![(p.side===0?this.stats.missile:p.missiles)%rails!.length];q.time=q.profile.life;
       q.velocity.copyFrom(q.direction).scaleInPlace(q.profile.speed*.39);
       if(p.side===0){this.stats.missile++;this.lastPracticalLaunch=q.profile.id;}
       else if(target===this.player)this.warning.fired(this.time);
@@ -349,6 +384,13 @@ export class Sortie {
     if(weapon==='gun'){
       const [,speed,error]=cannonFor(t);
       gunSight(p.position,p.forward,delta).subtractInPlace(q.position).normalize();
+      if(p.side===0&&!this.activeManeuver&&this.aimLead(this.aimAssist)){
+        this.aimAssist.subtractInPlace(q.position).normalize();
+        const alignment=Vector3.Dot(delta,this.aimAssist);
+        const intent=Math.max(Math.abs(p.controls.pitch),Math.abs(p.controls.yaw),Math.abs(p.controls.roll));
+        const assist=clamp((alignment-.9972)/.0028,0,1)*clamp(1-intent*2.5,0,1)*.45;
+        Vector3.LerpToRef(delta,this.aimAssist,assist,delta);
+      }
       const phase=q.serial*2.39996323,scatter=error*(.15+.85*(q.serial%7)/7)*(p.side===0?1:1.65-p.experience*.14);
       spreadVector.set(Math.cos(phase)*scatter,Math.sin(phase)*scatter,0).rotateByQuaternionToRef(p.orientation,spreadVector);
       q.direction.copyFrom(delta).addInPlace(spreadVector).normalize();
@@ -611,18 +653,13 @@ export class Sortie {
     if(!this.active)return;
     this.time+=dt;
     const p=this.player;
-    advanceFlight(p,this.resolveManeuver(input),dt,this.world,this.time);this.ground(p);
+    advanceFlight(p,this.resolvePlayer(input),dt,this.world,this.time);this.ground(p);
     this.defense.advance(dt);
     this.stats.distance+=distance(p.position,p.previous);this.stats.peak=Math.max(this.stats.peak,p.speed);this.stats.altitude=Math.max(this.stats.altitude,p.position.y);
     if(!this.active)return;
-    this.acquire();
-    if(this.locked&&p.missiles){
-      const previous=this.lockProgress;
-      this.lockProgress=Math.min(1,previous+dt/(this.missile.acquire*(this.enemies.some(x=>x.alive&&x.type.id==='ea6b')?1.86:1)));
-      if(previous<1&&this.lockProgress===1)this.notify({kind:'lock',at:p.position,side:0});
-    }
+    this.acquire(dt,input);
     if(input.gun)this.fire(p,'gun');
-    if(input.missile&&this.lockProgress===1)this.fire(p,'missile',this.locked);
+    if(input.missile&&this.targeting.inside&&this.lockProgress===1)this.fire(p,'missile',this.locked);
     if(input.bomb)this.fire(p,'bomb');
     for(const e of this.enemies)this.enemy(e,dt);
     if(this.ally.alive){

@@ -27,12 +27,11 @@ def extract(file, basis, box, name, use, chamfer=False):
     manifest[name]={'source':ref.name,'sourceSize':list(image.size),'box':crop,
                     'size':list(art.size),'alpha':bool(chamfer),'use':use,'format':'WebP',
                     'states':'CSS focus, hover, pressed, selected and disabled' if chamfer else 'static illustration'}
-for x,name in zip([63,136,210,283,357,849],
-                  ['hangar','tools','tree','missions','activity','settings']):
+for x,name in zip([63,136,283,849],
+                  ['hangar','tools','missions','settings']):
     extract('03',(900,507),(x-28,82,x+28,126),name,'独立功能图案',True)
 extract('03',(900,507),(34,171,164,225),'crest','指挥中心翼徽',True)
 extract('03',(1672,941),(732,328,898,391),'frame-command','可伸缩香槟金指挥框','frame')
 extract('03',(1672,941),(918,328,1069,391),'frame-instrument','可伸缩战术仪表框','frame')
 extract('03',(1672,941),(734,398,898,458),'frame-steel','可伸缩冷银机务框','frame')
-extract('04',(760,428),(122,82,538,221),'season','赛季宣传插画')
 (OUT/'sources.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')

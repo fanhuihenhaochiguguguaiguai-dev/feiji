@@ -41,27 +41,6 @@
     "format": "WebP",
     "states": "CSS focus, hover, pressed, selected and disabled"
   },
-  "tree": {
-    "source": "03_UI图标图案风格板.webp",
-    "sourceSize": [
-      1672,
-      941
-    ],
-    "box": [
-      338,
-      152,
-      442,
-      234
-    ],
-    "size": [
-      104,
-      82
-    ],
-    "alpha": true,
-    "use": "独立功能图案",
-    "format": "WebP",
-    "states": "CSS focus, hover, pressed, selected and disabled"
-  },
   "missions": {
     "source": "03_UI图标图案风格板.webp",
     "sourceSize": [
@@ -72,27 +51,6 @@
       474,
       152,
       578,
-      234
-    ],
-    "size": [
-      104,
-      82
-    ],
-    "alpha": true,
-    "use": "独立功能图案",
-    "format": "WebP",
-    "states": "CSS focus, hover, pressed, selected and disabled"
-  },
-  "activity": {
-    "source": "03_UI图标图案风格板.webp",
-    "sourceSize": [
-      1672,
-      941
-    ],
-    "box": [
-      611,
-      152,
-      715,
       234
     ],
     "size": [
@@ -208,26 +166,5 @@
     "use": "可伸缩冷银机务框",
     "format": "WebP",
     "states": "CSS focus, hover, pressed, selected and disabled"
-  },
-  "season": {
-    "source": "04_赛季活动界面.webp",
-    "sourceSize": [
-      1672,
-      941
-    ],
-    "box": [
-      268,
-      180,
-      1184,
-      486
-    ],
-    "size": [
-      916,
-      306
-    ],
-    "alpha": false,
-    "use": "赛季宣传插画",
-    "format": "WebP",
-    "states": "static illustration"
   }
 }

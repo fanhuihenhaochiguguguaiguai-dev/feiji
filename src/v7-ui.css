@@ -8,33 +8,23 @@
   --bevel:polygon(10px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 10px);
 }
 .reference-crest {background:transparent url('/ui-v7/crest.webp') center/contain no-repeat;border:0;width:64px;clip-path:none}
-#navigation {grid-template-columns:repeat(3,minmax(0,1fr)) minmax(74px,1.34fr) repeat(3,minmax(0,1fr));overflow:visible;background:linear-gradient(180deg,#182c42f7,#081320fe);box-shadow:0 8px 19px #02050acf}
+#navigation {grid-template-columns:repeat(2,minmax(0,1fr)) minmax(74px,1.38fr) minmax(0,1fr);overflow:visible;background:linear-gradient(180deg,#182c42f7,#081320fe);box-shadow:0 8px 19px #02050acf}
 #navigation button {font-weight:780;min-height:53px}
 #navigation .sortie-action {min-height:100%;transform:scaleY(1.08);clip-path:polygon(12% 0,88% 0,100% 100%,0 100%);font-size:1.2rem;background:linear-gradient(179deg,#faf0c7,#deae61 49%,#8f5b2e);box-shadow:inset 0 2px #fff0cb,inset 0 -2px #684327}
 .nav-art {width:clamp(21px,3vw,40px);aspect-ratio:1.28;background-size:contain;background-repeat:no-repeat;background-position:center}
 .nav-hangar {background-image:url('/ui-v7/hangar.webp')}
 .nav-tools {background-image:url('/ui-v7/tools.webp')}
-.nav-tree {background-image:url('/ui-v7/tree.webp')}
 .nav-missions {background-image:url('/ui-v7/missions.webp')}
-.nav-activity {background-image:url('/ui-v7/activity.webp')}
 .nav-settings {background-image:url('/ui-v7/settings.webp')}
-.quick button,.brief-lines button,.asset-card,.mission-brief,.tech-detail {clip-path:var(--bevel)}
+.quick button,.asset-card,.mission-brief {clip-path:var(--bevel)}
 .quick button {border-right:2px solid #9aafc263}
-.brief-lines button {min-height:32px}
 .route-page .station-heading {background:linear-gradient(117deg,#091727 8%,#223446 36%,#102138 42%,#0a1729 100%);border-bottom-color:#b1b9b582}
 .route-page .station-heading h2 {font-weight:830}
 .route-intro {background-position:center;box-shadow:inset 0 1px #d5d9de33,inset 0 -1px #a89b7652}
 .route-terminal.quests .route-intro {background-position: center, center 43%}
 .route-terminal.season,.route-terminal.activity {background:radial-gradient(ellipse at 77% 9%,#453c40,#0d1c31 62%,#0a1726)}
 .route-terminal.season .route-intro,.route-terminal.activity .route-intro {min-height:clamp(145px,31dvh,290px);background-position: center,center 56%}
-.reward-ribbon {display:grid;grid-auto-flow:column;grid-auto-columns:minmax(140px,1fr);gap:7px;overflow-x:auto;padding:0 0 8px}
-.reward-ribbon .reward-card {grid-template-columns:1fr;justify-items:center;align-content:start;min-height:162px;text-align:center}
-.reward-ribbon .item-art {max-width:67px}
-.reward-ribbon .prize .item-art {width:18px}
-.reward-ribbon .prize-tray {justify-content:center}
-.reward-ribbon .reward-ready {border-color:#ebca83}
-.reward-ribbon .claimed {opacity:.76}
-.quest-tabs,.activity-actions {display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:0 0 9px}
+.quest-tabs {display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:0 0 9px}
 .prep-chart {background-size:cover;background-position:center 51%;min-height:134px;border:1px solid #8fc6d284;border-left:3px solid var(--gold)}
 .upgrade-item .next-stat {color:#ffe19e;font-weight:700}
 .route-page button:active,#navigation button:active {filter:brightness(1.19)}
@@ -77,8 +67,6 @@
 }
 @media (max-height:470px) and (orientation:landscape) {
   #navigation button {min-height:41px}
-  .brief-lines button {min-height:27px}
-  .brief-lines {margin-top:10px;gap:3px}
   .quick {bottom:19%}
   .hud-right #gear,.hud-right #pause {min-height:29px}
 }
@@ -86,7 +74,6 @@
   .route-body,.reward-card,.tactical {animation:none!important;transition:none!important}
 }
 @media (max-height:390px) and (orientation:landscape) {
-  .brief-lines button {min-height:24px;padding-block:3px}
 }
 #application[data-screen="flight"] .lens {background:linear-gradient(180deg,#050a1530,transparent 15%,transparent 87%,#050a1520)}
 
@@ -97,15 +84,13 @@
   --frame-instrument:url('/ui-v7/frame-instrument.webp');
   --frame-steel:url('/ui-v7/frame-steel.webp');
 }
-.route-page :is(.air-spec,.hangar-filters,.livery,.kit-spec,.mission-brief,.tech-detail,.asset-card,.tech-board),
-.debrief-main {
+.route-page :is(.air-spec,.hangar-filters,.kit-spec,.mission-brief,.asset-card),.debrief-main {
   isolation:isolate;
   background:linear-gradient(165deg,#142438f5,#081728f8);
   border-color:#97adbd32;
   box-shadow:0 6px 18px #02081368;
 }
-.route-page :is(.air-spec,.hangar-filters,.livery,.kit-spec,.mission-brief,.tech-detail,.asset-card,.tech-board)::before,
-.debrief-main::before {
+.route-page :is(.air-spec,.hangar-filters,.kit-spec,.mission-brief,.asset-card)::before,.debrief-main::before {
   position:absolute;
   inset:0;
   content:"";
@@ -116,23 +101,17 @@
   opacity:var(--plate-opacity,.56);
   pointer-events:none;
 }
-.route-page :is(.mission-brief,.kit-spec,.air-spec,.tech-detail),.debrief-main,.route-page .reward-card.reward-ready {
+.route-page :is(.mission-brief,.kit-spec,.air-spec),.debrief-main {
   --plate:var(--frame-command);
   --plate-opacity:.90;
   clip-path:none;
 }
-.route-page .asset-card.rare,.route-page .hangar-filters,.route-page .livery {--plate:var(--frame-steel)}
+.route-page .asset-card.rare,.route-page .hangar-filters {--plate:var(--frame-steel)}
 .route-page .asset-card.elite {--plate:var(--frame-command);--plate-opacity:.80}
 .route-page .asset-card.claimed {--plate-opacity:.40}
-.route-page :is(.tech-detail,.tech-board,.mission-brief),
-.debrief-main {position:relative}
-.route-page :is(.air-spec,.livery,.kit-spec) {padding-inline-start:18px}
-.route-page .tech-board {isolation:isolate;border-radius:2px}
-.route-page .tech-board::before {opacity:.37}
+.route-page :is(.mission-brief),.debrief-main {position:relative}
+.route-page :is(.air-spec,.kit-spec) {padding-inline-start:18px}
 .route-page .asset-card::after {left:3px;top:45%;bottom:10px}
-.route-page .branch button {border-radius:1px;border-top-color:#9cb7cbcb;background:linear-gradient(175deg,#203c54,#101e31 58%);box-shadow:inset 0 0 0 2px #6a94b242}
-.route-page .branch button.on {border-color:#ebc977;box-shadow:inset 0 0 0 2px #8e7146b0,0 0 11px #c789493c}
-.route-page .branch button.researched {border-bottom-color:#91c8bd}
 .route-page .mission-brief h3,.route-page .kit-spec h3 {padding-block:3px 6px;border-bottom:1px solid #a9b9c261}
 .route-page.hangar .fleet-strip > button {border-image:var(--frame-steel) 23 16 9 32}
 .route-page.hangar .fleet-strip > button.on {border-image:var(--frame-command) 23 16 9 32}
@@ -199,7 +178,6 @@
 .route-page :is(.glass,.asset-card,.pilot-summary) {border-color:#a3bfda57}
 .route-page .asset-card {background:var(--panel-matte)}
 .asset-card .item-art {filter:drop-shadow(0 3px 5px #040a12d9)}
-.route-page .asset-card.reward-ready {border-color:#cda958bd}
 .route-page .asset-card.claimed {border-color:#6b8d8f90}
 .route-page button.on,.route-page button[aria-pressed="true"] {border-color:#d8b266;background-color:#483828;box-shadow:inset 0 -2px #eac47f,inset 0 1px #e7cd9333}
 .route-page progress {
@@ -211,9 +189,9 @@ progress::-webkit-progress-value {background:linear-gradient(#fff3b2,#d5a355);bo
 progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-radius:2px}
 .route-terminal .route-intro {border-left:3px solid #e3bd75;box-shadow:inset 0 -1px #e2c4888c,inset 0 0 0 2px #789eaf25,0 4px 19px #070d18a8}
 .route-terminal .route-intro h3 {line-height:1.16;max-width:72%;text-shadow:0 3px 9px #040a11}
-:where(.setting-card,.settings-grid,.facility-grid,.pilot-summary,.record-table) {font-variant-numeric:tabular-nums}
+:where(.setting-card,.settings-grid,.pilot-summary,.record-table) {font-variant-numeric:tabular-nums}
 .settings-grid select,.dispatch-grid select {min-height:34px;max-width:100%}
-.route-page :is(.settings-grid,.facility-grid) .glass {background:var(--panel-matte);border-top-color:#caad778c;box-shadow:var(--engraved)}
+.route-page :is(.settings-grid) .glass {background:var(--panel-matte);border-top-color:#caad778c;box-shadow:var(--engraved)}
 .pause-card,.system-card,.tactical,.acquisition,.receipt-panel,.debrief-main {
   border-color:#a8b8c992;
   box-shadow:inset 0 0 0 2px #6e8ca225,inset 0 1px #f5e4c87a,0 14px 56px #03070dcf;
@@ -281,14 +259,11 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 .wallet-art {width:34px;height:25px;vertical-align:middle;object-fit:contain}
 .brief {top:clamp(79px,16%,132px);width:clamp(133px,16%,216px)}
 .brief h1 {font-size:clamp(.91rem,2.18vw,1.39rem);font-weight:850;letter-spacing:.13em;text-shadow:0 2px 8px #040911}
-.brief-lines {margin:clamp(7px,2vh,15px) 0 0;padding-top:6px}
-.brief-lines button,.quick button {
+.quick button {
   border:1px solid #839eaf87;border-left:2px solid #c3ae80;
   box-shadow:inset 0 1px #e1e8ec38,inset 0 -3px #050e1b6e,0 3px 8px #020714a8;
   border-radius:1px;position:relative;
 }
-.brief-lines button {background:linear-gradient(108deg,#334961e9 2%,#122439ef 24%,#111e2bd4);min-height:38px}
-.brief-lines button i {width:26px;display:grid;place-items:center;align-self:stretch;border-right:1px solid #d4c18f51;color:#f2d59f}
 .quick {bottom:clamp(70px,16%,129px);width:clamp(160px,21vw,310px)}
 .quick button {min-height:clamp(45px,10vh,82px);padding-right:40px}
 .quick .launch-card {min-height:clamp(53px,12vh,91px);border-color:#e5bd7d}
@@ -393,7 +368,7 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 .mission-launch .levels button {min-height:34px;font-size:.73rem}
 .mission-launch .gold {margin:0;min-height:40px}
 @media (max-height:430px) and (orientation:landscape) {
-  .brief {top:70px}.brief-lines button {min-height:33px}.quick button {padding-block:4px}
+  .brief {top:70px}.quick button {padding-block:4px}
   .quick button strong {font-size:.79rem}.quick i {right:6px}
   .selected-ship button {min-height:34px}
   .missions .chart-bar button {min-height:29px;padding:3px 7px}
@@ -460,13 +435,8 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 .mount-counts .metric {padding:4px 3px}
 .mount-counts dt {font-size:.59rem;white-space:nowrap}
 .mount-counts dd {margin:2px 0 0}
-.weapons .kit-spec {width:clamp(175px,24%,252px);max-height:calc(100% - 27px);overflow:auto}
-.weapons .kit-spec>button {display:block;margin-top:7px;width:100%;font-size:.7rem;min-height:33px}
-.weapons .kit-spec>p {padding-top:5px}
-.weapons .kit-categories {max-width:52%}
-.weapons .kit-grid {width:min(43%,504px);top:60px}
-.weapons .kit-grid .asset-card small {display:block;margin-top:4px}
-.weapons .kit-grid .asset-card button {white-space:normal}
+.upgrade .kit-grid .asset-card small {display:block;margin-top:4px}
+.upgrade .kit-grid .asset-card button {white-space:normal}
 .sortie-block {background:linear-gradient(100deg,#523926ad,#221f25eb);border:1px solid #d1a16882;padding:6px 8px}
 .sortie-block strong {color:#f9d4a0;font-size:.8rem}
 .sortie-block button {margin:5px 0;min-height:31px}
@@ -498,3 +468,36 @@ progress::-moz-progress-bar {background:linear-gradient(#fff3b2,#d5a355);border-
 #boss-health{display:block;margin:3px auto 0;min-width:70px;padding:3px 6px;border:1px solid #d3a368a0;color:#ffe5af;background:linear-gradient(90deg,#664528e8 var(--health,0%),#142338dd 0);font-weight:700;text-align:center}
 .target-pin.ace:not(.ally){border-color:#ffbe71;color:#fff1c9}
 .stage-picker button[data-boss="true"]:not([data-state="locked"]){border-color:#d0a365;color:#ffe4a7}
+
+.mast-actions {display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mast-actions button {display:flex;gap:.5em;align-items:center;padding:4px 8px;min-height:34px;background:#0d1a28b5;border-color:#a7b9c45c;color:#dde8ed}
+.mast-actions svg {width:17px;color:#eccf96}
+#application[data-screen="home"] .brief {width:auto;pointer-events:none}
+.modification-tabs {position:absolute;right:var(--right);top:10px;display:flex;flex-direction:column;gap:4px;align-items:end;max-width:60%}
+.modification-tabs .kit-categories {position:static;max-width:none;justify-content:flex-end}
+.mount-tabs button {min-height:28px}
+.upgrade .kit-grid {width:min(43%,510px);top:82px}
+.upgrade-item {padding:8px;border:1px solid #9db1c65a;background:linear-gradient(135deg,#15263aed,#08111ced)}
+.upgrade-item button {white-space:nowrap}
+.task-actions {margin-bottom:10px}
+.award-status {font-size:.72rem;white-space:nowrap;color:#afcbd3}
+.claimed .award-status {color:#a4cbbd}
+#lock-zone,#lead-aim {position:absolute;translate:-50% -50%;pointer-events:none;height:auto;aspect-ratio:1;overflow:visible;fill:none;stroke:currentColor}
+#lock-zone {color:#dbe8e185;stroke-width:1}
+#lock-zone[data-state="search"] {stroke-dasharray:1 5;color:#c4d8e773}
+#lock-zone[data-state="track"] {stroke-dasharray:5 4;color:#f3db9caf}
+#lock-zone[data-state="locked"] {color:#ffdb939e}
+#lead-aim {width:24px;color:#daf3d4;stroke-width:1.15;filter:drop-shadow(0 1px 2px #091821)}
+.target-pin.locked:not(.off) {width:27px;height:27px;border-width:1px}
+.target-pin.locked:not(.off)::after {content:'';position:absolute;inset:4px;rotate:45deg;border:1px solid #ffe0a0}
+.target-pin.tracked:not(.off) {border-style:dashed;opacity:.85}
+:is(.flight-actions,.combat-controls) button {position:relative;isolation:isolate;overflow:hidden}
+:is(.flight-actions,.combat-controls) button.cooling::after {
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:conic-gradient(#050b17c9 var(--cooldown),transparent 0)
+}
+:is(.flight-actions,.combat-controls) button:active {filter:brightness(1.2)}
+@media (max-height:430px) and (orientation:landscape) {
+  .mast-actions {gap:4px}
+  .mast-actions button {min-height:29px;padding-inline:5px;font-size:.65rem}
+}

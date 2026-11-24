@@ -196,8 +196,8 @@ export class WorldView {
     bindRockSurface(this.terrainMaterial);bindRockSurface(this.ridgeMaterial);
     this.assets=new Assets(app);
     for(const e of [this.hangar,this.field,this.effects,this.vehicles,this.props,this.terrainRoot,this.sun,this.rim])app.root.addChild(e);
-    const hangarFloor=material('水磨混凝土','#c4b9a9',.11,.47);
-    hangarFloor.clearCoat=.47;hangarFloor.clearCoatGloss=.82;
+    const hangarFloor=material('磨损停机坪混凝土','#bcbbb7',.08,.62);
+    hangarFloor.clearCoat=.18;hangarFloor.clearCoatGloss=.70;
     const floor=primitive(this.hangar,'整体现浇机坪','plane',hangarFloor,0,0,23,140,1,191);
     floor.render!.receiveShadows=true;
     const texC=document.createElement('canvas');
@@ -227,8 +227,8 @@ export class WorldView {
     this.impactLamp.enabled=false;
     this.sun.addComponent('light',{type:'directional',color:new Color(1,.81,.62),intensity:2.3,castShadows:true,
       shadowDistance:95,shadowResolution:2048,shadowUpdateMode:SHADOWUPDATE_REALTIME,normalOffsetBias:.045,shadowBias:.15});
-    this.rim.addComponent('light',{type:'directional',color:new Color(.52,.68,.91),intensity:1.20});
-    this.rim.setPosition(19,11,-21);this.rim.lookAt(Vec3.ZERO);this.rim.rotateLocal(90,0,0);
+    this.rim.addComponent('light',{type:'directional',color:new Color(.59,.74,.96),intensity:1.32});
+    this.rim.setPosition(13,17,-24);this.rim.lookAt(Vec3.ZERO);this.rim.rotateLocal(90,0,0);
     app.scene.ambientLight.set(.45,.49,.57);
     app.scene.fog.type=FOG_EXP2;
     this.skyMat=this.environment('sky');this.seaMat=this.environment('sea');
@@ -259,8 +259,8 @@ export class WorldView {
         hangarFloor.diffuseMap=color;hangarFloor.aoMap=detail;hangarFloor.aoMapChannel='r';
         hangarFloor.metalnessMap=detail;hangarFloor.metalnessMapChannel='b';
         hangarFloor.glossMap=detail;hangarFloor.glossMapChannel='g';hangarFloor.glossInvert=true;
-        hangarFloor.normalMap=norm;hangarFloor.bumpiness=.29;
-        hangarFloor.emissiveMap=lamps;hangarFloor.emissive.set(1,1,1);hangarFloor.emissiveIntensity=.74;
+        hangarFloor.normalMap=norm;hangarFloor.bumpiness=.46;
+        hangarFloor.emissiveMap=lamps;hangarFloor.emissive.set(1,1,1);hangarFloor.emissiveIntensity=.48;
         hangarFloor.update();
         const runway=facilities.runway;
         runway.diffuse.set(.65,.64,.62);
@@ -400,8 +400,8 @@ export class WorldView {
     const dim=weather>=2&&weather<=6;
     if(dim){vector.horizon[0]*=.81;vector.zenith[2]*=.83;}
     if(this.indoors){
-      vector.sunDir.set([-.93,.19,.37]);vector.horizon.set([.89,.52,.37]);
-      vector.zenith.set([.22,.33,.61]);vector.sunColor.set([1,.72,.49]);
+      vector.sunDir.set([-.88,.23,.42]);vector.horizon.set([.75,.52,.42]);
+      vector.zenith.set([.22,.35,.59]);vector.sunColor.set([1,.80,.61]);
     }
     const n=Math.hypot(...vector.sunDir);vector.sunDir.forEach((v,i)=>vector.sunDir[i]=v/n);
     this.sun.setPosition(...vector.sunDir as unknown as [number,number,number]);
@@ -409,7 +409,7 @@ export class WorldView {
     // Directional lights emit along local -Y rather than the camera's -Z.
     this.sun.rotateLocal(90,0,0);
     this.sun.light!.color.set(...vector.sunColor as unknown as [number,number,number]);
-    this.sun.light!.intensity=this.indoors?3.04:lighting===3?.33:sunlight;
+    this.sun.light!.intensity=this.indoors?2.75:lighting===3?.33:sunlight;
     this.sun.light!.castShadows=this.indoors||sunHeight>0;
     this.sun.light!.numCascades=this.indoors?1:3;
     this.sun.light!.shadowDistance=this.indoors?95:1880;
@@ -420,7 +420,7 @@ export class WorldView {
     scene.fog.density=this.indoors?.00040:this.climateDensities[weather]??.000045;
     scene.fog.color.set(vector.horizon[0]*.87,vector.horizon[1]*.91,vector.horizon[2]*.96);
     if(!this.indoors)scene.ambientLight.set(dim?.40:.43,dim?.46:.49,dim?.55:.57);
-    else scene.ambientLight.set(.34,.41,.58);
+    else scene.ambientLight.set(.32,.40,.54);
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
     this.terrainMaterial.setParameter('terrainCloudCover',cover);
     this.ridgeMaterial.setParameter('terrainCloudCover',-.115);
@@ -460,17 +460,17 @@ export class WorldView {
     this.impactLamp.enabled=true;
   }
   resetMarkers(){for(const m of [...this.targets,...this.rings])m.enabled=false;}
-  setAwardLighting(on:boolean){this.rim.light!.intensity=on?1.55:1.22;}
+  setAwardLighting(on:boolean){this.rim.light!.intensity=on?1.55:1.32;}
   preview(plane:PlaneSpec,t:number,mode:string,zoom=1){
     const hero=mode==='home',size=Math.max(plane.length,plane.span);
-    const yaw=this.orbit+(hero?.09:0)+Math.sin(t*.19)*.016;
+    const yaw=this.orbit+(hero?.15:0)+Math.sin(t*.19)*.016;
     const aspect=this.entry.canvas.clientWidth/Math.max(1,this.entry.canvas.clientHeight);
     const fit=hero?clamp(1.91/aspect,.86,1.25):1;
-    const d=Math.max(hero?10:15,size*(hero?.97:mode==='reveal'?1.19:1.28)*fit*zoom);
+    const d=Math.max(hero?10:15,size*(hero?.92:mode==='reveal'?1.19:1.28)*fit*zoom);
     const y=plane.gearClearance||1.45;
     this.contact.setLocalScale(plane.span*.91,1,plane.length*.96);
-    this.camera.position.set(Math.sin(yaw)*d,y+d*((hero?.079:.110)+this.tilt*.25),-Math.cos(yaw)*d);
-    this.look.set(hero?-1.67:0,y+(hero?.72:.43),0);
+    this.camera.position.set(Math.sin(yaw)*d,y+d*((hero?.073:.110)+this.tilt*.25),-Math.cos(yaw)*d);
+    this.look.set(hero?-1.05:0,y+(hero?.76:.43),0);
     this.camera.fov=hero?.80:.91;this.camera.minZ=.14;this.camera.setTarget(this.look);
   }
 

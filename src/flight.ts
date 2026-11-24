@@ -31,14 +31,14 @@ export class Airframe {
   ace=false;
   lockAt:number|null=null;
   firepower=1;
-  roundsLimit?:number; missilesLimit?:number; bombsLimit?:number;
+  bombsLimit?:number;
   cannon=0; missiles=0; bombs=0; boost=0; throttle=.74; speed=0; stall=0;
   alpha=0; beta=0; loadG=1;
   gear=0; gearTarget=0; grounded=false;
   gunsAt=0; missileAt=0; bombAt=0; alive=true; down=0;
   evadeSide=1; evadeReadyAt=0;
   atStage=0; role=0; phase=0; evadeUntil=0; cooldown=0; hitTime=-100;
-  generation=0; enginePower=1; storesBonus=0;
+  generation=0; enginePower=1;
   constructor(readonly id:number, public type:PlaneSpec, readonly side:0|1|2){
     this.hp=this.maxHp=side===0?Math.max(BASE_DURABILITY,type.durability):106;
   }
@@ -49,9 +49,9 @@ export class Airframe {
     this.previousOrientation.copyFrom(this.orientation);
     ahead.rotateByQuaternionToRef(this.orientation,this.forward);
     this.velocity.copyFrom(this.forward).scaleInPlace(speed);
-    this.speed=speed;this.cannon=this.roundsLimit??this.type.ammo;
-    this.missiles=this.missilesLimit??(this.type.missiles+(this.type.missiles?this.storesBonus:0));
-    this.bombs=this.bombsLimit??(this.type.bombs+(this.type.bombs?this.storesBonus:0));
+    this.speed=speed;this.cannon=this.side===0?0:this.type.ammo;
+    this.missiles=this.side===0?0:this.type.missiles;
+    this.bombs=this.bombsLimit??this.type.bombs;
     this.damage.left=this.damage.right=this.damage.engine=this.damage.body=0;
     this.hp=this.maxHp;this.alive=true;this.down=this.stall=this.boost=this.hitIntensity=0;this.hitTime=-100;
     this.gear=this.gearTarget=this.type.gearFixed?1:0;this.grounded=false;

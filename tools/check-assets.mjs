@@ -5,13 +5,13 @@ import { gunzipSync } from 'node:zlib';
 const sourceOnly=process.argv.includes('--source-only');
 const output=sourceOnly?'public':'dist';
 import { build } from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export {fleet,upgrades} from './src/data'; export {items,missiles,technologies} from './src/items';",
+const {outputFiles}=await build({stdin:{contents:"export {fleet,upgrades} from './src/data'; export {items,missiles} from './src/items';",
   resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,platform:'node',format:'esm'});
-const {items,missiles,technologies,fleet,upgrades}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+const {items,missiles,fleet,upgrades}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 assert.equal(new Set(items.map(a=>a.id)).size,items.length);
 assert.equal(new Set(items.map(a=>a.visual.icon)).size,items.length);
 for(const entry of items)assert((await stat('public/'+entry.visual.icon.replace(/^\.\//,''))).size>80,entry.id);
-const diagrams=[...technologies.map(t=>'tech-'+t.id),...upgrades.map(u=>'up-'+u.id)];
+const diagrams=upgrades.map(u=>'up-'+u.id);
 const signatures=new Set();
 for(const id of diagrams){
   const svg=await readFile('public/items/'+id+'.webp');
@@ -57,6 +57,12 @@ for(const name of ['charts/world.webp','charts/sundown.webp','charts/frost.webp'
   assert(source.equals(await readFile(output+'/'+name)),name);
   assert(source.length>10000,name);
 }
+for(const name of ['alpine','wings','title']){
+  const path='loading/'+name+'.webp';
+  const source=await readFile('public/'+path);
+  assert.equal(source.subarray(8,12).toString(),'WEBP',path);
+  assert(source.equals(await readFile(output+'/'+path)),path);
+}
 const world=await readFile(output+'/charts/world.webp');
 assert.equal(world.subarray(8,12).toString(),'WEBP');
 const activeWorld=await readdir(output+'/world');
@@ -101,4 +107,4 @@ if(!sourceOnly){
   const dist=await readdir('dist/assets');
   assert(!dist.some(name=>name.includes('instrumentation')||name.includes('world-lab')||name.includes('field-lab')||name.includes('three')));
 }
-console.log('Asset registration verified:',items.length,'distinct visuals,',fleet.length,'three-LOD GLBs,',diagrams.length,'technology and upgrade visuals.');
+console.log('Asset registration verified:',items.length,'distinct visuals,',fleet.length,'three-LOD GLBs,',diagrams.length,'upgrade visuals.');

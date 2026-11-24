@@ -18,9 +18,6 @@ button:hover{border-color:#eacc8c99;color:#fff4d5}p{line-height:1.56}p.note{font
 #front{z-index:2;background:linear-gradient(90deg,#0b1220cf 0%,#131c2872 23%,transparent 43%,transparent 78%,#0b132060)}
 .brief{position:absolute;top:16%;left:var(--edge);width:min(282px,37%);text-shadow:0 3px 16px #14202e}
 .caption{font-size:.72rem;font-weight:730;color:var(--gold);letter-spacing:.18em;display:inline-block}
-.brief-lines{width:min(183px,100%);margin-top:21px;display:grid;gap:4px}
-.brief-lines button{min-height:35px;display:flex;align-items:center;gap:8px;text-align:left;background:linear-gradient(90deg,#152638db,#1421322b);border-color:#879cb747;border-width:0 0 1px 1px;font-size:.76rem}
-.brief-lines svg{color:#ebc488}.brief-lines em{font-style:normal;margin-left:auto;color:var(--gold)}
 .quick{position:absolute;right:var(--right);bottom:17.5%;width:min(231px,26%);display:grid;gap:8px}
 .quick button{position:relative;min-height:56px;padding:10px 11px 9px 14px;text-align:left;border-left:2px solid #a5bed49b;background:linear-gradient(110deg,#18293de9,#2b456bc2 66%,#233e5897),repeating-linear-gradient(127deg,transparent 0 7px,#ccd1dd29 8px 9px);clip-path:polygon(0 0,95% 0,100% 22%,100% 100%,0 100%)}
 .quick button strong,.quick button span{display:block}.quick button strong{font-size:.94rem;letter-spacing:.10em}.quick button span{font-size:.69rem;color:#afc3d0;margin-top:2px}.quick i{position:absolute;right:12px;bottom:10px;color:#a8c5de;font-size:1.27rem}
@@ -39,7 +36,7 @@ button:hover{border-color:#eacc8c99;color:#fff4d5}p{line-height:1.56}p.note{font
 .station-heading{display:flex;align-items:center;gap:10px;margin-bottom:9px;text-shadow:0 2px 10px #060b13}
 .station-heading h2{font-size:clamp(1.03rem,2.4vw,1.61rem);font-weight:770;letter-spacing:.095em}
 .glass{background:linear-gradient(145deg,#182a40f7 0%,#101b2de9 65%,#172b41dd);border:1px solid #9eb3c759;border-radius:4px;box-shadow:0 4px 13px #060c1554}
-.air-spec,.hangar-filters,.livery{position:absolute;top:55px;padding:13px;pointer-events:auto}
+.air-spec,.hangar-filters{position:absolute;top:55px;padding:13px;pointer-events:auto}
 .exposed{pointer-events:none}.exposed .station-heading{pointer-events:auto}
 .air-spec{right:0;bottom:74px;width:min(246px,27%);overflow:auto}
 .air-spec h3,.glass h3{font-size:1.12rem;letter-spacing:.06em;margin:5px 0}
@@ -55,26 +52,23 @@ select{background:#112238;min-width:0;border:1px solid #8ca9bf72;padding:6px 8px
 .fleet-strip>button{flex:0 0 clamp(108px,12vw,161px);height:60px;min-height:60px;display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:6px;padding:4px 7px;text-align:left;line-height:1.1;font-size:.68rem;background:linear-gradient(140deg,#31475dea,#101c2bf5)}
 .fleet-strip svg{color:#bacde0;font-size:1.56rem;grid-row:span 2}.fleet-strip small{color:#b3c4d0;font-size:.62rem}
 button.on{border-color:#d7b875;color:#ffecca;background-color:#7355295c;box-shadow:inset 0 -2px #dab676}
-.livery{left:0;width:min(215px,25%);max-height:80%;overflow:auto}.livery button{display:flex;align-items:center;width:100%;gap:8px;margin-top:4px;text-align:left;font-size:.77rem}
-.livery i{width:13px;height:13px;background:var(--chip);border:1px solid #c2c9d6}
 .upgrade .air-spec{bottom:0;width:min(260px,30%);background:#122033ed}
 .upgrade-item{display:grid;grid-template-columns:auto 1fr auto;gap:4px;padding:8px 0;border-top:1px solid var(--line);font-size:.73rem;align-items:center}
 .upgrade-item svg{color:var(--gold)}.upgrade-item span{grid-column:span 2;color:var(--soft)}.upgrade-item small{grid-column:1/3;color:var(--soft)}.upgrade-item button{grid-row:span 2;min-height:35px;padding:5px}
 .mission-tabs,.levels{display:flex;gap:7px;margin:0 0 8px}.mission-tabs button,.levels button{min-height:34px;font-size:.78rem}
-.mission-brief{padding:12px;display:flex;flex-direction:column;gap:6px;overflow:auto}.mission-brief p,.settings-grid p,.facility-grid p{font-size:.82rem;color:#b9cedf}
+.mission-brief{padding:12px;display:flex;flex-direction:column;gap:6px;overflow:auto}.mission-brief p,.settings-grid p{font-size:.82rem;color:#b9cedf}
 .mission-brief .gold{margin-top:auto;min-height:44px}.levels{gap:3px;margin-top:6px;flex-wrap:wrap}.levels button{padding-inline:7px}
 .select-line{font-size:.79rem}
 .panel-scroll{flex:1;min-height:0;overflow:auto;padding-right:3px}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;align-content:start}
-.settings-grid article,.facility-grid article{padding:13px}
-.facility-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;align-content:start}.facility-grid article>svg{color:var(--gold);font-size:1.71rem}.facility-grid button{margin-top:12px}
+.settings-grid article{padding:13px}
 .settings-grid label{margin:10px 0}.settings-grid label:has(input[type="checkbox"]){display:flex;align-items:center;gap:6px}.settings-grid summary{cursor:pointer;color:var(--gold)}
 progress{height:5px;width:min(145px,30vw);vertical-align:middle;accent-color:#ddb469}
 input{accent-color:#e9b665}
 .veil{position:absolute;inset:0;display:grid;place-items:center;background:#071017b9;z-index:10;padding:12px}
-.system-card,.pause-card{max-width:430px;width:min(430px,90%);padding:24px;color:#eef3f7}
-.system-card{text-align:center;background:#0b1729e9;border:1px solid #c8b18080}.system-card .crest{margin:0 auto 13px}.system-card p,.pause-card p{color:#a8bfce;margin-top:8px;font-size:.86rem}
-#boot-error{color:#ffc0aa;font-size:.82rem;margin-top:15px}.pause-card h2{font-size:2.1rem;margin:5px 0 14px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+.pause-card{max-width:430px;width:min(430px,90%);padding:24px;color:#eef3f7}
+
+#boot-error{color:#ffc0aa;font-size:.82rem}.pause-card h2{font-size:2.1rem;margin:5px 0 14px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
 #status-toast{position:absolute;z-index:30;left:50%;top:15%;transform:translateX(-50%);padding:9px 15px;background:#102031f5;border:1px solid #bcaf887c;color:#f5ddad;font-size:.84rem;pointer-events:none;max-width:90%;text-align:center}
 .debrief{width:min(617px,59%);max-height:88dvh;overflow:auto;padding:14px;margin-left:auto;margin-right:var(--right)}
 #overlay:has(.debrief){background:linear-gradient(90deg,#10192622,#111a2aa1 64%,#0a1225e9)}
@@ -105,9 +99,7 @@ input{accent-color:#e9b665}
 .flight-controls{position:absolute;left:var(--edge);bottom:var(--heel);display:flex;flex-direction:column;align-items:start;gap:6px;width:clamp(130px,22vw,206px);color:#d9e9df}
 #counter{position:relative;isolation:isolate;pointer-events:auto;border-radius:50%;min-height:58px;min-width:58px;padding:4px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;color:#e1f7f2;border-color:#85c1bcba;background:#122d3bdb;touch-action:none}
 #counter svg{width:17px;height:17px}#counter span,#counter b{font-size:.67rem;line-height:1;font-variant-numeric:tabular-nums}
-#counter::before{content:'';position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(#f8be77 var(--cool,0%),transparent 0);mask:radial-gradient(transparent calc(100% - 2px),#000 calc(100% - 1px));pointer-events:none}
 #counter.armed{color:#fff3ca;border-color:#ffe680;background:#594327db;box-shadow:0 0 17px #efae5364}
-#counter-state{font-size:.69rem;white-space:nowrap;color:#ddf4f1}
 #touch-guide{display:none;position:absolute;left:50%;bottom:calc(var(--heel) + 5px);translate:-50% 0;color:#ecf1e0;font-size:.75rem;white-space:nowrap}
 #application[data-touch="true"] #touch-guide:not([hidden]){display:block}
 .armor{grid-row:2;grid-column:2;min-width:86px;padding:3px 7px 4px;background:linear-gradient(90deg,#172639b0,transparent);border-left:1px solid #b5cbd766;text-align:left}.armor span{display:block;font-size:.82em;white-space:nowrap}.armor i{display:block;height:3px;background:#313d45;margin-top:3px}.armor em{height:100%;display:block;background:#7bdfad}.armor em.critical{background:#ff855f}
@@ -124,11 +116,10 @@ input{accent-color:#e9b665}
  .identity strong{font-size:.83rem}.identity small{font-size:.55rem}.wallet{font-size:.65rem}
  .mast .square{min-height:36px;width:36px;min-width:36px}
  .brief{top:17%;width:min(185px,26%)}.brief h1{font-size:clamp(1.6rem,7.5dvh,2.8rem)}.brief p{font-size:.68rem}
- .brief-lines{margin-top:8px;gap:2px}.brief-lines button{min-height:27px;font-size:.65rem;padding:3px 5px}
  .quick{width:23%;bottom:19%;gap:3px}.quick button{min-height:43px;padding:5px 5px 5px 9px}.quick button strong{font-size:.75rem}.quick button span{font-size:.62rem}.quick i{right:7px;bottom:7px;font-size:.85rem}
  #navigation button{min-height:42px;font-size:.71rem}.selected-ship{bottom:calc(var(--heel) + 49px)}
  #section{top:54px;bottom:calc(var(--heel) + 47px)}.station-heading{margin-bottom:5px}.station-heading h2{font-size:1.12rem}
- .air-spec,.livery,.hangar-filters{top:45px;padding:7px}.air-spec{bottom:58px;min-width:157px}.air-spec dl{margin:3px 0;gap:2px}.air-spec .note{margin:5px 0}
+ .air-spec,.hangar-filters{top:45px;padding:7px}.air-spec{bottom:58px;min-width:157px}.air-spec dl{margin:3px 0;gap:2px}.air-spec .note{margin:5px 0}
  .air-spec h3,.glass h3{font-size:.9rem}.hangar-filters{gap:6px}.fleet-strip{gap:4px}.fleet-strip>button{height:50px;min-height:50px}
  .mission-brief{padding:7px;gap:2px}.mission-brief p{font-size:.73rem}.mission-tabs,.levels{margin-bottom:4px}
  .mission-tabs button,.levels button{min-height:29px;padding-block:4px}
@@ -179,12 +170,11 @@ input{accent-color:#e9b665}
 .route-studio .route-body{pointer-events:none;overflow:hidden}
 .route-studio .route-body>aside,.route-studio .fleet-strip,.kit-grid,.kit-categories,.kit-spec{pointer-events:auto}
 .route-studio .hangar-filters{left:var(--edge);top:16px}.route-studio .air-spec{top:16px;right:var(--right);bottom:113px}
-.route-studio .fleet-strip{left:var(--edge);right:var(--right);bottom:var(--heel)}
-.route-studio .livery{left:var(--edge);top:16px}.route-studio.upgrade .air-spec{bottom:var(--heel);width:min(331px,35%)}
+.route-studio .fleet-strip{left:var(--edge);right:var(--right);bottom:var(--heel)}.route-studio.upgrade .air-spec{bottom:var(--heel);width:min(331px,35%)}
 .station-actions{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}.station-actions button{min-height:36px;padding:4px 6px;font-size:.71rem}
 .route-intro{border-left:2px solid #e5b777;min-height:126px;padding:13px 18px;margin-bottom:15px;background:linear-gradient(93deg,#182e47 17%,#21374875 61%,#101f31b5),var(--route-art) center right 5% / min(34%,250px) auto no-repeat;border-block:1px solid #86b0c751}
 .route-intro h3{font-size:clamp(1.12rem,3vw,1.86rem);margin:4px 0 3px;color:#f8dfac;letter-spacing:.08em}.route-intro p{color:#c7d4df;font-size:.76rem;max-width:70%}
-.route-cards,.inventory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.route-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .asset-card{position:relative;display:grid;align-items:center;grid-template-columns:82px minmax(0,1fr) auto;gap:9px;border:1px solid #9ab8ca64;min-height:84px;padding:7px;background:linear-gradient(131deg,#273e55f2,#12263be8 51%,#111e30e8);box-shadow:inset 0 1px #a5becc23;overflow:hidden}
 .asset-card::after{content:'';position:absolute;left:0;top:12px;bottom:12px;width:2px;background:#91aeb9}
 .asset-card.rare::after{background:#62d7e0}.asset-card.elite::after{background:#f1b76a}
@@ -198,19 +188,13 @@ input{accent-color:#e9b665}
 .kit-categories{position:absolute;right:var(--right);top:14px;display:flex;gap:3px;flex-wrap:wrap;max-width:48%}.kit-categories button{font-size:.65rem;padding:4px 6px;min-height:34px}
 .kit-grid{position:absolute;right:var(--right);top:76px;bottom:var(--heel);width:min(40%,380px);display:grid;align-content:start;gap:6px;overflow:auto}
 .kit-grid .asset-card{grid-template-columns:58px 1fr;min-height:77px;gap:6px}.kit-grid .asset-card button{grid-column:2;justify-self:start;min-height:34px}
-.tech-portal{display:grid;grid-template-rows:auto minmax(148px,1fr) auto;height:100%;gap:8px}
-.tech-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;color:#e3c898}.tech-tools button{min-height:34px}
-.tech-board{overflow:auto;border:1px solid #5b839c6b;background:radial-gradient(ellipse,#213a52,#101e30 79%)}
-.tech-tree{padding:12px;zoom:var(--zoom);min-width:570px;display:grid;gap:8px}
-.branch{display:grid;grid-template-columns:97px 150px 64px 150px;align-items:center;gap:6px;color:#c5d9e8;font-size:.78rem}.branch button{display:grid;justify-items:center;line-height:1.23;font-size:.74rem}.branch small{color:#e5c791}.branch img{width:54px}.branch i{border-top:1px solid #deb575;opacity:.7}
-.tech-detail{padding:8px 10px;display:grid;grid-template-columns:68px minmax(0,1fr) auto;align-items:center;gap:10px}.tech-detail img{width:66px}.tech-detail h3{margin:0}.tech-detail p{font-size:.78rem;color:#b7cbd8}.tech-detail small{color:#d9b87f;font-size:.68rem}
 .pilot-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;border:1px solid #89a4b662;padding:8px}
 .route-terminal.missions .route-body{display:flex;flex-direction:column}.route-terminal.missions .mission-grid{min-height:180px}
-.route-terminal .settings-grid,.route-terminal .facility-grid{min-height:max-content}.route-page .upgrade-item .item-art{width:26px}
+.route-terminal .settings-grid{min-height:max-content}.route-page .upgrade-item .item-art{width:26px}
 @media(max-height:470px) and (orientation:landscape){
  .route-page .station-heading{min-height:46px;padding-top:5px;padding-bottom:5px;gap:6px}.route-crumb{font-size:.57rem}.route-page .station-heading button{min-height:34px}
  .route-body{padding-top:8px}.route-intro{min-height:93px;padding:8px 12px;margin-bottom:8px}.route-intro p{font-size:.71rem}
- .route-studio .air-spec{top:10px;bottom:75px}.route-studio .hangar-filters,.route-studio .livery{top:10px}.route-studio .fleet-strip{bottom:5px}
+ .route-studio .air-spec{top:10px;bottom:75px}.route-studio .hangar-filters{top:10px}.route-studio .fleet-strip{bottom:5px}
  .asset-card{min-height:62px;padding:5px;grid-template-columns:53px minmax(0,1fr) auto;gap:6px}.asset-card h4{font-size:.77rem}.asset-card p{font-size:.67rem}
  .kit-grid .asset-card{min-height:63px;grid-template-columns:45px 1fr}
 }
@@ -225,9 +209,6 @@ input{accent-color:#e9b665}
 /* The command deck reads from warm operational cues to cool flight telemetry. */
 #application[data-screen="home"] .lens{background:radial-gradient(ellipse at 57% 43%,transparent 47%,#09101a73),linear-gradient(0deg,#070d1de6,transparent 30%,transparent 80%,#070e19a8)}
 #front{background:linear-gradient(90deg,#08111bdf 0%,#111d2a5e 28%,transparent 46%,transparent 72%,#08152089)}
-.brief-lines{border-top:1px solid #b3c6d746;padding-top:7px;width:min(211px,100%)}
-.brief-lines button{border-left:2px solid #b19064a0;background:linear-gradient(90deg,#112538d9,#18314656)}
-.brief-lines button:hover{border-color:#ffce8e}
 .quick{width:min(290px,24%)}
 .quick button,.quick .launch-card{min-height:65px;background:linear-gradient(90deg,#0c1b2cf5 4%,#142a42b3 56%,#0b182742 100%),var(--card-art) center right / auto 110% no-repeat,#0f2033;border-block-color:#a1bbcc6a}
 .quick button::before{background:linear-gradient(0deg,#09162272,transparent 55%),repeating-linear-gradient(135deg,transparent 0 18px,#e4f0fa0e 18px 19px)}
@@ -250,8 +231,6 @@ input{accent-color:#e9b665}
 .route-emblem{position:absolute;right:16px;bottom:7px;width:min(16%,140px);opacity:.74;filter:drop-shadow(0 4px 13px #0b1322)}
 .route-terminal.settings{background:repeating-linear-gradient(90deg,transparent 0 38px,#bdddf00d 38px 39px),radial-gradient(ellipse at 84% 0%,#314c62,#142538 63%,#111b29)}
 .route-terminal.settings .glass{border-top:2px solid #b39668b5}
-.route-terminal.tree .tech-board{background:repeating-linear-gradient(0deg,transparent 0 29px,#bdddf00d 29px 30px),repeating-linear-gradient(90deg,transparent 0 29px,#bdddf00d 29px 30px),radial-gradient(ellipse,#284659,#0b1b2f 79%)}
-.branch i{height:7px;border-block:1px solid #a98d62b8;background:repeating-linear-gradient(90deg,#d1a66788 0 3px,transparent 3px 9px)}
 .route-page .upgrade-item .item-art{width:32px;filter:drop-shadow(0 2px 4px #050b17aa)}
 .route-studio .fleet-strip>button{border-top-color:#97bdcc7c}
 .route-page .asset-card{box-shadow:inset 0 1px #b5c7d334,0 3px 10px #07192053}
@@ -260,7 +239,6 @@ input{accent-color:#e9b665}
 .combat-controls .fire{border-top:2px solid #ffe0a1;background:linear-gradient(145deg,#755436f3,#2e3b4fee 63%);color:#fff1cb}
 .combat-controls .fire span{font-weight:730}
 
-#counter::before{inset:0;border-radius:inherit;mask:linear-gradient(black 0 0) content-box,linear-gradient(black 0 0);mask-composite:exclude;padding:2px}
 .hud-left,.hud-right{filter:drop-shadow(0 1px 2px #091825b5)}
 .hud-middle{background:linear-gradient(90deg,transparent,#14293e72,transparent)}
 @media(max-height:465px) and (orientation:landscape){
@@ -292,7 +270,6 @@ input{accent-color:#e9b665}
 .current-reading{color:#baf3db;border-color:#82d7be8e}
 .receipt-arrow{color:var(--receipt)}
 .receipt .receipt-panel{animation:receipt-slide .34s cubic-bezier(.14,.78,.23,1) both}
-.receipt[data-kind="research"] .receipt-panel{animation:receipt-board .47s ease-out both}
 .receipt[data-kind="upgrade"] .current-reading{animation:receipt-board .48s .10s ease-out both}
 .receipt[data-kind="paint"] .receipt-emblem{animation:receipt-board .42s .11s ease-out both}
 .receipt[data-kind="equip"] .receipt-emblem{animation:mount-in .38s cubic-bezier(.27,.85,.30,1) both}
@@ -314,9 +291,7 @@ input{accent-color:#e9b665}
 .acquisition.show-model::backdrop{background:radial-gradient(ellipse at 50% 39%,#05102004 25%,#03102063 68%,#030a14c7 100%);animation:model-halo .65s ease-out both}
 .acquisition.show-model .receipt-panel{padding:11px 16px}
 .acquisition.show-model h2{font-size:clamp(1.08rem,3.6vw,1.96rem)}
-.reward-ready{border-left-color:#ebc38b}.reward-ready button{color:#ffdfaa;background:linear-gradient(150deg,#735538,#273c52);border-color:#daac72}
 .reward-card.claimed::after{background:#73b5a4}.reward-card.claimed button{color:#a4cbbd}
-.branch button.researched{border-color:#77c6b5;color:#c3f6e4}.branch i.powered{border-color:#86dccb;background:repeating-linear-gradient(90deg,#86dccbe6 0 3px,transparent 3px 9px)}
 .upgrade-item[data-level="3"] strong{color:#f7d59d}.upgrade-item[data-level="3"] .item-art{filter:drop-shadow(0 0 6px #e8b36b70)}
 #status-toast[data-failed="true"]{border-color:#e8937e;color:#ffd3c6;background:#301f28ed}
 .debrief-title,.debrief-main{animation:receipt-slide .37s ease-out both}.debrief-main{animation-delay:.08s}
@@ -331,8 +306,6 @@ input{accent-color:#e9b665}
   .acquisition .receipt-item{min-height:32px}.acquisition .gold{min-height:34px}
 }
 @media(prefers-reduced-motion:reduce){.receipt-panel,.receipt::after,.receipt-emblem,.receipt-item,.current-reading,.acquisition::backdrop,.debrief-title,.debrief-main{animation:none!important}}
-.claim-tray{display:flex;justify-content:space-between;align-items:center;padding:4px 0 10px;color:#c4dbdf;font-size:.74rem}
-.claim-tray span svg{color:#edbd76;margin-right:5px}.claim-tray button{min-height:36px}
 #missile[data-lock="tracking"]{border-color:#e6b76a;border-bottom-style:dashed}
 #missile[data-lock="ready"]{border-color:#fbe6ae;box-shadow:inset 0 0 0 2px #e1b67250,0 0 8px #101b2c}
 #boost.on{border-color:#ffc996;color:#ffdfb0;background:linear-gradient(140deg,#825236,#302d42)}
@@ -350,18 +323,15 @@ input{accent-color:#e9b665}
 .wallet>span:first-child{background:linear-gradient(105deg,#1f2c3af3,#111c2bea);box-shadow:inset 0 1px #e2d8bb34;border-color:#c9ac7a75}
 .wallet i:has(.credit-mark){margin:0}
 #application[data-screen="home"] .mast{background:linear-gradient(112deg,#0b1826cc,#172c3e35 67%,#121d2c90)}
-.brief-lines{border-top-color:#dab78d82;gap:5px}.brief-lines button{background:linear-gradient(90deg,#1a2e3fe9,#101a28a1 79%,#27334555)}
 .quick button{background-size:auto,auto 115%,auto}
 .selected-ship{box-shadow:0 4px 15px #02080faa,inset 0 1px #e1c18d22}
 .station-heading .route-crumb{color:#d7bd9b}
 .route-terminal .asset-card{background:linear-gradient(134deg,#293d50e8,#11263be6 40%,#111f34f5);border-top-color:#8da9b877}
 .route-terminal.activity .asset-card{background:linear-gradient(116deg,#473948d4,#253244 34%,#17263a)}
 .route-terminal.inventory .asset-card{background:linear-gradient(135deg,#2f4143ef,#203245ed 45%,#152334ee)}
-.asset-card .item-art,.tech-detail img,.branch img,.receipt-item img{filter:drop-shadow(0 5px 6px #0309168f)}
+.asset-card .item-art,.receipt-item img{filter:drop-shadow(0 5px 6px #0309168f)}
 .prize .item-art{width:26px}
 .route-emblem{opacity:.93}
-.tech-board .branch button{background:linear-gradient(145deg,#24394de9,#15283a);border-color:#85b3cc71}
-.tech-board .branch button.researched{box-shadow:inset 0 -2px #7caea577,inset 0 1px #cee2cb59}
 #missile-art:not([hidden]){width:29px;height:20px;filter:drop-shadow(0 1px 3px #09132b)}
 .telemetry small,.combat-controls small{font-size:.65rem}
 .power-control input{accent-color:#e6b571}
@@ -390,12 +360,6 @@ input{accent-color:#e9b665}
 #navigation button.on,#section .gold {
   border-color:#d3b77b;
   text-shadow:0 1px 2px #241c12aa;
-}
-#boot-progress{
-  width:min(245px,78%);height:8px;vertical-align:middle;accent-color:#e1bb71;
-}
-#boot-percent{
-  display:inline-block;min-width:4ch;margin-left:8px;color:#f4d18f;font-variant-numeric:tabular-nums;
 }
 #hud .flight-actions,#hud .combat-controls {
   --action-size:clamp(39px,11.5dvh,72px);

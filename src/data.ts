@@ -52,12 +52,5 @@ export const upgrades=[
   {id:'maneuver',label:'舵面校准',type:'操纵',icon:'wing',description:'每级实际角速率响应 +6%。'},
   {id:'radar',label:'数字雷达',type:'航电',icon:'lock',description:'每级探测 +350 米，锁定距离 +150 米。'},
   {id:'weapons',label:'航炮强化',type:'火控',icon:'cross',description:'每级航炮命中伤害 +7%。'},
-  {id:'cadence',label:'供弹与发射节奏',type:'火控',icon:'cross',description:'每级航炮射速 +9%，导弹发射频率 +6%。'},
   {id:'warhead',label:'导弹战斗部',type:'火控',icon:'target',description:'每级空空弹与空对地制导弹伤害 +12%。'},
-  {id:'stores',label:'弹仓扩容',type:'携弹',icon:'target',description:'每级追加基础航炮弹量的 10%，已装载的空空弹和对地弹药各 +1。'},
-];
-export const baseModules=[
-  {id:'repair',name:'维修机棚',detail:'每次空战波次之间补充已使用的热诱饵和箔条。',price:1100},
-  {id:'radar',name:'岸基雷达',detail:'将出击雷达探测范围扩展至 8.5 公里。',price:850},
-  {id:'supply',name:'前线补给',detail:'任务结算额外获得 15% 信用点。',price:980}
 ];

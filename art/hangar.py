@@ -11,10 +11,10 @@ from fleet import MAT, block, coating, empty, loft, merge, mesh, rod, tube
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 for name, rgb, metal, rough, glow in [
-    ('iron','384657',.68,.38,0),('edge','6b7b8a',.62,.38,0),
-    ('zinc','283240',.53,.60,0),('concrete','49525a',.09,.83,0),
+    ('iron','48525a',.62,.43,0),('edge','727e86',.61,.40,0),
+    ('zinc','283240',.53,.60,0),('concrete','535b5d',.06,.78,0),
     ('nightglass','334b68',.37,.24,0),('amber','d28a41',.46,.48,0),
-    ('beacon','ffc378',.08,.29,3.2),('strip','b7d6ef',.04,.35,2.8),
+    ('beacon','f4c386',.08,.36,1.38),('strip','cedbe4',.04,.39,1.85),
     ('rubber','21282d',.025,.89,0),('equip','5f645f',.34,.60,0),
     ('scarlet','803846',.36,.57,0),('white','dab994',.12,.49,0),
     ('arm','b17139',.53,.42,0),('piston','9da9b2',.84,.24,0),('teal','40616b',.37,.55,0)]:
@@ -77,14 +77,14 @@ for z in truss:
             for dz in (-.54,.54):
                 rod('Anchor and nut',(x+dx,.58,z+dz),(x+dx,.79,z+dz),.076,structure,'edge',6)
         block('Inspection marker',(x-side*.48,4.82,z),(.038,.57,1.04),structure,'amber')
-        lamp(x-side*1.48,6.83,z+.17,structure,'beacon')
+        if z in (-32,-10,23):lamp(x-side*1.48,6.83,z+.17,structure,'beacon')
         girder('Upper roof purlin',(x,17.8,z),(0,23.4,z),.46,.69,structure)
     girder('Roof truss lower chord',(-29.8,16.78,z),(29.8,16.78,z),.40,.61,structure)
     for i in range(12):
         xa=-30+i*5;xb=xa+5
         ya=17.8+(1-abs(xa)/30)*5.49;yb=17.8+(1-abs(xb)/30)*5.49
         girder('Continuous roof lattice',(xa,ya if i%2 else 16.78,z),(xb,16.78 if i%2 else yb,z),.22,.29,structure)
-        if i in (2,4,7,9):lamp(xa+2.5,16.50,z,structure,'strip' if i in (4,7) else 'beacon')
+        if i in (4,7):lamp(xa+2.5,16.50,z,structure,'strip')
 for x in [-29,-23,-16,-9,-3,3,9,16,23,29]:
     y=18+(1-abs(x)/30)*5.59
     girder('Longitudinal purlin',(x,y,-34),(x,y,34),.28,.36,structure)
@@ -133,7 +133,7 @@ for i in range(8):
     lamp(x,15.89,31.6,structure,'beacon')
     for z in (43,58,73,89):
         block('Runway recessed light',(x,.049,z),(.45,.08,.22),far,'beacon',.016)
-for x,z in [(-23,10),(22,14),(-22,-14)]:
+for x,z in [(-23,10),(23,17)]:
     cage(x,z,service)
     for j in range(4):
         p=x+(.58 if j%2 else -.34), .29+(j//2)*.52, z+3.1+(j%2)*.52
@@ -226,7 +226,7 @@ for i in range(8):
     block('Tower window bow',(towerX-3.8+i*1.08,16.52,towerZ-4.22),(.105,2.20,.102),far,'iron')
 rod('Airport aerial',(towerX,17.1,towerZ),(towerX,23.5,towerZ),.124,far,'edge',7)
 rod('Beacon lens',(towerX,23.08,towerZ),(towerX,23.58,towerZ),.17,far,'beacon',12)
-for x,z in [(-37,65),(26,78),(40,80)]:
+for x,z in [(-37,65),(34,82)]:
     block('Remote service shed',(x,2.72,z),(14,5.36,16),far,'zinc',.07)
     block('Raised air duct',(x,5.61,z),(10,.33,10),far,'edge',.067)
     for i in range(5): block('Service window',(x-5.2+i*2.45,3.48,z-8.06),(1.88,1,.12),far,'nightglass',.02)

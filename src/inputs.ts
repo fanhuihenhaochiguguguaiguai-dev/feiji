@@ -11,6 +11,7 @@ export class FlightInput {
   private gun=false;
   private missile=false;
   private bomb=false;
+  private boost=false;
   readonly values:Controls={...idle};
   on=false;
   constructor(canvas:HTMLCanvasElement,readonly action:(name:string)=>void){
@@ -24,6 +25,7 @@ export class FlightInput {
         if(kind==='gun')this.gun=true;
         if(kind==='missile')this.missile=true;
         if(kind==='bomb')this.bomb=true;
+        if(kind==='boost')this.boost=true;
       });
       for(const n of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(n,e=>{
         this.held.delete((e as PointerEvent).pointerId);b.classList.remove('pressed');
@@ -32,6 +34,7 @@ export class FlightInput {
         if(!this.on||(e as PointerEvent).detail)return;
         if(kind==='gun')this.gun=true;
         if(kind==='missile')this.missile=true;if(kind==='bomb')this.bomb=true;
+        if(kind==='boost')this.boost=true;
       });
     }
     const evade=document.getElementById('evade')!;
@@ -62,13 +65,14 @@ export class FlightInput {
       if(e.code==='Space')this.gun=true;
       if(e.code==='KeyF')this.missile=true;
       if(e.code==='KeyB')this.bomb=true;
+      if(e.code==='ShiftLeft'||e.code==='ShiftRight')this.boost=true;
       const commands:Record<string,string>={KeyC:'view',KeyG:'gear',KeyU:'turn',KeyZ:'counter',KeyJ:'evade-left',KeyK:'evade',KeyL:'evade-right'};
       if(commands[e.code])this.action(commands[e.code]);
     });
     addEventListener('keyup',e=>this.keys.delete(e.code));addEventListener('blur',()=>this.reset(false));
   }
   reset(defaultThrottle:number|false=.74){
-    this.touch.clear();this.keys.clear();this.held.clear();this.gun=this.missile=this.bomb=false;
+    this.touch.clear();this.keys.clear();this.held.clear();this.gun=this.missile=this.bomb=this.boost=false;
     if(defaultThrottle!==false){this.throttle=defaultThrottle;this.slider.value=String(defaultThrottle*100);}
     for(const node of document.querySelectorAll('.pressed'))node.classList.remove('pressed');
   }
@@ -83,15 +87,13 @@ export class FlightInput {
     const delta=axes('KeyR','KeyV');
     if(delta){this.throttle=clamp(this.throttle+delta*dt*.57,.12,1);this.slider.value=String(Math.round(this.throttle*100));}
     r.throttle=this.throttle;r.assist=true;
-    r.boost=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight');
+    r.boost=this.boost;
     r.gun=this.gun||this.keys.has('Space');
     for(const action of this.held.values()){
-      if(action==='boost')r.boost=true;
       if(action==='gun')r.gun=true;
     }
-    if(r.boost)r.throttle=Math.max(r.throttle,.98);
     r.missile=this.missile;r.bomb=this.bomb;
-    this.gun=this.missile=this.bomb=false;
+    this.gun=this.missile=this.bomb=this.boost=false;
     return r;
   }
 }

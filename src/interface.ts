@@ -1,15 +1,16 @@
 import type { FlightPose } from './flight';
 import { TacticalRadar } from './tactical-radar';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { baseModules, byAircraft, difficulties, eras, fleet, operation, operations, theatres, upgrades, type FreeFlightPlan, type Operation } from './data';
-import { buyItem, buyUpgrade, claimRewards, combatConfiguration, creditWeapon, detachWeapon, equipItem, purchaseBlock, sortieBlock, firstClearLoot, requirements, research, resetGear, rewardStatus, saveProfile, unlockAircraft, upgradeCompatible, upgradeLevel, type Save } from './profile';
-import { cannonID, compatible, gearSlot, slotName, gears, itemById, items, missiles, missileDamage, rewards, technologies, type RewardDefinition, type GearSlot } from './items';
-import { cannonFor, guidedStrike, gunDamage, gunCycle, gunSight, missileCycle } from './ordnance';
+import { byAircraft, difficulties, eras, fleet, operation, operations, theatres, upgrades, type FreeFlightPlan, type Operation } from './data';
+import { buyItem, buyUpgrade, combatConfiguration, detachWeapon, equipItem, purchaseBlock, sortieBlock, firstClearLoot, resetGear, rewardStatus, saveProfile, unlockAircraft, upgradeCompatible, upgradeLevel, upgradePrice, type Save } from './profile';
+import { cannonID, compatible, gearSlot, slotName, gears, itemById, missiles, missileDamage, rewards, type GearSlot } from './items';
+import { cannonFor, guidedStrike, gunDamage, gunCycle, gunSight } from './ordnance';
 import { icon, icons } from './icons';
-import type { Debrief,FlightEvent,Sortie } from './sortie';
+import type { CooldownAction,Debrief,FlightEvent,Sortie } from './sortie';
+import { lockRadius } from './targeting';
 import type { WorldView } from './renderer';
 import { clamp } from './terrain';
-import { defenseNames,seekerNames } from './defense';
+import { seekerNames } from './defense';
 import { countTo, Presentation, type Receipt } from './presentation';
 import type { FeedbackTone } from './audio';
 import { airframeLevels, levelProgress, levelReward, pilotLevel } from './progression';
@@ -19,11 +20,16 @@ import { campaignChart, chartMarker, chartPoint } from './campaign-chart';
 export const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const money=(n:number)=>n.toLocaleString('zh-CN');
 const clock=(v:number)=>Math.floor(v/60).toString().padStart(2,'0')+':'+Math.floor(v%60).toString().padStart(2,'0');
-const stationTitles:Record<string,string>={hangar:'战机机库',upgrade:'战机升级',weapons:'武器与改装',
-  tree:'航空科技树',missions:'战役司令部',training:'飞行训练中心',freeprep:'自由空战准备',
-  quests:'任务中心',activity:'活动中心',season:'赛季通行证',sortieprep:'出击准备',base:'空军基地',inventory:'军需仓库',records:'飞行员资料',settings:'游戏设置'};
-export const studioStations=['home','hangar','upgrade','weapons','sortieprep','freeprep'];
-const rewardAvailable=(p:Save,r:RewardDefinition)=>{const state=rewardStatus(p,r);return state.earned&&!state.claimed;};
+const stationTitles:Record<string,string>={hangar:'战机机库',upgrade:'改装',missions:'战役司令部',
+  training:'飞行训练中心',freeprep:'自由空战准备',quests:'任务中心',sortieprep:'出击准备',records:'个人档案',settings:'游戏设置'};
+export const studioStations=['home','hangar','upgrade','sortieprep','freeprep'];
+const modificationTabs=[
+  {id:'weapons',name:'武器',slots:['missile','cannon','bomb'],parts:['warhead','weapons']},
+  {id:'performance',name:'性能',slots:['engine','radar'],parts:['engine','maneuver','radar']},
+  {id:'defense',name:'防御',slots:['counter'],parts:['armor']},
+  {id:'skin',name:'外观',slots:['skin'],parts:[]}
+] as const;
+type ModificationTab=(typeof modificationTabs)[number];
 const picture=(id:string,klass='')=>{
   const asset=itemById[id];
   return asset?'<img class="item-art '+klass+'" src="'+asset.visual.icon+'" alt="" loading="lazy">':'';
@@ -31,8 +37,8 @@ const picture=(id:string,klass='')=>{
 const rewardChips=(list:[string,number][])=>list.map(([id,n])=>'<span class="prize '+itemById[id]?.grade+'">'+picture(id)+'<span>'+itemById[id]?.name+' <b>×'+n+'</b></span></span>').join('');
 const resource=(path:string)=>new URL(path,document.baseURI).href;
 const routeIntro=(label:string,headline:string,copy:string,art:string,backdrop:string)=>
-  '<header class="route-intro" style="--route-art:url('+resource((backdrop==='season'?'ui-v7/':'briefing/')+backdrop+'.webp')+')">'+
-  '<span class="caption">'+label+'</span><h3>'+headline+'</h3><p>'+copy+'</p><img class="route-emblem" src="'+resource('items/'+art+'.webp')+'" alt=""></header>';
+  '<header class="route-intro" style="--route-art:url('+resource('briefing/'+backdrop+'.webp')+')">'+
+  (label?'<span class="caption">'+label+'</span>':'')+'<h3>'+headline+'</h3><p>'+copy+'</p><img class="route-emblem" src="'+resource('items/'+art+'.webp')+'" alt=""></header>';
 const selected=(yes:boolean)=>yes?' selected':'';
 const disabled=(yes:boolean)=>yes?' disabled':'';
 const metric=(name:string,value:string)=>'<div class="metric"><dt>'+name+'</dt><dd>'+value+'</dd></div>';
@@ -47,12 +53,31 @@ function placeCue(cue:SVGSVGElement,at:Vector3|null,world:WorldView,w:number,h:n
 }
 interface Actions {amend:()=>void;preview:(id:string)=>void;fly:(id:string,rank:number,runway:boolean,plan:FreeFlightPlan)=>void;restart:()=>void;resume:()=>void;leave:()=>void;previewAward:(model?:string)=>void;feedback:(tone:FeedbackTone)=>void;}
 export class Interface {
-  station='home';aircraft='j20';selectedMission='s01';mode='campaign';era='';nation='';tier=1;runway=false;region=0;weather=0;lighting=0;technology='signal';gearFilter='missile';zoom=1;
+  station='home';aircraft='j20';selectedMission='s01';mode='campaign';era='';nation='';tier=1;runway=false;region=0;weather=0;lighting=0;gearFilter:GearSlot='missile';
+  private modification:ModificationTab=modificationTabs[0];
   private questTab='day';
   private chapter=0;
   private prepared='s01';
   private readonly radar=new TacticalRadar(el('radar'),el('tactical'));
   private readonly aim=document.querySelector<SVGSVGElement>('#aim')!;
+  private readonly lockZone=document.querySelector<SVGSVGElement>('#lock-zone')!;
+  private readonly leadCue=document.querySelector<SVGSVGElement>('#lead-aim')!;
+  private readonly leadPoint=new Vector3();
+  private readonly focusPoint=new Vector3();
+  private readonly projectionPoint=new Vector3();
+  private readonly cooldownButtons=(['counter','turn','boost','evade','missile','bomb'] satisfies CooldownAction[])
+    .map(id=>({id,node:el(id),last:-1}));
+  private targetView:{world:WorldView;w:number;h:number;radius:number;visible:boolean}|null=null;
+  private readonly measureZone=(position:Vector3)=>{
+    const view=this.targetView;
+    if(!view?.visible)return Infinity;
+    const {world,w,h,radius}=view;
+    if(Vector3.Dot(position.subtractToRef(world.camera.position,this.projectionPoint),cameraForward)<=0)return Infinity;
+    world.camera.project(position,this.projectionPoint,w,h);
+    const p=this.projectionPoint;
+    if(p.x<0||p.y<0||p.x>w||p.y>h)return Infinity;
+    return Math.hypot(p.x-this.focusPoint.x,p.y-this.focusPoint.y)/radius;
+  };
   private readonly groundAim=document.querySelector<SVGSVGElement>('#ground-aim')!;
   private readonly pins:{frame:HTMLDivElement;label:HTMLSpanElement}[]=[];
   private readonly presentation:Presentation;
@@ -91,22 +116,23 @@ export class Interface {
         window.setTimeout(()=>URL.revokeObjectURL(url),1000);return;
       }
       if(d.configure){
-        this.aircraft=p.selected;this.gearFilter=d.configure;this.open('weapons');return;
+        this.aircraft=p.selected;this.chooseModification('weapons',d.configure);this.open('upgrade');return;
       }
       if(d.unmount){
         const prior=p.loadouts[this.aircraft],slot=d.unmount as GearSlot;
         const message=detachWeapon(p,this.aircraft,slot);
         this.result(prior!==p.loadouts[this.aircraft],message,{
-          kind:'equip',title:'挂位已清空',detail:'采购装备保留在仓库，可重新装配'
+          kind:'equip',title:'挂位已清空',detail:'装备已保留，可重新装配'
         },'install');return;
       }
       if(d.nav){
+        if(d.mod)this.chooseModification(d.mod);
         this.open(d.nav);
-        if(d.upFocus)document.querySelector('[data-up="'+d.upFocus+'"]')?.scrollIntoView({block:'nearest'});
         return;
       }
       if(d.back!==undefined){this.back();return;}
-      if(d.gear){this.gearFilter=d.gear;this.render();return;}
+      if(d.mod){this.chooseModification(d.mod);this.render();return;}
+      if(d.gear){this.chooseModification(this.modification.id,d.gear);this.render();return;}
       if(d.previewMissile&&missiles[d.previewMissile]){
         const subject=itemById[d.previewMissile];
         if(subject)this.presentation.inspect(subject.name,subject.description,d.previewMissile);
@@ -132,20 +158,10 @@ export class Interface {
         this.purchase.close();
         const old=p.credits,message=buyItem(p,d.buyCommit),item=itemById[d.buyCommit];
         if(item)this.result(p.credits<old,message,{
-          kind:'purchase',title:item.name,detail:this.station==='weapons'?'已存入仓库。点击右侧安装到所选挂位':'已存入军需仓库',prizes:[[item.id,1]],spent:old-p.credits
+          kind:'purchase',title:item.name,detail:'已解锁，可直接安装到兼容挂位',prizes:[[item.id,1]],spent:old-p.credits
         },item.grade==='standard'?'supply':'rare',old);
         return;
       }
-      if(d.node){this.technology=d.node;this.render();return;}
-      if(d.research){
-        const tech=technologies.find(t=>t.id===d.research);
-        if(!tech)return;
-        const before=p.technology.length,credits=p.credits,message=research(p,tech.id);
-        this.result(p.technology.length>before,message,{
-          kind:'research',title:tech.name,detail:tech.description,art:'./items/tech-'+tech.id+'.webp',spent:credits-p.credits
-        },'research',credits);return;
-      }
-      if(d.zoom){this.zoom=clamp(this.zoom+Number(d.zoom),.72,1.65);this.render();return;}
       if(b.id==='radar-open'){this.radar.open();return;}
       if(d.questTab){this.questTab=d.questTab;this.render();return;}
       if(d.confirmSortie){this.launch(this.prepared);return;}
@@ -177,23 +193,6 @@ export class Interface {
         },'calibrate',credits);
         return;
       }
-      if(d.claim||d.claimAll!==undefined){
-        const available=rewards.filter(r=>rewardAvailable(p,r));
-        const wanted=d.claim?available.filter(r=>r.id===d.claim):available.filter(r=>d.claimAll==='pass'?r.id.startsWith('pass-'):this.filteredQuests().includes(r));
-        if(!wanted.length){this.denied('目前没有可核发的奖励');return;}
-        const credits=p.credits,granted=claimRewards(p,wanted.map(r=>r.id));
-        const items=new Map<string,number>();
-        for(const r of granted)for(const [id,n] of r.prize)items.set(id,(items.get(id)??0)+n);
-        const prizes=Array.from(items);
-        const reveal=prizes.map(([id])=>itemById[id]).find(i=>i&&(i.kind==='aircraft'||i.kind==='missile'));
-        const tone=reveal||prizes.some(([id])=>itemById[id]?.grade==='elite')?'ceremony':
-          prizes.some(([id])=>itemById[id]?.grade==='rare')?'rare':'supply';
-        this.result(granted.length>0,'存档失败，奖励未入库',{
-          kind:'reward',title:granted.length>1?'批量嘉奖 · '+granted.length+' 项':granted[0]?.name??'',
-          detail:'已核发到当前飞行员档案',prizes,model:reveal?.id
-        },tone,credits);
-        return;
-      }
       if(d.difficulty!==undefined){
         this.tier=Number(d.difficulty);
         for(const level of document.querySelectorAll<HTMLButtonElement>('[data-difficulty]')){
@@ -202,15 +201,6 @@ export class Interface {
         }
         const award=el('mission-credit-rate');if(award)award.textContent=Math.round(difficulties[this.tier].reward*100)+'%';
         return;
-      }
-      if(d.base){
-        const mod=baseModules.find(x=>x.id===d.base);
-        if(!mod||p.bases.includes(mod.id))return;
-        if(p.credits<mod.price){this.denied('信用点不足');return;}
-        const old=p.credits,next={...p,credits:old-mod.price,bases:[...p.bases,mod.id]};
-        if(!saveProfile(next)){this.denied('存档失败，设施未投用');return;}
-        Object.assign(p,next);
-        this.result(true,'',{kind:'facility',title:mod.name,detail:mod.detail,spent:mod.price},'install',old);return;
       }
       if(d.do==='equip'){this.equip();return;}
       if(d.do==='resume')commands.resume();
@@ -330,19 +320,18 @@ export class Interface {
     el('xp-text').textContent=money(level.progress)+' / '+money(level.required)+' EXP';
     bar.max=level.required;bar.value=level.progress;
     el('deck-name').textContent=byAircraft(p.selected).name;
-    el('ready-count').textContent=String(rewards.filter(a=>!a.id.startsWith('pass-')&&rewardAvailable(p,a)).length||'');
     el('front').hidden=this.station!=='home';el('navigation').hidden=this.station!=='home';
     const shell=el('section');shell.hidden=this.station==='home';
-    const scroll=shell.dataset.station===this.station?shell.querySelector(this.station==='upgrade'?'.air-spec':'.route-body')?.scrollTop??0:0;
+    const scroll=shell.dataset.station===this.station?shell.querySelector(this.station==='upgrade'?'.kit-grid':'.route-body')?.scrollTop??0:0;
     shell.dataset.station=this.station;
     if(shell.hidden)return;
     const title=stationTitles[this.station];
     shell.className='route-page '+this.station+(studioStations.includes(this.station)?' route-studio':' route-terminal');
     shell.setAttribute('aria-label',title);
-    shell.innerHTML='<header class="station-heading"><button class="square" data-back aria-label="返回上一层">'+icon('left')+'</button><div><div class="route-crumb">飞行指挥中心</div><h2>'+title+'</h2></div><span class="section-wallet"><img src="./items/credits-wallet.webp" alt="" width="30" height="23"><b class="balance">'+money(p.credits)+'</b><small>信用点</small></span><button data-nav="inventory" '+(this.station==='inventory'?'hidden':'')+'>军需仓库</button></header><div class="route-body">'+this.page()+'</div>';
+    shell.innerHTML='<header class="station-heading"><button class="square" data-back aria-label="返回上一层">'+icon('left')+'</button><div><div class="route-crumb">飞行指挥中心</div><h2>'+title+'</h2></div><span class="section-wallet"><img src="./items/credits-wallet.webp" alt="" width="30" height="23"><b class="balance">'+money(p.credits)+'</b><small>信用点</small></span></header><div class="route-body">'+this.page()+'</div>';
     if(this.station==='missions')this.updateMissionMap(false);
-    if(scroll)shell.querySelector(this.station==='upgrade'?'.air-spec':'.route-body')!.scrollTop=scroll;
-    for(const button of shell.querySelectorAll<HTMLButtonElement>('button[data-node],button[data-mode],button[data-difficulty],button[data-quest-tab],button[data-air],button[data-gear]')){
+    if(scroll)shell.querySelector(this.station==='upgrade'?'.kit-grid':'.route-body')!.scrollTop=scroll;
+    for(const button of shell.querySelectorAll<HTMLButtonElement>('button[data-mod],button[data-mode],button[data-difficulty],button[data-quest-tab],button[data-air],button[data-gear]')){
       button.setAttribute('aria-pressed',String(button.classList.contains('on')));
     }
   }
@@ -350,17 +339,11 @@ export class Interface {
     switch(this.station){
       case 'hangar':return this.hangar();
       case 'upgrade':return this.upgrade();
-      case 'weapons':return this.weapons();
-      case 'tree':return this.tree();
       case 'missions':return this.missions();
       case 'training':return this.training();
       case 'freeprep':return this.freeprep();
       case 'sortieprep':return this.preparation();
       case 'quests':return this.quests();
-      case 'inventory':return this.inventory();
-      case 'activity':return this.activity();
-      case 'season':return this.season();
-      case 'base':return this.base();
       case 'records':return this.records();
       case 'settings':return this.settings();
       default:return '';
@@ -374,8 +357,8 @@ export class Interface {
     const filter=(id:string,label:string,items:[string,string][],value:string)=>'<label>'+label+'<select id="'+id+'"><option value="">全部</option>'+items.map(([k,l])=>'<option value="'+k+'"'+selected(k===value)+'>'+l+'</option>').join('')+'</select></label>';
     const options=[...new Set(fleet.flatMap(x=>x.origin.split('／')))].map(value=>[value,value] as [string,string]);
     const details='<aside class="air-spec glass"><div class="caption">'+a.origin+' · '+eras[a.era]+'</div><h3>'+a.name+'</h3><p>'+a.role+'</p><dl>'+
-      metric('机体耐久',String(a.durability))+metric('翼展',a.span+' 米')+metric('游戏极速',Math.round(a.maxSpeed*3.6)+' 公里/时')+metric('空对空导弹',String(fit.airMissiles))+metric('航炮备弹',String(fit.rounds))+metric('对地弹药',String(fit.groundStores))+metric('机动响应',Math.round(a.grip*100)+'%')+metric('推力系数',Math.round(a.acceleration*100)+'%')+
-      '</dl><p class="note">'+a.specialty+'</p><button class="gold" data-do="equip"'+disabled(a.support||!hasLevel)+'>'+icon(owned?'check':'lock')+(a.support?'任务编队使用':owned?'选作出击战机':hasLevel?'解锁 · 1150':'需要飞行员 Lv.'+needed)+'</button><div class="station-actions"><button data-nav="weapons">挂载与涂装</button><button data-nav="upgrade">升级部件</button></div></aside>';
+      metric('机体耐久',String(a.durability))+metric('翼展',a.span+' 米')+metric('游戏极速',Math.round(a.maxSpeed*3.6)+' 公里/时')+metric('对地弹药',String(fit.groundStores))+metric('机动响应',Math.round(a.grip*100)+'%')+metric('推力系数',Math.round(a.acceleration*100)+'%')+
+      '</dl><p class="note">'+a.specialty+'</p><button class="gold" data-do="equip"'+disabled(a.support||!hasLevel)+'>'+icon(owned?'check':'lock')+(a.support?'任务编队使用':owned?'选作出击战机':hasLevel?'解锁 · 1150':'需要飞行员 Lv.'+needed)+'</button><div class="station-actions"><button data-nav="upgrade" data-mod="skin">战机涂装</button><button data-nav="upgrade" data-mod="weapons">战机改装</button></div></aside>';
     return '<div class="hangar-filters glass">'+filter('nation','研制国家',options,this.nation)+filter('era','航空年代',Object.entries(eras),this.era)+'</div>'+
       details+'<div class="fleet-strip">'+visible.map((p,index)=>'<button class="'+(p.id===a.id?'on':'')+'" data-air="'+p.id+'"><img width="104" height="46" loading="'+(index<8?'eager':'lazy')+'" src="./cards/'+p.id+'.webp" alt=""><b>'+p.name+'</b><small>'+(p.support?'任务支援':this.p.unlocked.includes(p.id)?p.durability+' 耐久':'Lv.'+(airframeLevels[p.id]??1)+' 可解锁')+'</small></button>').join('')+'</div>';
   }
@@ -383,62 +366,54 @@ export class Interface {
     const c=combatConfiguration(profile,this.aircraft),a=byAircraft(this.aircraft);
     const current:Record<string,string>={armor:(1-c.armor*.065).toFixed(3)+'× 扰动',engine:c.engine.toFixed(2)+'× 推力',
       maneuver:c.grip.toFixed(2)+'× 响应',radar:c.radar+' 米',weapons:gunDamage(a,c.gun).toFixed(1)+' / 发',
-      cadence:(60/gunCycle(a,c.gunRate)).toFixed(0)+' 发/分'+(c.airMissiles?' · 空空 '+missileCycle(c.missileRate).toFixed(2)+' 秒/枚':''),
-      warhead:c.airMissiles?c.missile.damage.toFixed(1)+' / 枚':Math.round(c.missilePower*100)+'% 对地制导伤害',
-      stores:c.rounds+' 发'+(c.airMissiles?' · 空空 '+c.airMissiles+' 枚':'')+(c.groundStores?' · 对地 '+c.groundStores+' 枚':'')};
+      warhead:c.hasAirMissile?c.missile.damage.toFixed(1)+' / 枚':Math.round(c.missilePower*100)+'% 对地制导伤害'};
     return current[part];
   }
-  upgrade(){
-    const a=byAircraft(this.aircraft);
-    return '<aside class="livery glass">'+picture('vector')+'<h3>'+a.name+'</h3><p>以当前飞行配置显示升级前后数据。</p><button data-nav="weapons">进入武器与改装</button></aside>'+
-      '<aside class="air-spec glass"><div class="caption">机务工位</div><h3>部件升级</h3>'+upgrades.map(u=>{
-        const l=upgradeLevel(this.p,a.id,u.id),[id,n]=requirements(u.id,l);
-        const suitable=upgradeCompatible(a.id,u.id);
-        const after=l<3&&suitable?this.upgradeValue(u.id,{...this.p,improvements:{...this.p.improvements,[a.id+':'+u.id]:l+1}}):'';
-        return '<div class="upgrade-item" data-level="'+l+'"><img class="item-art" src="./items/up-'+u.id+'.webp" alt=""><strong>'+u.label+'</strong><span>'+(suitable?this.upgradeValue(u.id):'本机不适用')+(after?' <b class="next-stat">→ '+after+'</b>':'')+' · '+u.description+'</span><button data-up="'+u.id+'"'+disabled(l>=3||!suitable)+'>'+(l>=3?'已满级':!suitable?'不适用':560+l*360+' 信用点')+'</button><small>等级 '+l+' / 3'+(creditWeapon(u.id)?' · 仅信用点':' · 消耗 '+itemById[id]?.name+' '+n+'（拥有 '+(this.p.inventory[id]??0)+'）')+'</small></div>';
-      }).join('')+'</aside>';
+  private chooseModification(id:string,slot?:string){
+    const tab=modificationTabs.find(t=>t.id===id)??modificationTabs[0];
+    const slots:readonly GearSlot[]=tab.slots;
+    this.modification=tab;
+    this.gearFilter=slots.find(key=>key===(slot??this.gearFilter))??slots[0];
   }
-  weapons(){
+  upgrade(){
     const p=this.p,a=byAircraft(this.aircraft),cfg=combatConfiguration(p,a.id),fit=p.loadouts[a.id]??{};
-    const slots:[GearSlot,string][]=[['missile','空空弹'],['cannon','航炮'],['bomb','对地武器'],['engine','推进'],['radar','雷达'],['counter','反制'],['skin','涂装']];
-    const slot=this.gearFilter as GearSlot,quantity=slot==='missile'?cfg.airMissiles:slot==='bomb'?cfg.groundStores:cfg.rounds;
-    const weapon=['missile','cannon','bomb'].includes(slot);
-    const active=slot==='cannon'?(cfg.rounds?cannonID(a):''):slot==='missile'?(cfg.airMissiles?cfg.missile.id:''):
-      slot==='bomb'?(cfg.groundStores?cfg.groundWeapon:''):fit[slot]??'';
-    return '<div class="loadout-deck"><aside class="glass kit-spec"><span class="caption">挂位选择</span><h3>'+a.name+'</h3>'+
-      '<div class="mount-station">'+icon(slot==='cannon'?'cannon':slot==='bomb'?'bomb':slot==='missile'?'missile':'tools')+'<div><strong>'+slotName(slot,a)+'</strong>'+
-      '<p>'+(itemById[active]?.name??(weapon?'空挂位':'原厂组件'))+(weapon?' · '+quantity+(slot==='cannon'?' 发':' 枚'):'')+'</p></div></div>'+
-      '<dl class="mount-counts">'+metric('空空弹',String(cfg.airMissiles))+metric('航炮',String(cfg.rounds))+metric('对地弹药',String(cfg.groundStores))+'</dl>'+
-      (a.id==='j20'&&slot==='bomb'?'<p>中央挂位可用于实验空域。正式空战每次出击至少装填 10 枚空空导弹，固定航炮按机型补满。</p>':'')+
-      (slot==='missile'&&quantity?'<p>出击时自动补到本机配额。购买的是型号使用权，可任意切回原厂弹。</p><button class="gold" data-nav="upgrade" data-up-focus="warhead">升级导弹</button>':'')+
-      (slot==='bomb'&&quantity?'<button data-unmount="bomb">拆卸对地武器</button>':'')+
-      (fit[slot]?'<button data-reset-gear="'+slot+'">恢复原厂</button>':'')+
-      (history.state?.depth>1?'<button data-back>返回上一页</button>':'')+'</aside><div class="kit-categories">'+slots.map(([key,title])=>
-      '<button class="'+(key===slot?'on':'')+'" data-gear="'+key+'">'+title+'</button>').join('')+'</div>'+
-      '<div id="kit-list" class="kit-grid">'+(slot==='cannon'&&cfg.rounds?'<article class="asset-card cannon-spec">'+picture(active)+'<div><h4>'+itemById[active]?.name+'</h4><p>固定航炮自动装弹。每次出击按机型和升级等级配发。</p><dl class="mount-counts">'+metric('配发弹数',cfg.rounds+' 发')+metric('单发伤害',gunDamage(a,cfg.gun).toFixed(1))+metric('射速',(60/gunCycle(a,cfg.gunRate)).toFixed(0)+' 发/分')+metric('弹速',cannonFor(a)[1]+' 米/秒')+'</dl></div><button class="gold" data-nav="upgrade" data-up-focus="weapons">升级航炮</button></article>':
-      gears.filter(it=>gearSlot(it.kind)===slot).map(it=>{
-        const count=p.inventory[it.id]??0,match=compatible(a,it),installed=active===it.id,block=purchaseBlock(p,it.id);
-        const stats=missiles[it.id],info=stats?'<small>'+stats.range+' 米 · 锁定 '+stats.acquire.toFixed(2)+' 秒 · 伤害 '+missileDamage(a,stats,upgradeLevel(p,a.id,'warhead')).toFixed(1)+' · 极速 '+stats.speed+' 米/秒</small>':
-          it.kind==='strike'?'<small>伤害 '+Math.round(guidedStrike.damage*cfg.missilePower)+' · 极速 '+guidedStrike.speed+' 米/秒</small>':'';
-        const category=it.kind==='strike'?'空对地制导弹':it.kind==='bomb'?'重力炸弹':it.kind==='missile'?'空空导弹':'';
-        const action=!match?'<button disabled>机型或挂位不兼容</button>':installed?'<button disabled>已装载 · '+(weapon?quantity:'启用')+'</button>':
-          (slot==='missile'&&it.id==='interceptor'||fit[slot]==='none'&&slot==='bomb'&&it.id==='bomb'&&a.bombs)?
-          '<button class="gold" data-reset-gear="'+slot+'">恢复原厂武器</button>':
-          count?'<button class="gold" data-mount="'+it.id+'">安装到所选挂位</button>':
+    const slot=this.gearFilter,tab=this.modification;
+    const labels:Record<GearSlot,string>={missile:'空空弹',cannon:'航炮',bomb:'对地武器',engine:'推进',radar:'雷达',counter:'反制',skin:'涂装'};
+    const active=slot==='cannon'?(cfg.hasCannon?cannonID(a):''):slot==='missile'?(cfg.hasAirMissile?cfg.missile.id:''):
+      slot==='bomb'?(cfg.groundStores?cfg.groundWeapon:''):slot==='skin'?fit.skin??'factory':fit[slot]??'';
+    const parts:readonly string[]=slot==='missile'?['warhead']:slot==='cannon'?['weapons']:slot==='bomb'?[]:tab.parts;
+    const upgradesForSlot=upgrades.filter(u=>parts.includes(u.id)).map(u=>{
+      const level=upgradeLevel(p,a.id,u.id),suitable=upgradeCompatible(a.id,u.id);
+      const after=level<3&&suitable?this.upgradeValue(u.id,{...p,improvements:{...p.improvements,[a.id+':'+u.id]:level+1}}):'';
+      const price=upgradePrice(level);
+      return '<article class="upgrade-item" data-level="'+level+'"><img class="item-art" src="./items/up-'+u.id+'.webp" alt=""><strong>'+u.label+'</strong><span>'+
+        (suitable?this.upgradeValue(u.id):'本机不适用')+(after?' <b class="next-stat">→ '+after+'</b>':'')+' · '+u.description+'</span><button data-up="'+u.id+
+        '"'+disabled(level>=3||!suitable||p.credits<price)+'>'+(level>=3?'已满级':!suitable?'不适用':price+' 信用点')+'</button><small>等级 '+level+' / 3</small></article>';
+    }).join('');
+    const choices=slot==='cannon'&&active?'<article class="asset-card cannon-spec">'+picture(active)+'<div><h4>'+itemById[active]?.name+
+      '</h4><p>无限弹药，按住连续射击。</p><dl class="mount-counts">'+metric('单发伤害',gunDamage(a,cfg.gun).toFixed(1))+
+      metric('射速',(60/gunCycle(a)).toFixed(0)+' 发/分')+metric('弹速',cannonFor(a)[1]+' 米/秒')+'</dl></div></article>':
+      gears.filter(it=>gearSlot(it.kind)===slot&&(slot!=='cannon'||compatible(a,it))).map(it=>{
+        const owned=p.inventory[it.id]>0,match=compatible(a,it),installed=active===it.id,block=purchaseBlock(p,it.id);
+        const stats=missiles[it.id],info=stats?'<small>'+stats.range+' 米 · 伤害 '+missileDamage(a,stats,upgradeLevel(p,a.id,'warhead')).toFixed(1)+
+          ' · 极速 '+stats.speed+' 米/秒</small>':it.kind==='strike'?'<small>伤害 '+Math.round(guidedStrike.damage*cfg.missilePower)+'</small>':'';
+        const action=!match?'<button disabled>机型或挂位不兼容</button>':installed?'<button disabled>已装配</button>':
+          it.id==='interceptor'||it.id==='factory'||it.id==='bomb'&&a.bombs?'<button data-reset-gear="'+slot+'">恢复原厂</button>':
+          owned?'<button class="gold" data-mount="'+it.id+'">安装</button>':
           '<button class="gold" data-buy="'+it.id+'"'+disabled(!!block)+'>'+(block||'购买 · '+money(it.price!)+' 信用点')+'</button>';
         return '<article class="asset-card '+it.grade+'">'+picture(it.id)+'<div><h4>'+it.name+'</h4><p>'+it.description+'</p>'+info+
-          '<small>'+(category?category+' · ':'')+(it.id==='interceptor'?'原厂配发':count?'库存 '+count+' 套':'仓库未持有')+'</small>'+
           (stats?'<button class="inspect-link" data-preview-missile="'+it.id+'">3D 检视</button>':'')+'</div>'+action+'</article>';
-      }).join(''))+'</div></div>';
-  }
-  tree(){
-    const current=technologies.find(i=>i.id===this.technology)??technologies[0];
-    const researched=this.p.technology.includes(current.id);
-    return '<div class="tech-portal"><div class="tech-tools"><button aria-label="缩小科技树" data-zoom="-.13">−</button><span>'+Math.round(this.zoom*100)+'%</span><button aria-label="放大科技树" data-zoom=".13">＋</button></div>'+
-      '<div class="tech-board"><div class="tech-tree" style="--zoom:'+this.zoom+'">'+[technologies.slice(0,2),technologies.slice(2)].map((row,i)=>
-        '<div class="branch"><span>'+['航电分支','飞控分支'][i]+'</span>'+row.map(t=>'<button class="'+(t.id===current.id?'on ':'')+(this.p.technology.includes(t.id)?'researched':'')+'" data-node="'+t.id+'"><img src="./items/tech-'+t.id+'.webp" alt=""><b>'+t.name+'</b><small>'+(this.p.technology.includes(t.id)?'已研发':'待研发')+'</small></button>').join('<i aria-hidden="true" class="'+(this.p.technology.includes(row[0].id)?'powered':'')+'"></i>')+'</div>').join('')+'</div></div>'+
-      '<article class="glass tech-detail"><img src="./items/tech-'+current.id+'.webp" alt=""><div><h3>'+current.name+'</h3><p>'+current.description+'</p><small>'+(
-        current.prerequisite?'前置 · '+technologies.find(n=>n.id===current.prerequisite)?.name:'无前置研发')+' · 航电板 '+current.material+'</small></div><button class="gold" data-research="'+current.id+'"'+disabled(researched)+'>'+(researched?'已研究':current.cost+' 信用点')+'</button></article></div>';
+      }).join('');
+    return '<div class="loadout-deck"><aside class="glass kit-spec"><h3>'+a.name+'</h3><div class="mount-station">'+
+      icon(slot==='cannon'?'cannon':slot==='bomb'?'bomb':slot==='missile'?'missile':'tools')+
+      '<div><strong>'+slotName(slot,a)+'</strong><p>'+(itemById[active]?.name??'原厂配置')+'</p></div></div>'+
+      (slot==='bomb'&&active?'<button data-unmount="bomb">拆卸对地武器</button>':'')+
+      (fit[slot]&&slot!=='bomb'?'<button data-reset-gear="'+slot+'">恢复原厂</button>':'')+
+      '</aside><div class="modification-tabs"><div class="kit-categories">'+modificationTabs.map(t=>
+        '<button class="'+(t===tab?'on':'')+'" data-mod="'+t.id+'">'+t.name+'</button>').join('')+'</div>'+
+      (tab.slots.length>1?'<div class="kit-categories mount-tabs">'+tab.slots.map(key=>
+        '<button class="'+(key===slot?'on':'')+'" data-gear="'+key+'">'+labels[key]+'</button>').join('')+'</div>':'')+
+      '</div><div id="kit-list" class="kit-grid">'+upgradesForSlot+choices+'</div></div>';
   }
   private missionState(m:Operation){
     if(m.campaign&&m.campaign>this.p.campaign)return 'locked';
@@ -495,9 +470,9 @@ export class Interface {
     launch.innerHTML=icon(state==='locked'?'lock':'plane')+(state==='locked'?'先完成前序战役':state==='complete'?'再次出击':'开始任务');
   }
   training(){
-    return routeIntro('飞行学院','实战训练课程','选择一门课程进入对应空域。使用机库已选战机。','tech-vectoring','training')+
+    return routeIntro('飞行学院','实战训练课程','选择一门课程进入对应空域。使用机库已选战机。','vector','training')+
       '<div class="route-cards">'+['d04','t02','t03','t04','t05'].map((id,i)=>{
-        const mission=operation(id),art=['tech-vectoring','tech-power','cannon-jet','interceptor','veil'][i];
+        const mission=operation(id),art=['vector','up-engine','cannon-jet','interceptor','veil'][i];
         return '<article class="asset-card">'+(picture(art)||'<img class="item-art" src="./items/'+art+'.webp" alt="">')+
           '<div><h4>'+mission.name+'</h4><p>'+mission.detail+'</p></div><button data-task="'+id+'">'+(this.p.completed.includes(id)?'再次训练':'开始训练')+'</button></article>';
       }).join('')+'</div>';
@@ -520,61 +495,31 @@ export class Interface {
     return '<div class="dispatch-grid"><article class="glass briefing-flight"><div class="caption">'+map.name+'</div><h3>'+mission.name+'</h3><p>'+mission.detail+'</p>'+
       '<div class="prep-chart" role="img" aria-label="'+map.name+'地形图" style="background-image:url('+resource('charts/'+map.id+'.webp')+')"></div>'+
       '<span class="caption">出击机型</span><select id="planned-plane" aria-label="出击机型">'+this.p.unlocked.map(id=>'<option value="'+id+'"'+selected(id===plane.id)+'>'+byAircraft(id).name+'</option>').join('')+'</select>'+
-      '<dl>'+metric('机体结构',String(plane.durability))+metric('雷达探测',(loadout.radar/1000).toFixed(1)+' 公里')+metric('航炮备弹',String(loadout.rounds))+metric('空空导弹',String(loadout.airMissiles))+
+      '<dl>'+metric('机体结构',String(plane.durability))+metric('雷达探测',(loadout.radar/1000).toFixed(1)+' 公里')+
       (loadout.groundStores?metric(loadout.groundWeapon==='shorebolt'?'对地制导弹':'炸弹',String(loadout.groundStores)):'')+'</dl><button data-configure="'+slot+'">检视当前挂载</button></article>'+
       '<article class="glass dispatch-options"><h3>航线条件</h3><p>默认环境 · '+map.weather+'</p>'+maps+weather+light+
       (free?'<label class="runway-option"><input type="checkbox" id="runway" '+(this.runway?'checked':'')+'>从跑道起飞</label>':'<p>任务难度 · '+difficulties[mission.kind==='train'||mission.lesson?0:this.tier].name+'</p>')+
       (blocked?'<section class="sortie-block" role="status"><strong>待补齐任务配置</strong><p>'+blocked+'</p>'+
         (progressionLocked?'<button data-nav="training">进入训练获取经验</button>':
-          '<button data-configure="'+slot+'">打开'+(slot==='bomb'?'对地':'空空')+'挂位与商店</button>')+
+          '<button data-configure="'+slot+'">打开'+(slot==='bomb'?'对地':'空空')+'挂位</button>')+
         (!progressionLocked&&alternate.length?'<p>也可在左侧选择 '+alternate.map(a=>byAircraft(a).name).slice(0,3).join('、')+'</p>':'')+'</section>':'')+
       '<button class="gold" '+start+disabled(!!blocked)+'>'+icon('plane')+(free?'开始连续迎击':'确认出击')+'</button></article></div>';
   }
-  private filteredQuests(){
-    if(this.questTab==='day')return rewards.filter(r=>r.period==='day');
-    if(this.questTab==='main')return rewards.filter(r=>['first','first-win','intercept'].includes(r.id));
-    return rewards.filter(r=>['flight-wing','tideline'].includes(r.id));
-  }
-  private claimTray(pass:boolean,list:RewardDefinition[]){
-    const count=list.filter(r=>rewardAvailable(this.p,r)).length;
-    return '<div class="claim-tray"><span>'+icon('gift')+' 可领取 '+count+' 项</span><button class="gold" data-claim-all="'+(pass?'pass':'task')+'"'+disabled(count===0)+'>领取全部</button></div>';
-  }
-  private rewardRows(list:RewardDefinition[]){
-    return list.map(r=>{
-      const {earned,claimed,progress}=rewardStatus(this.p,r);
-      return '<article class="asset-card reward-card '+(claimed?'claimed':earned?'reward-ready':'')+'">'+picture(r.prize.find(p=>p[0]!=='credits')?.[0]??'credits')+'<div><h4>'+r.name+'</h4><p>'+r.criteria+'</p><progress max="'+r.threshold+'" value="'+progress+'"></progress>'+
-        '<div class="prize-tray">'+rewardChips(r.prize)+'</div></div><button data-claim="'+r.id+'"'+disabled(claimed||!earned)+'>'+(claimed?'已入库':earned?'领取奖励':'进行中')+'</button></article>';
-    }).join('');
-  }
   quests(){
-    const list=this.filteredQuests(),tabs=[['day','每日任务'],['main','主线任务'],['challenge','挑战任务']];
-    return routeIntro('战术任务','任务中心','由实际出击结算推进。每日任务按本地日期刷新。','flarewing','coast')+
+    const tabs=[['day','每日任务'],['main','主线任务'],['challenge','挑战'],['achievement','成就']];
+    const groups:Record<string,string[]>={main:['first','first-win','intercept'],challenge:['flight-wing','tideline']};
+    const list=rewards.filter(r=>this.questTab==='day'?r.period==='day':this.questTab==='achievement'?
+      r.metric==='xp':groups[this.questTab]?.includes(r.id));
+    const links=this.questTab==='main'?'<button class="gold" data-nav="missions">'+icon('target')+'查看战役</button>':
+      this.questTab==='challenge'?'<button class="gold" data-task="d05">'+icon('plane')+'雷暴前线</button>':'';
+    return routeIntro('','任务中心','任务奖励在达到条件后自动发放。','flarewing','coast')+
       '<div class="quest-tabs">'+tabs.map(([id,name])=>'<button class="'+(this.questTab===id?'on':'')+'" data-quest-tab="'+id+'">'+name+'</button>').join('')+'</div>'+
-      this.claimTray(false,list)+'<div class="route-cards">'+this.rewardRows(list)+'</div>';
-  }
-  activity(){
-    const pass=rewards.filter(r=>r.id.startsWith('pass-')),count=pass.filter(r=>rewardAvailable(this.p,r)).length;
-    return routeIntro('苍穹争锋','雷暴前线','在雷云边缘迎击精锐编队，挑战本机最高战绩。','bronze-sky','season')+
-      '<div class="activity-actions"><button class="gold" data-task="d05">'+icon('plane')+'进入限时挑战</button><button data-nav="season">'+icon('gift')+'赛季通行证'+(count?' · '+count+' 项待领取':'')+'</button></div>';
-  }
-  season(){
-    const pass=rewards.filter(r=>r.id.startsWith('pass-'));
-    const level=pass.filter(r=>rewardStatus(this.p,r).earned).length;
-    const max=pass[pass.length-1].threshold;
-    return routeIntro('苍穹争锋','空勤通行证','当前第 '+level+' 阶 · '+money(this.p.xp)+' 飞行经验 / '+money(max)+' 全阶解锁。','bronze-sky','season')+
-      this.claimTray(true,pass)+'<div class="reward-ribbon">'+this.rewardRows(pass)+'</div>';
-  }
-  inventory(){
-    const stock=items.filter(i=>(i.id==='credits'||i.id==='xp')||this.p.inventory[i.id]>0||i.kind==='aircraft'&&this.p.unlocked.includes(i.id.slice(4))||i.kind==='consumable');
-    const fitted=new Set(Object.values(this.p.loadouts[this.p.selected]??{}));
-    return routeIntro('军需管理','库存与航空器','列出已拥有的装备与材料。装备在武器与改装工位安装。','alloy','hangar')+
-      '<div class="inventory-grid">'+stock.map(i=>'<article class="asset-card '+i.grade+'">'+picture(i.id)+'<div><h4>'+i.name+'</h4><p>'+i.description+'</p><b>'+
-        (i.kind==='aircraft'?'拥有':i.id==='credits'?money(this.p.credits):i.id==='xp'?money(this.p.xp):'库存 '+(this.p.inventory[i.id]??0))+(fitted.has(i.id)?' · 已配给当前战机':'')+'</b></div>'+
-        (i.kind==='consumable'?'<button data-buy="'+i.id+'">购入 '+i.price+'</button>':'')+'</article>').join('')+'</div>';
-  }
-  base(){
-    return '<div class="facility-grid panel-scroll">'+baseModules.map(m=>'<article class="glass">'+icon(m.id==='radar'?'lock':m.id==='repair'?'tools':'base')+
-      '<h3>'+m.name+'</h3><p>'+m.detail+'</p><button data-base="'+m.id+'"'+disabled(this.p.bases.includes(m.id))+'>'+(this.p.bases.includes(m.id)?'运行中':'启用 · '+m.price)+'</button></article>').join('')+'</div>';
+      (links?'<div class="task-actions">'+links+'</div>':'')+'<div class="route-cards">'+list.map(r=>{
+        const {earned,claimed,progress}=rewardStatus(this.p,r);
+        return '<article class="asset-card reward-card '+(claimed?'claimed':'')+'">'+picture(r.prize.find(p=>p[0]!=='credits')?.[0]??'credits')+
+          '<div><h4>'+r.name+'</h4><p>'+r.criteria+'</p><progress max="'+r.threshold+'" value="'+progress+'"></progress><div class="prize-tray">'+
+          rewardChips(r.prize)+'</div></div><small class="award-status">'+(claimed?'已发放':earned?'待入账':'进行中')+'</small></article>';
+      }).join('')+'</div>';
   }
   records(){
     const level=levelProgress(this.p.xp);
@@ -604,6 +549,7 @@ export class Interface {
   }
   flight(s:Sortie){
     this.presentation.clear();
+    this.targetView=null;
     el('menu').hidden=true;el('overlay').hidden=true;el('hud').hidden=false;
     el('application').dataset.screen='flight';this.lastHud=-2;this.killsSeen=0;this.killUntil=0;this.strikeUntil=0;el('hit-confirm').hidden=true;el('kill-notice').hidden=true;
     const missileArt=el<HTMLImageElement>('missile-art'),art=itemById[s.missile.id]?.visual.icon;
@@ -682,11 +628,11 @@ export class Interface {
       el('flight-time').textContent=clock(game.time);el('throttle').textContent=Math.round(player.throttle*100)+'%';
       el('burn').textContent=player.boost>.13?'加力中':'';
       el('boost').classList.toggle('on',player.controls.boost);
-      el('missile').dataset.lock=game.lockProgress>=1?'ready':game.lockProgress>.15?'tracking':'none';
       el('hp').textContent=String(Math.ceil(player.hp));el('hp').title='耐久上限 '+player.maxHp;
       el('hp-bar').style.width=player.hp/player.maxHp*100+'%';
       el('hp-bar').classList.toggle('impact',game.time-player.hitTime<.32);
-      el('ammo').textContent=String(player.cannon);el('missiles').textContent=String(player.missiles);el('missile').title=itemById[game.missile.id]?.name??'';el('bombs').textContent=String(player.bombs);
+      el('missile').title=itemById[game.missile.id]?.name??'';
+      el('bombs').textContent=String(player.bombs);
       el('gear').classList.toggle('on',player.gearTarget>0);
       const boss=game.enemies.find(e=>e.alive&&e.ace);
       const stock=game.enemies.filter(e=>e.alive).length;
@@ -701,31 +647,43 @@ export class Interface {
       const distance=threat?' · '+(w.distance<1000?Math.round(w.distance)+' 米':(w.distance/1000).toFixed(1)+' 公里'):'';
       const alert=w.stage>=3?(w.stage===4?'紧急 · ':'')+type+'导弹来袭'+distance:w.stage===2?type+'导弹发射'+distance:
         w.stage===1?'敌机雷达锁定':player.stall>.49?'失速 · 加大推力':
-        game.lockProgress>=1?'锁定完成':game.lockProgress>.15?'捕捉目标':player.grounded?'跑道滑行':'';
+        player.grounded?'跑道滑行':'';
       const a=el('alerts');a.textContent=alert||(player.bombs>0&&game.groundWeapon==='shorebolt'?(game.groundLock()?'地面目标就绪':'向下瞄准地面目标'):'');a.dataset.danger=String(w.stage>0||player.stall>.49);
-      el('counter-count').textContent=defense.reserves+'';
       const counter=el('counter');
-      counter.style.setProperty('--cool',(cool/defense.totalCooldown*100).toFixed(2)+'%');
       counter.classList.toggle('armed',w.stage>=2&&cool<=0&&kind!==null&&defense.stocks[kind]>0);
       counter.title='热诱饵 '+defense.stocks.flare+' · 箔条 '+defense.stocks.chaff+' · 电子干扰 '+defense.stocks.ecm;
-      el('counter-state').textContent=cool>0?'冷却 '+cool.toFixed(1)+' 秒':game.time<defense.jamUntil?'电子干扰开启':kind?defenseNames[kind]+'就绪':defense.reserves?'反制就绪':'无反制装备';
-      const stores=[['gun',player.cannon,player.gunsAt,'就绪'],['missile',player.missiles,player.missileAt,game.lockProgress>=1?'就绪':'自动锁定'],['bomb',player.bombs,player.bombAt,'就绪']] as const;
-      for(const [id,stock,at,ready] of stores){
-        const wait=at-game.time;
-        el(id+'-status').textContent=stock===0?'无弹药':wait>0?wait.toFixed(1)+' 秒':ready;
-      }
-      for(const id of ['turn','evade'] as const){
-        const status=el(id+'-status'),wait=game.readyAt[id]-game.time;
-        status.hidden=wait<=0;
-        status.textContent=wait>0?wait.toFixed(1)+' 秒':'';
-        el(id).classList.toggle('on',wait>0);
-      }
       el('touch-guide').hidden=game.time>6;
       this.radar.draw(game);
     }
     world.camera.getDirectionToRef(cameraAxis,cameraForward);
     world.camera.getDirectionToRef(rightAxis,cameraRight);
     world.camera.getDirectionToRef(upAxis,cameraUp);
+    const phase=game.targeting.inside?(game.lockProgress===1?'locked':'track'):'search';
+    this.lockZone.dataset.state=phase;
+    el('missile').dataset.lock=phase==='locked'?'ready':phase==='track'?'tracking':'none';
+    for(const button of this.cooldownButtons){
+      const value=Math.round(game.cooldown(button.id)*1000);
+      if(value===button.last)continue;
+      button.last=value;
+      button.node.style.setProperty('--cooldown',value*.1+'%');
+      button.node.classList.toggle('cooling',value>0);
+    }
+    gunSight(pose.position,pose.forward,worldPosition);
+    placeCue(this.aim,worldPosition,world,w,h,offsetX,offsetY);
+    this.aim.dataset.lock=String(phase==='locked');
+    placeCue(this.leadCue,game.aimLead(this.leadPoint)?this.leadPoint:null,world,w,h,offsetX,offsetY);
+    const radius=lockRadius(world.camera.fov,h),canAcquire=game.op.kind!=='train'&&game.op.kind!=='ground';
+    if(!this.targetView){this.targetView={world,w,h,radius,visible:false};game.targeting.projection=this.measureZone;}
+    const targetView=this.targetView;
+    targetView.w=w;targetView.h=h;targetView.radius=radius;
+    targetView.visible=canAcquire&&Vector3.Dot(worldPosition.subtractToRef(world.camera.position,localOffset),cameraForward)>0;
+    this.lockZone.toggleAttribute('hidden',!targetView.visible);
+    if(targetView.visible){
+      world.camera.project(worldPosition,this.focusPoint,w,h);
+      this.lockZone.style.width=radius*2+'px';
+      this.lockZone.style.left=this.focusPoint.x+offsetX+'px';
+      this.lockZone.style.top=this.focusPoint.y+offsetY+'px';
+    }
     const camera=world.camera.position;
     const baseItems=game.op.kind==='train'&&game.gates[game.gate]?[{position:game.gates[game.gate],alive:true,id:game.gate+1}]:game.targetPoints;
     const active=game.enemies.filter(enemy=>enemy.alive).sort((a,b)=>{
@@ -756,7 +714,8 @@ export class Interface {
         x=clamp(w*.5+side/k,left,right);y=clamp((top+bottom)*.5+up/k,top,bottom);
         degrees=Math.atan2(up,side)*180/Math.PI+90;
       }
-      const lock=target===game.locked&&game.lockProgress>.98;
+      const lock=target===game.locked&&phase==='locked';
+      node.frame.classList.toggle('tracked',target===game.locked&&phase==='track');
       let label=(i<3||lock)&&(!edge||i===0);
       for(let j=0;j<assigned&&label;j++)if(Math.abs(this.labelSites[j*2]-x)<108&&Math.abs(this.labelSites[j*2+1]-y)<26)label=false;
       if(label){this.labelSites[assigned*2]=x;this.labelSites[assigned*2+1]=y;assigned++;}
@@ -783,9 +742,6 @@ export class Interface {
       impact.style.left=w/2+Math.sin(angle)*r+'px';impact.style.top=h/2-Math.cos(angle)*r+'px';
       impact.style.rotate=angle+'rad';
     }
-    gunSight(pose.position,pose.forward,worldPosition);
-    placeCue(this.aim,worldPosition,world,w,h,offsetX,offsetY);
-    this.aim.dataset.lock=String(game.lockProgress>=1);
     let drop:Vector3|null=null;
     if(player.bombs>0){
       if(game.groundWeapon==='shorebolt')drop=game.groundLock()?.position??null;

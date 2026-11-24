@@ -7,26 +7,27 @@ const {outputFiles}=await build({stdin:{
   contents:`export { Sortie } from './src/sortie'; export { byAircraft,fleet,operation,operations } from './src/data';
     export { cannonFor,gunDamage,gunSight } from './src/ordnance';
     export { chapters } from './src/campaign'; export { levelProgress,levelThreshold,pilotLevel } from './src/progression';
-    export { missiles,missileDamage,minimumEnemyDurability,rewards } from './src/items'; export { freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie } from './src/profile';
+    export { missiles,missileDamage,minimumEnemyDurability,rewards } from './src/items'; export { freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie } from './src/profile';
     export { advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, above, right } from './src/flight';
     export { CountermeasureSystem, MissileGuidance, MissileWarningSystem } from './src/defense';
     export { mapRadar } from './src/tactical-radar';
     export { OceanSpectrum, ShallowWake, oceanSize } from './src/ocean-solver';
     export { Terrain,registerTerrain,gridSize,chunkCells } from './src/terrain';
     export { targetPixels } from './src/screen-scale';
+    export { TargetDirector,lockRadius } from './src/targeting';
     export { RenderBudget } from './src/render-budget';
     export { FlightCamera } from './src/flight-camera';
     export { Vector3,Quaternion } from '@babylonjs/core/Maths/math.vector';`,
   resolveDir:process.cwd(),loader:'ts'
 },bundle:true,write:false,platform:'node',format:'esm'});
 const {Sortie, chapters, operations, levelProgress, levelThreshold, pilotLevel, byAircraft, fleet, cannonFor, gunDamage, gunSight, operation, advanceFlight, FlightPose, Airframe, FLIGHT_STEP, idle, right, Vector3, Quaternion,
-  Terrain, registerTerrain,gridSize,chunkCells,targetPixels,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,claimReward,claimRewards,rewardStatus,consumeReserve,buyItem,research,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
+  Terrain, registerTerrain,gridSize,chunkCells,targetPixels,TargetDirector,lockRadius,RenderBudget,FlightCamera, OceanSpectrum, ShallowWake, oceanSize, CountermeasureSystem, MissileGuidance, MissileWarningSystem,mapRadar,missiles,missileDamage,minimumEnemyDurability,rewards,freshProfile,normalizeProfile,loadProfile,combatConfiguration,equipItem,detachWeapon,resetGear,sortieBlock,saveProfile,rewardStatus,buyItem,unlockAircraft,buyUpgrade,recordSortie}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].contents).toString('base64'));
 for(const [id,seed] of [['sundown',413],['frost',704],['storm',116]]){
   const b=gunzipSync(await readFile('public/world/'+id+'.height'));
   registerTerrain(seed,b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));
 }
 const dt=FLIGHT_STEP;
-const loadout={rank:0,armor:0,engine:0,stores:0,repair:false,radar:false,runway:false,diagnostics:true};
+const loadout={rank:0,armor:0,engine:0,repair:false,radar:false,runway:false,diagnostics:true};
 const bombRange={...operation('s03'),kind:'ground',engagement:{...operation('s03').engagement,groups:2,altitude:176}};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
@@ -40,7 +41,7 @@ function clearWithOrdnance(s){
     for(const e of targets){
       p.position.set(e.position.x,3050,1100);p.previous.copyFrom(p.position);
       p.orientation.set(0,0,0,1);p.previousOrientation.copyFrom(p.orientation);p.forward.set(0,0,-1);p.velocity.set(0,0,-160);
-      if(p.missiles){
+      if(s.weapons.includes('missile')){
         s.fire(p,'missile',e);
         for(let i=0;i<110&&e.alive&&s.groups.missile.some(q=>q.live);i++){s.time+=dt;s.project(dt);}
       }
@@ -203,23 +204,21 @@ test('three real combat waves, guidance, ammunition, damage and victory',()=>{
 const memory=new Map();
 globalThis.localStorage={getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value)};
 
-test('A–F: combat result, claim, stock, guided loadout, engine, hardware, livery and recovery',()=>{
+test('combat settlement, earned gear, credit upgrades, livery and save recovery',()=>{
   memory.clear();
   const p=freshProfile(),type=byAircraft('f16');
-  assert(!claimReward(p,'first-win'));
   const source=new Sortie(operation('s01'),type,loadout,()=>{});
   clearWithOrdnance(source);
   assert(source.win);
   assert(recordSortie(p,source.report(),'f16')>0);
-  assert(claimReward(p,'first-win'));
+  assert(p.claimed.includes('first-win'));
   assert.equal(p.inventory.flarewing,1);
-  for(let i=0;i<8;i++)assert(!claimReward(p,'first-win'));
-  assert.equal(p.inventory.flarewing,1);
+  assert.equal(loadProfile().inventory.flarewing,1);
   assert.equal(equipItem(p,'f16','flarewing'),'装备配置已保存');
   assert.equal(equipItem(p,'dr1','flarewing'),'装备配置已保存');
-  const base=combatConfiguration(p,'f16'),stock=p.inventory.alloy;
+  const base=combatConfiguration(p,'f16'),wallet=p.credits;
   assert.equal(buyUpgrade(p,'f16','engine'),'改装已装配');
-  assert.equal(p.inventory.alloy,stock-1);
+  assert.equal(p.credits,wallet-560);
   const faster=combatConfiguration(p,'f16');
   assert(faster.engine>base.engine);
   const slow=new Sortie(operation('free'),type,{...loadout,configuration:base},()=>{});
@@ -240,21 +239,21 @@ test('A–F: combat result, claim, stock, guided loadout, engine, hardware, live
   p.xp=levelThreshold(7);
   assert.equal(unlockAircraft(p,'gripen'),'已解锁');
   assert(combatConfiguration(p,'gripen').aircraft==='gripen');
-  p.distance=20100;assert(claimReward(p,'tideline'));
+  p.distance=20100;
+  assert(saveProfile(p));Object.assign(p,loadProfile());
+  assert(p.claimed.includes('tideline'));
   assert.equal(equipItem(p,'f16','bronze-sky'),'装备配置已保存');
   assert.equal(combatConfiguration(p,'f16').paint,'#af7956');
-  assert.equal(research(p,'horizon'),'缺少前置研发');
-  assert.match(research(p,'signal'),/研发完成/);
+  assert.equal(buyItem(p,'survey'),'已购买，可直接安装');
+  assert.equal(equipItem(p,'f16','survey'),'装备配置已保存');
   assert(combatConfiguration(p,'f16').radar>faster.radar);
-  const supply=p.inventory.reserve;
-  assert(consumeReserve(p)&&p.inventory.reserve===supply-1);
   memory.set('pixel-sky-af-v4','{broken');
   const restored=loadProfile();
   assert.equal(combatConfiguration(restored,'f16').paint,'#af7956');
   assert.equal(combatConfiguration(restored,'f16').missile.id,'flarewing');
   assert.equal(combatConfiguration(restored,'f16').engine,faster.engine);
   assert(restored.unlocked.includes('gripen'));
-  assert(!claimReward(restored,'tideline'));
+  assert(restored.claimed.includes('tideline'));
   const old=normalizeProfile({selected:'f16',unlocked:['gripen'],paint:{f16:'navy'},credits:777,
     settings:{quality:'low'},improvements:{'f16:engine':2}});
   assert.equal(combatConfiguration(old,'f16').paint,'#526e91');
@@ -263,25 +262,31 @@ test('A–F: combat result, claim, stock, guided loadout, engine, hardware, live
   assert.equal(combatConfiguration(old,'f16').engine,1.12);
 });
 
-test('bulk reward receipts report only the committed grants and cannot pay twice',()=>{
+test('retired materials and upgrades migrate once while unclaimed rewards settle atomically',()=>{
   memory.clear();
   const p=freshProfile(),write=localStorage.setItem;
-  p.sorties=1;p.victories=1;p.xp=365;
-  const before=p.credits;
+  const raw={...p,xp:365,rewardedLevel:2,sorties:1,victories:1,claimed:['pass-1'],
+    inventory:{...p.inventory,alloy:2,circuit:1,reserve:1,vector:1},
+    improvements:{'j20:cadence':2,'j20:stores':1},loadouts:{j20:{engine:'vector'}},bases:['radar'],technology:['power']};
+  memory.set('pixel-sky-af-v4',JSON.stringify(raw));
+  const migrated=p.credits+2*90+140+300+560+920+560;
   try {
     localStorage.setItem=()=>{throw Error('storage denied');};
-    assert.deepEqual(claimRewards(p,['first','first-win','pass-1']),[]);
-    assert.equal(p.credits,before);
-    assert.equal(p.claimed.length,0);
+    const blocked=loadProfile();
+    assert.equal(blocked.credits,migrated);
+    assert.deepEqual(blocked.claimed,['pass-1']);
+    assert(!blocked.inventory.flarewing);
   } finally {
     localStorage.setItem=write;
   }
-  const receipts=claimRewards(p,['first','first-win','first-win','pass-1','pass-2','pass-3']);
-  assert.deepEqual(receipts.map(r=>r.id),['first','first-win','pass-1','pass-2']);
-  assert.equal(p.credits,before+400+245+330);
-  assert.equal(p.inventory.flarewing,1);
-  assert.deepEqual(claimRewards(p,receipts.map(r=>r.id)),[]);
-  assert.deepEqual(loadProfile().claimed,p.claimed);
+  const saved=loadProfile();
+  assert.equal(saved.credits,migrated+970+420+510);
+  assert.deepEqual(saved.claimed,['pass-1','first','first-win','pass-2']);
+  assert.equal(saved.inventory.flarewing,1);
+  assert.deepEqual(saved.improvements,{});
+  assert(Math.abs(combatConfiguration(saved,'j20').engine-1.15)<1e-10);
+  assert.equal(combatConfiguration(saved,'j20').radar,8500);
+  assert.deepEqual(loadProfile(),saved);
 });
 
 test('the same lattice crosses chunk borders and guards the actual aircraft hangar',()=>{
@@ -344,14 +349,14 @@ test('graded pitch, real position change and interpolated renderer pose',()=>{
 test('daily rewards reset by local date and use the committed sortie ledger',()=>{
   const pilot=freshProfile(),daily=rewards.find(r=>r.id==='daily-sortie');
   const sortie=new Sortie(operation('t04'),byAircraft('f16'),loadout,()=>{});
-  assert(!rewardStatus(pilot,daily).earned&&!claimReward(pilot,daily.id));
+  assert(!rewardStatus(pilot,daily).earned);
   recordSortie(pilot,sortie.report(),'f16');
-  assert(rewardStatus(pilot,daily).earned&&claimReward(pilot,daily.id));
-  assert(rewardStatus(normalizeProfile(pilot),daily).claimed&&!claimReward(pilot,daily.id));
+  assert(rewardStatus(pilot,daily).earned&&rewardStatus(pilot,daily).claimed);
+  assert(rewardStatus(normalizeProfile(pilot),daily).claimed);
   pilot.daily.day='1999-1-1';
   assert(!rewardStatus(pilot,daily).earned&&!rewardStatus(pilot,daily).claimed);
   recordSortie(pilot,sortie.report(),'f16');
-  assert(claimReward(pilot,daily.id)&&pilot.daily.sorties===1);
+  assert(rewardStatus(pilot,daily).claimed&&pilot.daily.sorties===1);
 });
 
 test('radar uses real bearing in the ownship coordinate system',()=>{
@@ -422,8 +427,8 @@ test('J-20 purchases two-bomb payload, persists the mount and hits both groups o
   const p=freshProfile(),type=byAircraft('j20'),mission=bombRange;
   p.campaign=3;
   assert.equal(p.selected,'j20');
-  assert.equal(combatConfiguration(p,'j20').rounds,1200);
-  assert.equal(combatConfiguration(p,'j20').airMissiles,20);
+  assert.equal(combatConfiguration(p,'j20').hasCannon,true);
+  assert.equal(combatConfiguration(p,'j20').hasAirMissile,true);
   assert.equal(sortieBlock(p,mission),'');
   assert.equal(sortieBlock(p,mission,combatConfiguration(p,'a10')),'');
   const wallet=p.credits,write=globalThis.localStorage.setItem;
@@ -433,7 +438,7 @@ test('J-20 purchases two-bomb payload, persists the mount and hits both groups o
     assert.equal(p.credits,wallet);
     assert.equal(p.inventory.bomb,undefined);
   }finally{globalThis.localStorage.setItem=write;}
-  assert.equal(buyItem(p,'bomb'),'已放入仓库');
+  assert.equal(buyItem(p,'bomb'),'已购买，可直接安装');
   assert.equal(p.credits,wallet-340);
   assert.equal(p.inventory.bomb,1);
   assert.equal(buyItem(p,'bomb'),'已经拥有');
@@ -443,7 +448,7 @@ test('J-20 purchases two-bomb payload, persists the mount and hits both groups o
   assert.equal(equipItem(p,'j20','bomb','bomb'),'装备配置已保存');
   assert.equal(sortieBlock(p,mission),'');
   let loaded=loadProfile(),fit=combatConfiguration(loaded,'j20');
-  assert.deepEqual([fit.rounds,fit.airMissiles,fit.groundStores],[1200,20,2]);
+  assert.deepEqual([fit.hasCannon,fit.hasAirMissile,fit.groundStores],[true,true,2]);
   const s=new Sortie(mission,type,{...loadout,configuration:fit},()=>{});
   const pz=s.player,alt=130,fall=(-5+Math.sqrt(25+19.62*alt))/9.81;
   for(const index of [0,3]){
@@ -464,7 +469,7 @@ test('J-20 purchases two-bomb payload, persists the mount and hits both groups o
   loaded=loadProfile();
   assert(loaded.completed.includes('s03')&&loaded.campaign===4);
   assert(loaded.rewardedLevel>1);
-  assert.equal(detachWeapon(loaded,'j20','bomb'),'已卸下，采购装备保留在仓库');
+  assert.equal(detachWeapon(loaded,'j20','bomb'),'已卸下，可重新装配');
   assert.equal(loaded.inventory.bomb,1);
   assert.equal(combatConfiguration(loadProfile(),'j20').groundStores,0);
   assert.equal(sortieBlock(loaded,mission),'');
@@ -473,25 +478,33 @@ test('J-20 purchases two-bomb payload, persists the mount and hits both groups o
   assert.equal(combatConfiguration(loadProfile(),'j20').groundStores,2);
 });
 
-test('playable airframes have free fixed ammunition, early aircraft hit harder, and legacy empty guns recover',()=>{
+test('playable airframes have unlimited air-to-air weapons, early aircraft hit harder, and legacy empty guns recover',()=>{
   const p=normalizeProfile({...freshProfile(),version:7,loadouts:{j20:{cannon:'none',missile:'none',bomb:'none'}}});
   assert.deepEqual(p.loadouts.j20,{bomb:'none'});
   const playable=fleet.filter(a=>!a.support);
   for(const type of playable){
     const fit=combatConfiguration(p,type.id);
-    assert(fit.rounds>0&&type.guns.length>0,type.id);
-    assert.equal(fit.rounds,1200,type.id);
-    assert.equal(fit.airMissiles,20,type.id);
+    assert(type.guns.length>0,type.id);
+    assert.equal(fit.hasCannon,true,type.id);
+    assert.equal(fit.hasAirMissile,true,type.id);
   }
   const ty=byAircraft('dr1'),jet=byAircraft('f16');
   assert(gunDamage(ty)/cannonFor(ty)[0]>gunDamage(jet)/cannonFor(jet)[0]);
   assert.equal(detachWeapon(p,'j20','cannon'),'固定航炮随战机自动配发');
-  assert.notEqual(buyItem(p,'cannon-jet'),'已放入仓库');
+  assert.notEqual(buyItem(p,'cannon-jet'),'已购买，可直接安装');
   assert.equal(p.credits,2600);
   const sortie=new Sortie(operation('s01'),jet,loadout,()=>{});
-  sortie.player.cannon=27;sortie.player.missiles=1;
-  sortie.spawn();
-  assert.deepEqual([sortie.player.cannon,sortie.player.missiles],[27,1]);
+  assert.equal(sortie.player.cannon,0);
+  assert.equal(sortie.player.missiles,0);
+  for(let i=0;i<1250;i++){
+    sortie.time+=4;
+    sortie.fire(sortie.player,'gun');
+    sortie.fire(sortie.player,'missile',sortie.enemies[0]);
+  }
+  assert.equal(sortie.stats.fired,1250);
+  assert.equal(sortie.stats.missile,1250);
+  assert.deepEqual([sortie.player.cannon,sortie.player.missiles],[0,0]);
+
 });
 
 test('FFT swells evolve and low flight leaves pressure ripples beyond the aircraft',()=>{
@@ -528,13 +541,13 @@ test('empty airframe slots never become radar contacts in navigation or ground-o
   }
 });
 
-test('shared sight converges off-axis muzzles, upgrades change real firing cadence and swept impact damage',()=>{
+test('shared sight converges off-axis muzzles, power upgrades change swept impact damage and retain firing cadence',()=>{
   memory.clear();
   const p=freshProfile(),jet=byAircraft('j20'),base=combatConfiguration(p,jet.id);
-  p.credits=4500;p.inventory.circuit=7;
-  for(const id of ['weapons','cadence','warhead','stores'])assert.equal(buyUpgrade(p,jet.id,id),'改装已装配');
+  p.credits=4500;
+  for(const id of ['weapons','warhead'])assert.equal(buyUpgrade(p,jet.id,id),'改装已装配');
   const fit=combatConfiguration(loadProfile(),jet.id);
-  assert.deepEqual([base.rounds,fit.rounds,base.airMissiles,fit.airMissiles],[1200,1320,20,21]);
+  assert.deepEqual([base.hasCannon,fit.hasCannon,base.hasAirMissile,fit.hasAirMissile],[true,true,true,true]);
   const sample=(configuration,id)=>{
     const s=new Sortie(operation('s01'),jet,{...loadout,configuration},()=>{});
     const p=s.player,target=s.enemies[0];
@@ -559,15 +572,15 @@ test('shared sight converges off-axis muzzles, upgrades change real firing caden
     return {damage,gunWait,missileWait,missileDamage:500-target.hp,flight:s.time-start};
   };
   const before=sample(base,'stock'),after=sample(fit,'upgraded');
-  assert(after.damage>before.damage&&after.gunWait<before.gunWait);
-  assert(after.missileDamage>before.missileDamage&&after.missileWait<before.missileWait);
+  assert(after.damage>before.damage&&after.gunWait===before.gunWait);
+  assert(after.missileDamage>before.missileDamage&&after.missileWait===before.missileWait);
   console.log('ordnance calibration',JSON.stringify({before,after}));
 });
 
 test('late air-to-ground guidance consumes only its own station and physically reaches an aimed target',()=>{
   memory.clear();
   const p=freshProfile(),type=byAircraft('a10');p.xp=levelThreshold(6);
-  assert.equal(buyItem(p,'shorebolt'),'已放入仓库');
+  assert.equal(buyItem(p,'shorebolt'),'已购买，可直接安装');
   assert.match(equipItem(p,'a10','shorebolt','missile'),/挂位/);
   assert.equal(equipItem(p,'a10','shorebolt','bomb'),'装备配置已保存');
   const s=new Sortie(bombRange,type,{...loadout,configuration:combatConfiguration(p,'a10')},()=>{});
@@ -619,7 +632,7 @@ test('all 60 ordered campaigns are launchable with starter airframes when their 
   assert(last.enemies.some(e=>e.alive&&e.type.id==='j20'&&e.experience===3));
 });
 
-test('endless sessions vary by seed, restock only at wave boundaries, and keep generating enemies beyond the final campaign',()=>{
+test('endless sessions vary by seed, preserve unlimited player weapons, and keep generating enemies beyond the final campaign',()=>{
   const stage=operation('free'),p=byAircraft('j20'),start={...loadout,diagnostics:false,seed:342};
   const a=new Sortie(stage,p,start,()=>{}),b=new Sortie(stage,p,{...start,seed:343},()=>{});
   assert.notEqual(a.opening,b.opening);
@@ -645,7 +658,7 @@ test('XP awards and threshold rewards persist once through reload, and ignore a 
   const report={...s.report(),xp:levelThreshold(4),credits:500};
   const starting=p.credits;
   assert.equal(pilotLevel(p.xp),1);
-  assert.equal(recordSortie(p,report,'f16'),500);
+  assert(recordSortie(p,report,'f16')>500);
   assert.equal(pilotLevel(p.xp),4);
   assert(p.credits>starting+500&&p.unlocked.includes('mirage'));
   assert.equal(levelProgress(p.xp).progress,0);
@@ -667,8 +680,8 @@ test('representative chapter 1, 3 and 6 sorties exercise the escalation with fin
     if(id==='s60'){
       profile.xp=levelThreshold(12);profile.technology.push('power','vectoring','signal','horizon');
       profile.improvements={'a10:engine':3,'a10:maneuver':3,'a10:weapons':3};
-      assert.equal(buyItem(profile,'vector'),'已放入仓库');
-      assert.equal(buyItem(profile,'skylance'),'已放入仓库');
+      assert.equal(buyItem(profile,'vector'),'已购买，可直接安装');
+      assert.equal(buyItem(profile,'skylance'),'已购买，可直接安装');
       assert.equal(equipItem(profile,'a10','vector'),'装备配置已保存');
       assert.equal(equipItem(profile,'a10','skylance'),'装备配置已保存');
     }
@@ -765,4 +778,46 @@ test('high fidelity reference scale and render cadence remain deterministic',()=
   assert(view.position.z>19&&view.position.z<21);
   assert(view.position.y-plane.position.y>6&&view.position.y-plane.position.y<7);
   assert(view.fov*180/Math.PI>52&&view.fov*180/Math.PI<55);
+});
+
+test('fire control honors the projected ring, keeps a steady target and predicts a moving intercept',()=>{
+  const game=new Sortie(operation('s01'),byAircraft('j20'),loadout,()=>{});
+  const p=game.player,[lead,second]=game.enemies;
+  p.reset(0,3500,1000,0,180);
+  lead.reset(20,3500,220,Math.PI,50);lead.velocity.set(140,0,30);
+  second.reset(35,3500,230,Math.PI,50);
+  const director=new TargetDirector(),result=new Vector3();
+  const unobstructed={terrainMasks:()=>false};
+  assert.equal(lockRadius(.925,1080)/lockRadius(.925,360),3);
+  let ring=[.1,.2];
+  director.projection=point=>ring[point===lead.position?0:1];
+  const tick=(t,env=unobstructed)=>director.update(p,[lead,second],env,4400,.55,t,.05,0,null);
+  for(let i=0;i<=12;i++)tick(i*.05);
+  assert.equal(director.target,lead);
+  assert.equal(director.progress,1);
+  assert(director.lead(p,cannonFor(p.type)[1],result));
+  assert(result.x>lead.position.x+35&&result.y===lead.position.y);
+  ring=[.24,.11];tick(.66);assert.equal(director.target,lead);
+  ring=[1.03,1.02];tick(.71);assert(!director.inside&&director.target===lead);
+  tick(1.04);assert(!director.target);
+  ring=[.25,1.02];tick(1.10);assert(director.inside&&director.progress>.32);
+  tick(1.40,{terrainMasks:()=>true});assert(!director.inside);
+  assert(!director.lead(p,cannonFor(p.type)[1],result));
+});
+
+test('cooldown masks use accepted actions and keep the original weapon firing intervals',()=>{
+  const game=new Sortie(operation('s01'),byAircraft('j20'),loadout,()=>{});
+  game.player.reset(0,3800,1000,0,200);
+  game.fire(game.player,'missile',game.enemies[0]);
+  assert.equal(game.cooldown('missile'),1);
+  game.fire(game.player,'missile',game.enemies[0]);
+  assert.equal(game.stats.missile,1);
+  assert(game.maneuver('evade',-1));
+  assert.equal(game.cooldown('evade'),1);
+  const control={...idle,boost:true};
+  game.step(dt,control);
+  assert.equal(game.cooldown('boost'),1);
+  assert(game.cooldown('evade')<1);
+  game.time=game.readyAt.boost+1;
+  for(const id of ['missile','boost','evade'])assert.equal(game.cooldown(id),0);
 });

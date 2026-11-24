@@ -1,7 +1,7 @@
 import { itemById } from './items';
 import { icon } from './icons';
 
-type Feedback='reward'|'aircraft'|'research'|'upgrade'|'equip'|'paint'|'purchase'|'facility';
+type Feedback='aircraft'|'upgrade'|'equip'|'paint'|'purchase';
 
 export interface Receipt {
   kind:Feedback;
@@ -17,8 +17,8 @@ export interface Receipt {
 
 const grades={standard:'标准补给',rare:'稀有物资',elite:'珍藏嘉奖'};
 const captions:Record<Feedback,string>={
-  reward:'军需入库',aircraft:'战机入列',research:'研发完成',upgrade:'试车校准',
-  equip:'挂载确认',paint:'蒙皮涂装',purchase:'采购回执',facility:'基地投用'
+  aircraft:'战机入列',upgrade:'试车校准',
+  equip:'挂载确认',paint:'蒙皮涂装',purchase:'采购回执'
 };
 const counters=new WeakMap<HTMLElement,number>();
 const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,9 +75,9 @@ export class Presentation {
       const entry=itemById[id];return entry?[{entry,amount}]:[];
     });
     const gold=list.some(x=>x.entry.grade==='elite')||data.kind==='aircraft'||data.model?.startsWith('air-');
-    const rare=list.some(x=>x.entry.grade==='rare')||data.kind==='research';
+    const rare=list.some(x=>x.entry.grade==='rare');
     const grade=gold?'elite':rare?'rare':'standard';
-    const ceremonial=data.kind==='aircraft'||data.kind==='reward'&&Boolean(data.model||gold);
+    const ceremonial=data.kind==='aircraft';
     const target=ceremonial?this.layer:this.ribbon;
     const panel=document.createElement('section');
     panel.className='receipt-panel';

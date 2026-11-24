@@ -8,6 +8,23 @@
 <title>苍穹锋刃 · PIXEL SKY AFTERBURNER</title>
 <link rel="icon" href="./icon.svg">
 <link rel="manifest" href="./manifest.webmanifest">
+<style>
+html{background:#07121c;color:#ecf4f8}body{margin:0}#boot[hidden],#boot [hidden]{display:none!important}
+#boot{position:fixed;inset:0;display:grid;place-items:end center;z-index:30;overflow:auto;padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(17px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));background:#0b1d31;font-family:system-ui,sans-serif;text-align:center}
+.boot-art{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,transparent 24%,#08192b30 54%,#061320 100%),url('./loading/alpine.webp') center 17%/cover no-repeat}
+.boot-console{position:relative;width:min(46rem,82vw);color:#e2edf7;text-shadow:0 2px 9px #03101e;display:grid;justify-items:center;gap:clamp(8px,2.5vh,23px);margin-bottom:clamp(4px,3.2vh,44px)}
+.boot-mark{display:block;width:clamp(92px,17vw,212px);height:auto;margin:0 auto -5%;position:relative;z-index:1;filter:drop-shadow(0 5px 13px #061220)}
+.boot-title{margin:0;width:min(100%,32rem);padding:clamp(7px,1.8vh,17px) clamp(36px,7vw,86px);box-sizing:border-box;background:linear-gradient(130deg,#263c54,#0e233c 45%,#0b1c2c);border:1px solid #b89a62;box-shadow:inset 0 1px #87b8e7,inset 0 -2px #b08b4d,0 10px 38px #020d1b97;clip-path:polygon(4% 0,98% 0,100% 19%,96% 100%,2% 100%,0 83%)}
+.boot-title img{display:block;width:100%;height:auto;filter:drop-shadow(0 5px 8px #000c)}
+#boot-text{font-weight:570;letter-spacing:.12em;margin:0;font-size:clamp(.9rem,2.1vw,1.24rem)}
+.boot-track{width:100%;display:flex;align-items:center;gap:10px;padding:5px 12px;box-sizing:border-box;background:linear-gradient(#1b3348,#0b1725 60%);border:1px solid #ac9060;clip-path:polygon(4% 0,98% 0,100% 40%,96% 100%,2% 100%,0 60%);box-shadow:inset 0 1px #917241}
+#boot-progress{flex:1;min-width:0;width:100%;height:10px;appearance:none;border:0;background:#122335;color:#60dcff;display:block}
+#boot-progress::-webkit-progress-bar{background:#122335}#boot-progress::-webkit-progress-value{background:linear-gradient(180deg,#8de6ff,#1b74dd 72%,#3ebaee);box-shadow:0 0 10px #49d9ff}#boot-progress::-moz-progress-bar{background:linear-gradient(#8de6ff,#1b74dd 72%,#3ebaee)}
+#boot-percent{min-width:3.4ch;font-weight:760;color:#fff0c4;font-variant-numeric:tabular-nums;font-size:clamp(.92rem,2.5vw,1.31rem)}
+#boot-error{max-width:35em}#boot-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px}
+#boot-actions a{color:#d8eaf8;background:#112640;border:1px solid #6b9cb3;padding:8px 12px;text-decoration:none;border-radius:3px}#boot-actions a:last-child{color:#fde1ad;border-color:#be9660}
+@media(orientation:portrait){.boot-art{background-size:100% 100%,auto 56%;background-position:center,center top}.boot-console{align-self:center;transform:translateY(12vh);width:min(88vw,28rem);gap:clamp(17px,4vh,30px);margin:0}.boot-mark{width:min(38vw,162px);margin-bottom:-9%}.boot-title{padding:13px 10vw}.boot-track{margin-top:1.8vh}}
+</style>
 </head>
 <body>
 <main id="application" data-screen="loading">
@@ -23,18 +40,15 @@
     <header class="mast">
       <button class="identity" data-nav="home"><span class="crest reference-crest" aria-hidden="true"></span><span><strong>苍穹锋刃</strong><small>飞行指挥中心</small></span></button>
       <div class="wallet"><span><img src="./items/credits-wallet.webp" class="wallet-art" alt=""><b id="credits">2600</b> 信用点</span><span class="pilot-meter"><i data-icon="star"></i><b id="rank">Lv.1</b><small id="xp-text"></small><progress id="pilot-xp" aria-label="等级经验"></progress></span></div>
+      <div class="mast-actions">
+        <button data-nav="records" data-icon-label="record">个人档案</button>
+        <button data-nav="settings" data-icon-label="tools">设置</button>
+      </div>
       <button class="square" id="fullscreen" type="button" aria-label="进入全屏" title="全屏" data-icon="fullscreen" hidden></button>
     </header>
     <div id="front" hidden>
       <aside class="brief">
         <h1>南海前哨</h1>
-        <div class="brief-lines">
-          <button data-nav="quests"><i data-icon="gift"></i><span>任务与成就</span><em id="ready-count"></em></button>
-          <button data-nav="activity"><i data-icon="star"></i><span>活动中心</span></button>
-          <button data-nav="season"><i data-icon="wing"></i><span>赛季通行证</span></button>
-          <button data-nav="base"><i data-icon="base"></i><span>空军基地</span></button>
-          <button data-nav="records"><i data-icon="record"></i><span>飞行员资料</span></button>
-        </div>
       </aside>
       <aside class="quick">
         <button class="launch-card" data-nav="missions" data-briefing="coast"><strong>战役司令部</strong><span>战役与独立任务</span><i data-icon="target"></i></button>
@@ -47,11 +61,8 @@
     <nav id="navigation" aria-label="主要界面">
       <button data-nav="hangar"><i class="nav-art nav-hangar"></i>机库</button>
       <button data-nav="upgrade"><i class="nav-art nav-tools"></i>改装</button>
-      <button data-nav="tree"><i class="nav-art nav-tree"></i>研发</button>
       <button data-sortie class="sortie-action" data-icon-label="plane">出击</button>
-      <button data-nav="weapons"><i data-icon="missile"></i>武器</button>
-      <button data-nav="inventory"><i data-icon="tools"></i>仓库</button>
-      <button data-nav="settings"><i class="nav-art nav-settings"></i>设置</button>
+      <button data-nav="quests" data-icon-label="target">任务</button>
     </nav>
   </div>
   <section id="hud" aria-label="飞行仪表" hidden>
@@ -70,6 +81,12 @@
     <div id="pins" aria-hidden="true"></div>
     <output id="hit-confirm" aria-live="off" hidden></output>
     <output id="kill-notice" aria-live="polite" hidden></output>
+    <svg id="lock-zone" aria-hidden="true" viewBox="0 0 100 100" hidden>
+      <circle cx="50" cy="50" r="50" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <svg id="lead-aim" aria-hidden="true" viewBox="0 0 24 24" hidden>
+      <circle cx="12" cy="12" r="6"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+    </svg>
     <svg id="aim" aria-hidden="true" viewBox="0 0 64 64" hidden>
       <path class="sight-ring" d="M18 14a22 22 0 0 1 28 0M50 18a22 22 0 0 1 0 28M46 50a22 22 0 0 1-28 0M14 46a22 22 0 0 1 0-28"/>
       <path class="sight-index" d="M32 5v10m0 34v10M5 32h10m34 0h10m-34 0h4m6 0h4m-7-7v4m0 6v4"/>
@@ -83,18 +100,17 @@
     <div id="touch-guide">滑动空白区域控制飞行</div>
     <div class="flight-controls">
       <div class="flight-actions">
-        <button id="counter" data-icon-label="deflect" aria-label="反制导弹" aria-describedby="counter-state"><span>反制导弹</span><b id="counter-count"></b></button>
-        <button id="turn" data-icon-label="turn"><span>掉头</span><small id="turn-status" hidden></small></button>
+        <button id="counter" data-icon-label="deflect" aria-label="反制导弹"><span>反制导弹</span></button>
+        <button id="turn" data-icon-label="turn"><span>掉头</span></button>
         <button id="boost" data-icon-label="boost"><span>加速</span></button>
-        <button id="evade" data-icon-label="evade" aria-label="躲避，向左右滑动选择方向"><span>躲避</span><small id="evade-status" hidden></small></button>
+        <button id="evade" data-icon-label="evade" aria-label="躲避，向左右滑动选择方向"><span>躲避</span></button>
       </div>
-      <span id="counter-state"></span>
       <div class="power-control"><label for="power">油门 <b id="throttle"></b><em id="burn"></em></label><input type="range" id="power" min="12" max="100" value="74"></div>
     </div>
     <div class="combat-controls">
-      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b><small id="gun-status"></small></button>
-      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b><small id="missile-status"></small></button>
-      <button id="bomb" class="fire" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b><small id="bomb-status"></small></button>
+      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span></button>
+      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span></button>
+      <button id="bomb" class="fire" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b></button>
     </div>
   </section>
   <dialog id="tactical" class="tactical" aria-labelledby="tactical-name">
@@ -106,9 +122,31 @@
   <dialog id="purchase-confirm" aria-labelledby="purchase-title" class="acquisition"></dialog>
   <dialog id="acquisition" aria-labelledby="acquisition-title" class="acquisition"></dialog>
   <div id="status-toast" role="status" hidden></div>
-  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><progress id="boot-progress" max="100" value="0" aria-label="实际加载进度"></progress><output id="boot-percent">0%</output><div id="boot-error" hidden></div></div></section>
+  <section id="boot" aria-label="启动状态">
+    <div class="boot-art" aria-hidden="true"></div>
+    <div class="boot-console">
+      <img class="boot-mark" src="./loading/wings.webp" alt="">
+      <h1 class="boot-title"><img src="./loading/title.webp" alt="苍穹锋刃"></h1>
+      <p id="boot-text" role="status">正在加载游戏程序</p>
+      <div class="boot-track"><progress id="boot-progress" max="100" value="0" aria-label="加载进度"></progress><span id="boot-percent" aria-hidden="true">0%</span></div>
+      <div id="boot-error" hidden></div><div id="boot-actions" hidden><a id="boot-retry" href="./?fresh=1">重新连接</a><a id="boot-safe" href="./?graphics=safe&amp;fresh=1">使用 WebGL2</a></div>
+    </div>
+  </section>
   <noscript>请启用 JavaScript 后启动游戏。</noscript>
 </main>
+<script>
+(() => {
+  const app = document.getElementById('application');
+  const offer = () => { if (!document.getElementById('boot').hidden) document.getElementById('boot-actions').hidden = false; };
+  const unavailable = () => {
+    if (app.dataset.screen !== 'loading') return;
+    document.getElementById('boot-text').textContent = '启动文件未能载入';
+    offer();
+  };
+  addEventListener('error', event => { if (event.target instanceof HTMLScriptElement && event.target.type === 'module') unavailable(); }, true);
+  setTimeout(() => { if (app.dataset.screen === 'loading') offer(); }, 24000);
+})();
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

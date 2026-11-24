@@ -173,7 +173,7 @@ export class AircraftView {
   preview(spec:PlaneSpec,time:number,configuration:CombatConfiguration,heading:number){
     if(this.stand?.type!==spec)this.stand=new Airframe(0,spec,0);
     const v=this.stand;
-    v.position.set(0,Math.max(1.03,spec.gearClearance),0);v.gear=1;v.throttle=.06;v.missiles=configuration.airMissiles;v.bombs=configuration.groundStores;
+    v.position.set(0,Math.max(1.03,spec.gearClearance),0);v.gear=1;v.throttle=.06;v.bombs=configuration.groundStores;
     Quaternion.RotationAxisToRef(above,-.15+heading,v.orientation);
     this.sync(v,time,configuration.paint,false,true,undefined,configuration.missile.shape,1,configuration.groundWeapon);
   }
@@ -249,7 +249,7 @@ export class AircraftView {
       else if(n.startsWith('Elevator')||n.startsWith('Canard'))node.setLocalEulerAngles(pose.x+p.controls.pitch*20,pose.y,pose.z);
       else if(n.startsWith('Rudder'))node.setLocalEulerAngles(pose.x,pose.y+p.controls.yaw*22,pose.z);
       else if(n.startsWith('Prop_'))node.setLocalEulerAngles(pose.x,pose.y,pose.z+time*(390+p.throttle*8050));
-      else if(/^Store_\d+$/.test(n))node.enabled=p.missiles>Number(n.slice(6));
+      else if(/^Store_\d+$/.test(n))node.enabled=p.side===0?(preview||!sortie||sortie.time>=p.missileAt-.32):p.missiles>Number(n.slice(6));
       else if(n.startsWith('Bay_')&&sortie){
         const fromMissile=sortie.time-p.missileAt+1.05;
         const fromGround=sortie.time-p.bombAt+(sortie.groundWeapon==='shorebolt'?1.45:.61);
