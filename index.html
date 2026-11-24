@@ -63,6 +63,7 @@
     <div class="hud-middle"><b id="enemy-counter"></b><span id="flight-time"></span><small id="boss-health" hidden></small><output id="alerts" role="status"></output></div>
     <div class="hud-right">
       <button id="pause" class="square" data-icon="pause" aria-label="暂停"></button>
+      <button id="view" class="square" data-icon="view" aria-label="切换视角"></button>
       <button id="gear" class="square small-label" aria-label="起落架">起落架</button>
       <button id="radar-open" aria-label="打开战术雷达"><canvas id="radar" width="180" height="180"></canvas></button>
     </div>
@@ -81,20 +82,19 @@
     <div id="damage-bearing" aria-hidden="true" hidden></div>
     <div id="touch-guide">滑动空白区域控制飞行</div>
     <div class="flight-controls">
-      <div class="defense-controls">
-        <button id="counter" data-icon-label="deflect" aria-label="一键反导弹"><span>反制</span><b id="counter-count"></b></button>
-        <div><span id="counter-state"></span><button id="assist" aria-label="飞行辅助开关">飞行辅助</button><button id="spares" hidden>补给 <b id="spare-count"></b></button></div>
+      <div class="flight-actions">
+        <button id="counter" data-icon-label="deflect" aria-label="反制导弹" aria-describedby="counter-state"><span>反制导弹</span><b id="counter-count"></b></button>
+        <button id="turn" data-icon-label="turn"><span>掉头</span><small id="turn-status" hidden></small></button>
+        <button id="boost" data-icon-label="boost"><span>加速</span></button>
+        <button id="evade" data-icon-label="evade" aria-label="躲避，向左右滑动选择方向"><span>躲避</span><small id="evade-status" hidden></small></button>
       </div>
+      <span id="counter-state"></span>
       <div class="power-control"><label for="power">油门 <b id="throttle"></b><em id="burn"></em></label><input type="range" id="power" min="12" max="100" value="74"></div>
     </div>
     <div class="combat-controls">
-      <button id="view" data-icon-label="view">视角</button>
-      <button id="boost" data-icon-label="boost">加力</button>
-      <button id="next-target" data-icon-label="lock">锁定</button>
-      <button id="weapon-mode" data-icon-label="switch"><small>切换</small><b id="weapon-display"></b></button>
-      <button id="bomb" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b></button>
-      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b></button>
-      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b></button>
+      <button id="gun" class="fire" data-icon-label="cannon"><span>航炮</span><b id="ammo"></b><small id="gun-status"></small></button>
+      <button id="missile" class="fire" data-icon-label="missile"><img id="missile-art" alt="" hidden><span>导弹</span><b id="missiles"></b><small id="missile-status"></small></button>
+      <button id="bomb" class="fire" data-icon-label="bomb"><span>炸弹</span><b id="bombs"></b><small id="bomb-status"></small></button>
     </div>
   </section>
   <dialog id="tactical" class="tactical" aria-labelledby="tactical-name">
@@ -106,7 +106,7 @@
   <dialog id="purchase-confirm" aria-labelledby="purchase-title" class="acquisition"></dialog>
   <dialog id="acquisition" aria-labelledby="acquisition-title" class="acquisition"></dialog>
   <div id="status-toast" role="status" hidden></div>
-  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><div id="boot-error" hidden></div></div></section>
+  <section id="boot" class="veil"><div class="system-card"><span class="crest reference-crest" aria-hidden="true"></span><h1>苍穹锋刃</h1><p id="boot-text">正在接通机库与渲染系统</p><progress id="boot-progress" max="100" value="0" aria-label="实际加载进度"></progress><output id="boot-percent">0%</output><div id="boot-error" hidden></div></div></section>
   <noscript>请启用 JavaScript 后启动游戏。</noscript>
 </main>
 <script type="module" src="/src/main.ts"></script>

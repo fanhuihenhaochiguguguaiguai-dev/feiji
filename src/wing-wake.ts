@@ -53,10 +53,14 @@ export class WingWake {
 
   clear(){this.head=this.used=0;this.time=-1;this.entity.enabled=false;}
 
-  update(s:Sortie,pose:FlightPose,eye:Vector3,step:number,show:boolean){
+  update(s:Sortie,pose:FlightPose,eye:Vector3,step:number,show:boolean,weather:number){
     const p=s.player,time=s.time;
     if(!p.alive){this.clear();return;}
-    const strength=Math.max(0,Math.min(1,(p.speed-p.type.stall)/(p.type.trim-p.type.stall)*.65+p.boost*.34+Math.abs(p.angular.z)*.30));
+    const mach=p.speed/Math.max(300,340-p.position.y*.0024);
+    const moisture=[.72,.46,.79,.94,1,.64,.83,.59][weather]??.65;
+    const maneuver=Math.max(0,Math.abs(p.loadG)-1.06)*.24+Math.min(.8,Math.abs(p.alpha)*1.47);
+    const cold=Math.min(1,Math.max(0,(p.position.y-1900)/5500));
+    const strength=Math.max(0,Math.min(1,(mach*.39+maneuver+p.boost*.29)*moisture+cold*.4));
     if(step>0&&time-this.time>=.035){
       const cell=this.head*7;
       this.history[cell]=time;

@@ -1,6 +1,6 @@
 """Author three coastal provinces, simulate drainage, and export one shared height lattice per map."""
 from pathlib import Path
-import struct
+from terrain_detail import encode
 
 import numpy as np
 from PIL import Image
@@ -128,7 +128,7 @@ def forge(name, seed, spines):
     # Z-major image rows. The runtime samples texel centres and never flips the texture.
     u = (packed.astype(np.int32) + 32768)
     atlas = np.stack((u>>8,u&255,np.rint(np.clip(distance/520+.5,0,1)*255)),axis=-1).astype(np.uint8)
-    (ROOT/f"{name}.height").write_bytes(struct.pack("<4sHHI",b"WF09",SIZE,4,EXTENT)+packed.tobytes())
+    (ROOT/f"{name}.height").write_bytes(encode(packed,seed))
     Image.fromarray(atlas,"RGB").save(ROOT/f"{name}-surface.png",compress_level=8)
     print(name, "heights", int(h.min()), int(h.max()), "cells", SIZE**2,flush=True)
 

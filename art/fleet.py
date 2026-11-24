@@ -3,6 +3,8 @@ import bpy
 import bmesh
 import json
 import math
+import os
+import zlib
 import sys
 import numpy as np
 from pathlib import Path
@@ -12,9 +14,9 @@ ART = Path(__file__).resolve().parent
 sys.path.insert(0, str(ART))
 from airframes import REGISTRY
 
-OUTPUT = ART.parent / 'public' / 'fleet'
-SOURCES = ART / 'models'
-CATALOG = ART / 'catalog'
+OUTPUT = Path(os.environ.get('FLEET_OUTPUT', ART.parent / 'public' / 'fleet'))
+SOURCES = Path(os.environ.get('FLEET_SOURCES', ART / 'models'))
+CATALOG = Path(os.environ.get('FLEET_CATALOG', ART / 'catalog'))
 PALETTES = {
     'oxblood': ('713835','a75143','eee5ce','e4c193'), 'linen': ('685d3d','9c8653','e1d7a7','553f27'),
     'raf': ('4c5545','666956','b7c5a8','c69355'), 'mustang': ('899da8','bbc9cf','64707c','c17453'),
@@ -59,6 +61,8 @@ def coating(name, hex_, metal, rough, detail=False, alpha=1, radiance=0):
         channels=mat.node_tree.nodes.new('ShaderNodeSeparateColor')
         mat.node_tree.links.new(weather.outputs['Color'],channels.inputs['Color'])
         mat.node_tree.links.new(channels.outputs['Green'],bsdf.inputs['Roughness'])
+        if metal>.35:
+            mat.node_tree.links.new(channels.outputs['Blue'],bsdf.inputs['Metallic'])
         if ao_group is not None:
             output=mat.node_tree.nodes.new('ShaderNodeGroup');output.node_tree=ao_group
             mat.node_tree.links.new(weather.outputs['Color'],output.inputs['Occlusion'])
@@ -77,28 +81,60 @@ def coating(name, hex_, metal, rough, detail=False, alpha=1, radiance=0):
     return mat
 
 
-def baked_surface(size=288):
-    ax=np.linspace(0,1,size,endpoint=False,dtype=np.float32)
-    u,w=np.meshgrid(ax,ax)
-    seam_u=np.exp(-((np.mod(u*4+.5+.1*np.sin(w*6.283),1)-.5)*26)**2)
-    seam_v=np.exp(-((np.mod(w*6+.5,1)-.5)*38)**2)
-    rows=np.clip(seam_u+seam_v,0,1)
-    bolts=(np.roll(seam_v,4,0)+np.roll(seam_v,-4,0))*np.maximum(0,np.cos(u*81.6814))**22
-    random=np.random.default_rng(743)
-    grain=.011*random.normal(size=u.shape)+.017*np.sin(u*81.68+w*46.49)
-    relief=-rows*.22+bolts*.31+grain
-    nx=(np.roll(relief,1,1)-np.roll(relief,-1,1))*.69
-    ny=(np.roll(relief,1,0)-np.roll(relief,-1,0))*.69
-    n=np.stack((.5+nx,.5+ny,np.sqrt(np.maximum(.1,1-4*(nx*nx+ny*ny))),np.ones_like(u)),-1)
-    rough=np.clip(.47+.18*rows+.072*np.cos(w*6.283+u*18.849)+grain*.65,.24,.69)
-    orm=np.stack((1-rows*.29,rough,np.zeros_like(u),np.ones_like(u)),-1)
-    packed=[]
-    for name,array in [('Airframe panel and fastener relief',n),('Panel recess and varnish',orm)]:
-        img=bpy.data.images.new(name,size,size,alpha=False)
-        img.colorspace_settings.name='Non-Color'
-        img.pixels.foreach_set(array.astype(np.float32).reshape(-1));img.pack();packed.append(img)
-    return packed
+def baked_surface(d):
+    size=2048 if d['support'] else 4096
+    seed=zlib.crc32(d['id'].encode())
+    era=d['era']
+    modern=era in ('modern','stealth')
+    composite=era=='stealth'
+    rng=np.random.default_rng(seed)
+    u=(np.arange(size,dtype=np.float32)+.5)[None,:]/size
+    normal=np.empty((size,size,4),dtype=np.float32)
+    orm=np.empty_like(normal)
+    freq=2+seed%4
+    across=3+seed//7%4
+    roughness=.48 if modern else .59
+    if composite:
+        roughness=.52
 
+    def relief(v):
+        seam=np.abs(np.remainder(u*freq+.19*np.sin(v*6.283)+.09*np.cos(v*18.85),1)-.5)
+        edge=np.abs(np.remainder(v*across+.06*np.cos(u*12.56),1)-.5)
+        panel=np.maximum(np.exp(-(seam/.017)**2),np.exp(-(edge/.019)**2))
+        rivet=np.exp(-((edge-.048)/.019)**2)*np.maximum(0,np.cos(u*(freq*25)*6.283))**13
+        brushed=np.sin(u*2*math.pi*(83+seed%23)+v*113)*np.sin(v*2*math.pi*39+u*73)
+        coating=np.sin(u*5.3*6.283+v*3*6.283)*np.cos(v*7.7*6.283)*.5
+        write=-panel*.12+rivet*(.024 if composite else .063)+brushed*.007+coating*.014
+        return write,panel,rivet,coating
+
+    for start in range(0,size,128):
+        stop=min(start+128,size)
+        v=(np.arange(start,stop,dtype=np.float32)+.5)[:,None]/size
+        h,panel,rivet,coating=relief(v)
+        right=np.roll(h,-1,axis=1)
+        left=np.roll(h,1,axis=1)
+        # The two derivatives sample the same relief function, including at strip boundaries.
+        up=relief(v-1/size)[0];down=relief(v+1/size)[0]
+        nx=(left-right)*1.67
+        ny=(up-down)*1.67
+        scale=1/np.sqrt(1+nx*nx+ny*ny)
+        normal[start:stop,:,0]=.5+.5*nx*scale
+        normal[start:stop,:,1]=.5+.5*ny*scale
+        normal[start:stop,:,2]=.5+.5*scale
+        normal[start:stop,:,3]=1
+        grain=rng.uniform(-.012,.012,(stop-start,size)).astype(np.float32)
+        orm[start:stop,:,0]=1-panel*.24
+        orm[start:stop,:,1]=np.clip(roughness+panel*.15-rivet*.17+coating*.032+grain,.27,.78)
+        orm[start:stop,:,2]=np.clip((.34 if composite else .55)-panel*.13+rivet*.17+coating*.018,0,1)
+        orm[start:stop,:,3]=1
+    images=[]
+    for suffix,array in [('normal',normal),('orm',orm)]:
+        img=bpy.data.images.new(d['id']+'-panel-'+suffix,size,size,alpha=False)
+        img.colorspace_settings.name='Non-Color'
+        img.pixels.foreach_set(array.reshape(-1))
+        img.pack()
+        images.append(img)
+    return images
 
 def empty(name, parent=None, pos=(0,0,0)):
     ob = bpy.data.objects.new(name, None)
@@ -145,7 +181,7 @@ def monotone(a, b, c, d, t):
 
 
 def loft(name, rows, parent, mats, *, style='round', hollow=False, smooth_steps=2):
-    segments = 44 if quality==2 else 19 if quality else 10
+    segments = 64 if quality==2 else 19 if quality else 10
     steps = []
     for i in range(len(rows)-1):
         a,b,c,d = [rows[max(0,min(len(rows)-1,i+k))] for k in (-1,0,1,2)]
@@ -522,6 +558,8 @@ def surface_marks(d, parent):
         rod('Service stencil',(side*(x-.12),h,z),(side*(x+.24),h,z+.07),.027,parent,'trim',5)
     if d['id']=='j20':
         for side in (-1,1):
+            for start,end in [(-1.48,.74),(1.12,3.10)]:
+                rod('Door seal',(side*.70,-.89,start),(side*.70,-.89,end),.011,parent,'dark',6)
             pos=side*.81
             rod('Flush antenna',(pos,.53,-4.8),(pos*1.18,.51,-3.96),.043,parent,'panel',8)
 
@@ -616,7 +654,7 @@ def configure(d):
     global texture,surface_map,ao_group
     bpy.ops.wm.read_factory_settings(use_empty=True)
     MAT.clear()
-    texture,surface_map=baked_surface(448 if d['id']=='f16' else 288)
+    texture,surface_map=baked_surface(d)
     ao_group=bpy.data.node_groups.new('glTF Material Output','ShaderNodeTree')
     ao_group.interface.new_socket(name='Occlusion',in_out='INPUT',socket_type='NodeSocketFloat')
     a,b,c,e=PALETTES[d['scheme']]

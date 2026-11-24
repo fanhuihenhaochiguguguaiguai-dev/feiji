@@ -10,9 +10,10 @@ import { loadTerrain } from './terrain';
 import { RenderBudget } from './render-budget';
 import { el,Interface,studioStations } from './interface';
 import { FlightInput } from './inputs';
+import { loading,milestones } from './loading';
 import { HangarOrbit } from './hangar-control';
 import { FlightAudio } from './audio';
-import { combatConfiguration,consumeReserve,recordSortie,saveProfile,sortieBlock,type Backend,type Save } from './profile';
+import { combatConfiguration,recordSortie,sortieBlock,type Backend,type Save } from './profile';
 import { pilotLevel } from './progression';
 import { defenseNames } from './defense';
 import { missiles } from './items';
@@ -104,7 +105,7 @@ export class Game {
     this.root.addEventListener('click',event=>{
       if(this.state==='home'&&(event.target as Element).closest('button'))this.audio.play('switch');
     });
-    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['next-target','lock'],['weapon-mode','weapon'],['counter','counter'],['spares','spares'],['assist','assist']]){
+    for(const [id,cmd] of [['pause','pause'],['gear','gear'],['view','view'],['counter','counter'],['turn','turn']]){
       const button=el(id);
       button.addEventListener('pointerdown',e=>{
         if(e.pointerType==='mouse')return;
@@ -125,16 +126,26 @@ export class Game {
     this.root.style.setProperty('--hud',this.p.settings.hud.toFixed(2));
   }
   async init(){
-    await Promise.all([this.world.ready,this.pilot.request(this.preview)]);
+    await milestones([this.world.ready,this.pilot.request(this.preview),this.art.ready],43,93,'正在读取机库与战机素材');
     this.pilot.preview(this.preview,this.clock,combatConfiguration(this.p,this.preview.id),0);
     this.state='home';
-    el('boot').hidden=true;el('menu').hidden=false;this.ui.open('home');
+    this.ui.open('home');
+    loading(96,'正在准备首帧');
     if(this.entry.fallback)this.ui.toast('已使用 WebGL2');
     this.engine.on('update',()=>this.frame(performance.now()));
     this.engine.on('postrender',()=>{
       if(this.state==='flight'&&this.sortie)this.ui.telemetry(this.sortie,this.world,this.targetAnchors,this.playerPose);
     });
+    let expired:ReturnType<typeof setTimeout>|undefined;
+    const firstFrame=new Promise<void>((resolve,reject)=>{
+      expired=setTimeout(()=>reject(new Error('首帧渲染超时')),20000);
+      this.engine.once('postrender',resolve);
+    });
     this.engine.autoRender=false;this.engine.start();
+    try{await firstFrame;}
+    catch(error){this.engine.destroy();throw error;}
+    finally{clearTimeout(expired);}
+    loading(100,'机库已就绪');el('boot').hidden=true;el('menu').hidden=false;
   }
   presentAward(id?:string){
     const aircraftWasActive=this.awardPlane!==null;
@@ -178,31 +189,32 @@ export class Game {
     const type=byAircraft(lab?'f16':this.p.selected),old=this.state;
     this.input.on=false;
     this.state='loading';
-    el('boot').hidden=false;el('boot-text').textContent='正在准备出击';
+    el('boot').hidden=false;loading(0,'正在准备出击');
     const request=operation(id),op=lab?{...request,region:plan.region,name:'地貌验收空域'}:id==='free'?{...request,region:plan.region}:request;
     const configuration=combatConfiguration(this.p,type.id,lab||op.kind==='ground');
     let rigid:WreckPhysics|null=null;
     try {
       const theatre=theatres[op.region];
       await loadTerrain(theatre.seed,asset('world/'+theatre.id+'.height'));
+      loading(26,'已读取出击地貌，正在配置环境');
       await this.world.setTheme(op.region);
+      loading(45,'正在打开残骸模拟');
       rigid=await openWreckPhysics(FLIGHT_STEP);
       const mission=new Sortie(op,type,{rank,runway,armor:configuration.armor,engine:0,
       stores:configuration.stores,repair:this.p.bases.includes('repair'),radar:this.p.bases.includes('radar'),configuration,
       seed:op.kind==='free'&&!lab?++this.freeSeed:undefined,diagnostics:lab
     },e=>this.event(e),this.world.terrain,rigid);
-      await this.pilot.request(type);
-      await Promise.all(mission.enemies.map((e,i)=>e.alive?this.foes[i].request(e.type):null));
-      if(mission.enemies.some(e=>e.alive)){
-        for(const id of mission.enemyKit)void this.world.assets.load('fleet/'+id+'.glb','container').catch(()=>{});
-      }
-      if(mission.ally.alive)await this.support.request(mission.ally.type);
+      const assets=[this.pilot.request(type),...mission.enemies.flatMap((e,i)=>e.alive?[this.foes[i].request(e.type)]:[])];
+      if(mission.ally.alive)assets.push(this.support.request(mission.ally.type));
+      await milestones(assets,58,93,'正在读取出击编队');
       this.sortie?.releaseRigidBodies();
       this.labSortie=lab;this.notion={id,rank,runway,plan};this.sortie=mission;rigid=null;this.acc=0;
+      this.world.assets.trimFleet(new Set([type.id,...mission.enemies.filter(e=>e.alive).map(e=>e.type.id),
+        ...(mission.ally.alive?[mission.ally.type.id]:[])]));
       this.world.showDeck(false);this.world.resetMarkers();this.world.configureFlightWeather(plan.weather,plan.lighting);this.art.weather=plan.weather;this.world.view=0;
       this.input.reset(runway&&op.kind==='free'?.12:.74);this.input.on=true;
       this.art.clear();this.meshChange.clear();
-      this.state='flight';this.ui.flight(mission);el('boot').hidden=true;
+      this.state='flight';this.ui.flight(mission);loading(100,'出击资源已就绪');el('boot').hidden=true;
     }catch(e){
       rigid?.dispose();
       this.state=old;el('boot').hidden=true;
@@ -237,18 +249,9 @@ export class Game {
       this.world.view=1-this.world.view;this.world.cameraReset=true;
       this.ui.toast(['跟随视角','第一人称座舱'][this.world.view]);this.audio.play('switch');
     }
-    if(name==='lock')this.sortie.acquire(true);
-    if(name==='weapon'){this.sortie.nextWeapon();this.input.selected=this.sortie.weapon;this.audio.play('switch');}
     if(name==='counter')this.sortie.counter();
-    if(name==='spares'){
-      const mission=this.sortie;
-      if(mission.spares<=0||!mission.defense.canReplenish()){this.ui.toast('反制弹仍满载');return;}
-      if(!this.labSortie&&!consumeReserve(this.p)){this.ui.toast('补给未消耗');return;}
-      mission.spares--;mission.defense.replenish();this.ui.toast('已消耗一个补给包');
-    }
-    if(name==='assist'){
-      this.p.settings.assist=!this.p.settings.assist;saveProfile(this.p);
-      this.ui.toast(this.p.settings.assist?'飞行辅助开启':'飞行辅助关闭');this.audio.play('switch');
+    if(name==='turn'||name==='evade'||name==='evade-left'||name==='evade-right'){
+      this.sortie.maneuver(name==='turn'?'turn':'evade',name==='evade-left'?1:name==='evade-right'?-1:0);
     }
     if(name==='gear'){
       if(this.sortie.player.gearChange())this.ui.toast(this.sortie.player.gearTarget?'起落架放下':'起落架收起');
@@ -257,6 +260,12 @@ export class Game {
   }
   event(e:FlightEvent){
     this.art.event(e);
+    if(e.kind==='hit'&&e.target){
+      const view=e.target.id===0?this.pilot:e.target.side===2?this.support:this.foes[e.target.id-1];
+      view?.markHit(e.target,e.strike??e.at,e.weapon==='missile');
+    }
+    if(e.kind==='breakup'||e.kind==='hit'&&e.weapon==='missile'&&!e.terminal||e.kind==='impact'&&e.weapon==='missile')
+      this.world.impactPressure(e.at,e.scale??1,e.kind==='breakup',this.sortie?.time??0);
     this.ui.impact(e,this.sortie?.time??0);
     if(e.kind==='counter'){
       if(e.side!==0){this.engine.fire('sortie-event',e);return;}
@@ -292,8 +301,8 @@ export class Game {
   }
   frame(now:number){
     const span=this.last?Math.max(0,(now-this.last)/1000):1/60;
-    const dt=Math.min(.14,span);this.last=now;
-    if(document.hidden||this.portrait.matches){this.engine.renderNextFrame=false;return;}
+    let dt=Math.min(.14,span);this.last=now;
+    if(document.hidden||this.portrait.matches&&(this.state!=='home'||el('boot').hidden)){this.engine.renderNextFrame=false;return;}
     const s=this.sortie,home=this.state==='home'||this.state==='result'&&s?.win===true;
     if(this.state!=='pause')this.clock+=dt;
     this.engine.renderNextFrame=true;
@@ -301,15 +310,12 @@ export class Game {
       this.audio.update(false,0,0,0,false,true);
       this.engine.renderNextFrame=false;return;
     }
-    const level=this.budget.apply(this.qualityOverride??this.p.settings.quality,span,this.p.settings.renderScale);
-    this.world.level=level;
     const player=s?.player;
     if(this.state==='flight'&&s){
       this.acc=Math.min(.25,this.acc+span);
       while(this.acc>=FLIGHT_STEP&&s.active){
         const cfg=this.p.settings;
-        this.input.selected=s.weapon;
-        s.step(FLIGHT_STEP,this.input.read(FLIGHT_STEP,cfg.assist,cfg.invert,cfg.sensitivity));this.acc-=FLIGHT_STEP;
+        s.step(FLIGHT_STEP,this.input.read(FLIGHT_STEP,cfg.invert,cfg.sensitivity));this.acc-=FLIGHT_STEP;
       }
       if(!s.active){
         this.state='settling';this.settleFor=.87;this.input.on=false;this.input.reset(false);
@@ -320,6 +326,12 @@ export class Game {
       while(this.acc>=FLIGHT_STEP){s.advanceWrecks(FLIGHT_STEP);this.acc-=FLIGHT_STEP;}
       if(this.settleFor<=0)this.finish(s);
     }
+    const drawTime=this.budget.sampleFrame(now,span,this.p.settings.fps);
+    if(!drawTime){this.engine.renderNextFrame=false;return;}
+    dt=Math.min(.14,drawTime);
+    const level=this.budget.apply(this.qualityOverride??this.p.settings.quality,drawTime,this.p.settings.renderScale);
+    this.world.level=level;
+    this.world.renderScale(this.budget.sceneScale);
     const result=this.state==='result';
     if(home&&this.awardMissile){
       this.pilot.pivot.enabled=false;
@@ -339,14 +351,16 @@ export class Game {
     }else if(s&&player&&!this.world.fixed){
       const alpha=this.state==='flight'?this.acc/FLIGHT_STEP:1;
       this.playerPose.sample(player,alpha);
-      this.world.flight(player,dt,s.time,s.locked??s.manual,this.playerPose);
+      this.world.flight(player,dt,s.time,s.locked,this.playerPose);
       this.pilot.sync(player,this.clock,s.loadout.configuration?.paint??'',this.world.view===1,false,s,undefined,alpha);
       this.targetAnchors.clear();
       for(let i=0;i<s.enemies.length;i++){
         const enemy=s.enemies[i],view=this.foes[i];
         if(enemy.alive&&enemy.type.id!==view.loaded&&!this.meshChange.has(i+':'+enemy.type.id)){
           const key=i+':'+enemy.type.id;this.meshChange.add(key);
-          void view.request(enemy.type).finally(()=>this.meshChange.delete(key)).catch(console.error);
+          void view.request(enemy.type).then(()=>{
+            this.world.assets.trimFleet(new Set([this.pilot.loaded,...this.foes.map(unit=>unit.loaded),this.support.loaded]));
+          }).finally(()=>this.meshChange.delete(key)).catch(console.error);
         }
         view.sync(enemy,this.clock,'',false,false,undefined,undefined,alpha);
         if(view.pivot.enabled&&enemy.alive)this.targetAnchors.set(enemy.id,view.anchor);

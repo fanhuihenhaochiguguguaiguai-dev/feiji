@@ -1,15 +1,17 @@
-import { Application, Asset, BLEND_NORMAL, CULLFACE_NONE, Color, ContainerResource, DEVICETYPE_WEBGPU, Entity, EnvLighting, FOG_EXP2, Mesh, MeshInstance, SEMANTIC_POSITION, ShaderMaterial, StandardMaterial, Texture, TONEMAP_ACES, Vec2, Vec3, calculateNormals, createGraphicsDevice, meshoptInitialize } from 'playcanvas';
+import { ADDRESS_CLAMP_TO_EDGE, Application, Asset, BLEND_NORMAL, CULLFACE_NONE, Color, ContainerResource, DEVICETYPE_WEBGPU, Entity, EnvLighting, FOG_EXP2, Mesh, MeshInstance, SEMANTIC_POSITION, ShaderMaterial, StandardMaterial, Texture, Vec2, type Material, Vec3, calculateNormals, createGraphicsDevice, basisInitialize, meshoptInitialize, SHADOWUPDATE_REALTIME } from 'playcanvas';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { airfield, base } from './airfield-layout';
 import { theatres, type PlaneSpec } from './data';
 import { Airframe } from './flight';
 import { FlightCamera } from './flight-camera';
+import { FlightGraph } from './flight-graph';
+import { Vegetation } from './vegetation';
 import { bindRockSurface } from './terrain-material';
 import { environmentSource } from './shading';
 import { OceanRender } from './ocean-render';
 import { wakeCeiling } from './ocean-solver';
-import { Terrain, clamp, chunkCells, gridStep, noise, worldExtent } from './terrain';
+import { Terrain, clamp, chunkCells, gridSize, gridStep, noise, worldExtent } from './terrain';
 import type { Backend } from './profile';
 
 export const asset=(path:string)=>new URL(path,document.baseURI).href;
@@ -17,9 +19,11 @@ export interface OpenEngine { app:Application; canvas:HTMLCanvasElement; backend
 meshoptInitialize({decoder:MeshoptDecoder});
 
 export async function openEngine(canvas:HTMLCanvasElement,mode:Backend):Promise<OpenEngine>{
+  basisInitialize({glueUrl:asset('codec/basis/basis.wasm.js'),wasmUrl:asset('codec/basis/basis.wasm.wasm'),
+    fallbackUrl:asset('codec/basis/basis.js'),numWorkers:1,lazyInit:true});
   const device=await createGraphicsDevice(canvas,{
     deviceTypes:mode==='gl'||!navigator.gpu?['webgl2']:[DEVICETYPE_WEBGPU,'webgl2'],
-    antialias:true,alpha:false,stencil:false,powerPreference:'high-performance',
+    antialias:false,alpha:false,stencil:false,powerPreference:'high-performance',
   });
   if(device.deviceType!=='webgl2'&&!device.isWebGPU){
     device.destroy();
@@ -67,7 +71,7 @@ export class Assets {
   trimFleet(keep:ReadonlySet<string>){
     this.pinnedFleet=keep;
     const aircraft=[...this.pending.entries()].filter(([file])=>file.startsWith('fleet/'));
-    for(const [file,promise] of aircraft.filter(([file])=>!keep.has(file.slice(6,-4))).slice(0,Math.max(0,aircraft.length-9))){
+    for(const [file,promise] of aircraft.filter(([file])=>!keep.has(file.slice(6,-4))).slice(0,Math.max(0,aircraft.length-5))){
       void promise.then(a=>{
         if(this.pending.get(file)===promise&&!this.pinnedFleet.has(file.slice(6,-4)))this.drop(file,a);
       }).catch(()=>{});
@@ -81,7 +85,7 @@ export function material(name:string,hex:string,metal=0,rough=.65){
   return m;
 }
 export type Primitive='plane'|'box'|'cone'|'torus'|'sphere'|'cylinder'|'capsule';
-export function primitive(parent:Entity,name:string,type:Primitive,mat:StandardMaterial,x:number,y:number,z:number,w:number,h:number,l:number){
+export function primitive(parent:Entity,name:string,type:Primitive,mat:Material,x:number,y:number,z:number,w:number,h:number,l:number){
   const e=new Entity(name);
   parent.addChild(e);e.setLocalPosition(x,y,z);e.setLocalScale(w,h,l);
   e.addComponent('render',{type,material:mat,castShadows:false});
@@ -155,6 +159,16 @@ export class WorldView {
   readonly skyMat:ShaderMaterial;
   readonly seaMat:ShaderMaterial;
   readonly seaFields:OceanRender;
+  readonly graph:FlightGraph;
+  private readonly vegetation:Vegetation;
+  readonly hullMark=material('命中受损表面','#ffffff',.14,.84);
+  private readonly impactLamp=new Entity('空战闪光');
+  private glow=0;
+  private glowEnds=0;
+  private readonly camRight=new Vector3();
+  private readonly camUp=new Vector3();
+  private readonly camForward=new Vector3();
+  private pressureTime=-1;
   terrain=new Terrain(theatres[0].seed);
   theme=theatres[0];
   level=.94;view=0;orbit=.72;tilt=.16;cameraReset=true;fixed=false;
@@ -169,6 +183,7 @@ export class WorldView {
     fov:1,minZ:.5,setTarget:(t:Vector3)=>{this.camera.setTarget(t);}};
   private cameraPosition(){return new Vector3();}
   private tileClock=-Infinity;
+  private microTile?:Entity;
   private themeSequence=0;
   private edgeDepth:Texture|null=null;
   private probeName='';
@@ -203,10 +218,15 @@ export class WorldView {
     for(const sign of [-1,1])primitive(this.hangar,'滑入导向线','box',gold,sign*7.5,.013,3,.11,.017,114);
     for(let k=-60;k<=100;k+=8)primitive(this.hangar,'混凝土分仓缝','box',concreteSeam,0,.008,k,134,.008,.022);
     const cameraEntity=new Entity('主镜头');app.root.addChild(cameraEntity);
-    cameraEntity.addComponent('camera',{fov:56,nearClip:.15,farClip:100000,toneMapping:TONEMAP_ACES,clearColor:new Color(.13,.22,.31)});
+    cameraEntity.addComponent('camera',{fov:56,nearClip:.15,farClip:100000,clearColor:new Color(.13,.22,.31)});
     this.camera=new Camera(cameraEntity,canvas);
+    this.vegetation=new Vegetation(this);
+    this.graph=new FlightGraph(app,cameraEntity.camera!);
+    this.effects.addChild(this.impactLamp);
+    this.impactLamp.addComponent('light',{type:'omni',color:new Color(1,.51,.19),range:175,intensity:0});
+    this.impactLamp.enabled=false;
     this.sun.addComponent('light',{type:'directional',color:new Color(1,.81,.62),intensity:2.3,castShadows:true,
-      shadowDistance:95,shadowResolution:1024,normalOffsetBias:.045,shadowBias:.15});
+      shadowDistance:95,shadowResolution:2048,shadowUpdateMode:SHADOWUPDATE_REALTIME,normalOffsetBias:.045,shadowBias:.15});
     this.rim.addComponent('light',{type:'directional',color:new Color(.52,.68,.91),intensity:1.20});
     this.rim.setPosition(19,11,-21);this.rim.lookAt(Vec3.ZERO);this.rim.rotateLocal(90,0,0);
     app.scene.ambientLight.set(.45,.49,.57);
@@ -232,6 +252,7 @@ export class WorldView {
     for(const a of airfield)primitive(this.field,a.kind,'box',facilities[a.kind],a.x,a.y,a.z,a.w,a.h,a.l);
     for(let z=base.near+48;z<base.far-40;z+=53)primitive(this.field,'中心线','box',marker,base.x,32.1,z,1.7,.09,23);
     this.ready=Promise.all([
+      this.graph.ready,
       Promise.all([this.assets.texture('studio/tarmac.webp'),this.assets.texture('studio/tarmac-orm.png'),
         this.assets.texture('studio/tarmac-normal.png'),this.assets.texture('studio/apron-light.webp')]).then(([color,detail,norm,lamps])=>{
         for(const t of [color,detail,norm])t.anisotropy=Math.min(12,app.graphicsDevice.maxAnisotropy);
@@ -252,14 +273,35 @@ export class WorldView {
         e.setLocalPosition(34,0,44);
         for(const part of e.findComponents('render'))part.receiveShadows=true;
       }),
+      this.assets.texture('surface/impact-mark.webp').then(texture=>{
+        const mark=this.hullMark;
+        mark.diffuseMap=texture;mark.opacityMap=texture;mark.opacityMapChannel='a';
+        mark.blendType=BLEND_NORMAL;mark.depthWrite=false;mark.cull=CULLFACE_NONE;mark.update();
+      }),
       this.assets.texture('surface/dusk-panorama.webp').then(t=>this.skyMat.setParameter('deckDome',t)),
-      this.assets.texture('surface/cloud-density.png').then(t=>{this.skyMat.setParameter('weatherTex',t);this.seaMat.setParameter('weatherTex',t);}),
+      this.assets.texture('surface/air-scattering.png').then(t=>{
+        t.addressU=t.addressV=ADDRESS_CLAMP_TO_EDGE;
+        this.skyMat.setParameter('airLut',t);this.seaMat.setParameter('airLut',t);
+      }),
+      this.assets.texture('surface/cloud-density.png').then(t=>{
+        this.skyMat.setParameter('weatherTex',t);this.seaMat.setParameter('weatherTex',t);
+        this.terrainMaterial.setParameter('terrainWeather',t);this.ridgeMaterial.setParameter('terrainWeather',t);
+      }),
       this.assets.texture('surface/wave-field.png').then(t=>this.seaMat.setParameter('waveTex',t)),
       this.assets.texture('world/sundown-surface.png').then(t=>{this.edgeDepth=t;this.seaMat.setParameter('depthTex',t);}),
-      this.assets.texture('surface/rock-grain.png').then(t=>{t.anisotropy=Math.min(12,app.graphicsDevice.maxAnisotropy);this.terrainMaterial.diffuseMap=t;this.terrainMaterial.update();
-        this.ridgeMaterial.diffuseMap=t;this.ridgeMaterial.update();}),
-      this.assets.texture('surface/terrain-normal.png').then(t=>{t.anisotropy=Math.min(12,app.graphicsDevice.maxAnisotropy);this.terrainMaterial.normalMap=t;this.terrainMaterial.bumpiness=.34;this.terrainMaterial.update();
-        this.ridgeMaterial.normalMap=t;this.ridgeMaterial.bumpiness=.32;this.ridgeMaterial.update();}),
+      Promise.all([
+        this.assets.texture('surface/stone-color.ktx2'),
+        this.assets.texture('surface/stone-relief.ktx2'),
+        this.assets.texture('surface/stone-response.ktx2')
+      ]).then(([color,normal,response])=>{
+        for(const texture of [color,normal,response])texture.anisotropy=Math.min(12,app.graphicsDevice.maxAnisotropy);
+        for(const surface of [this.terrainMaterial,this.ridgeMaterial]){
+          surface.diffuseMap=color;surface.normalMap=normal;surface.bumpiness=.73;
+          surface.aoMap=response;surface.aoMapChannel='r';
+          surface.glossMap=response;surface.glossMapChannel='g';surface.glossInvert=true;
+          surface.update();
+        }
+      }),
       this.lightingProbe('deck'),
     ]).then(()=>undefined);
     this.showDeck(true);
@@ -339,7 +381,7 @@ export class WorldView {
     if(this.theme!==theme){
       this.theme=theme;this.terrain=new Terrain(theme.seed);
       for(const tile of this.terrainTiles.values())tile.entity.destroy();
-      this.terrainTiles.clear();this.tileClock=-Infinity;
+      this.terrainTiles.clear();this.microTile?.destroy();this.microTile=undefined;this.tileClock=-Infinity;
     }
     this.configureFlightWeather(this.weather,this.lighting);
   }
@@ -368,7 +410,9 @@ export class WorldView {
     this.sun.rotateLocal(90,0,0);
     this.sun.light!.color.set(...vector.sunColor as unknown as [number,number,number]);
     this.sun.light!.intensity=this.indoors?3.04:lighting===3?.33:sunlight;
-    this.sun.light!.castShadows=this.indoors;
+    this.sun.light!.castShadows=this.indoors||sunHeight>0;
+    this.sun.light!.numCascades=this.indoors?1:3;
+    this.sun.light!.shadowDistance=this.indoors?95:1880;
     this.rim.enabled=this.indoors;
     scene.skyboxIntensity=this.indoors?1.02:dim?.61:.76;
     const probe=this.indoors?'deck':lighting===3||weather===7?'night':dim?'storm':lighting===1||this.theme.id==='frost'?'day':'dusk';
@@ -378,6 +422,8 @@ export class WorldView {
     if(!this.indoors)scene.ambientLight.set(dim?.40:.43,dim?.46:.49,dim?.55:.57);
     else scene.ambientLight.set(.34,.41,.58);
     const cover=[.006,.026,-.055,-.10,-.16,-.015,-.077,.087][weather]??.006;
+    this.terrainMaterial.setParameter('terrainCloudCover',cover);
+    this.ridgeMaterial.setParameter('terrainCloudCover',-.115);
     for(const m of [this.skyMat,this.seaMat]){
       for(const [key,value] of Object.entries(vector))m.setParameter(key,value);
       m.setParameter('cover',this.indoors?-.115:cover);
@@ -388,6 +434,7 @@ export class WorldView {
   }
   showDeck(active:boolean){
     this.indoors=active;this.hangar.enabled=active;
+    this.graph.setCombat(!active);this.pressureTime=-1;this.impactLamp.enabled=false;this.glowEnds=0;
     this.seaFields.reset(active?null:this.terrain.bathymetry());
     this.terrain.extraWater=active?null:(x,z,scale)=>this.seaFields.height(x,z,scale);
     for(const node of [this.field,this.terrainRoot,this.props,this.sea,this.effects])node.enabled=!active;
@@ -397,6 +444,20 @@ export class WorldView {
     const {x,y,z}=plane.position;
     const altitude=y-this.terrain.water(x,z,time);
     this.seaFields.advance({time,x,z,altitude,speed:plane.speed,water:altitude<wakeCeiling&&this.terrain.classify(x,z)==='water'},plane.forward.x,plane.forward.z);
+  }
+  renderScale(scale:number){
+    this.graph.scale(scale);
+    const resolution=this.level>1.10?4096:2048;
+    if(this.sun.light!.shadowResolution!==resolution)this.sun.light!.shadowResolution=resolution;
+  }
+  impactPressure(point:Vector3,magnitude:number,terminal:boolean,time:number){
+    this.graph.pressure.pulse(point,magnitude,terminal);
+    if(Vector3.DistanceSquared(this.camera.position,point)>950**2)return;
+    this.impactLamp.setPosition(point.x,point.y,point.z);
+    this.impactLamp.light!.range=(terminal?155:103)*magnitude;
+    this.glow=(terminal?15:8)*magnitude;
+    this.glowEnds=time+(terminal?.38:.23);
+    this.impactLamp.enabled=true;
   }
   resetMarkers(){for(const m of [...this.targets,...this.rings])m.enabled=false;}
   setAwardLighting(on:boolean){this.rim.light!.intensity=on?1.55:1.22;}
@@ -431,15 +492,16 @@ export class WorldView {
     const p=this.camera.position;
     this.sea.setPosition(Math.round(p.x/16)*16,0,Math.round(p.z/16)*16);
     this.updateTiles(p.x,p.z,time,leadX,leadZ);
+    this.vegetation.update(this.terrain,p.x,p.z,this.level,time);
   }
-  private tile(x:number,z:number,step:number){
+  private tile(x:number,z:number,step:number,cells=chunkCells){
     const p:number[]=[],c:number[]=[],uv:number[]=[],idx:number[]=[],normals:number[]=[];
-    const count=chunkCells/step+1;
+    const count=cells/step+1,patch=this.terrain.priorityArea;
     for(let iz=0;iz<count;iz++)for(let ix=0;ix<count;ix++){
-      const i=x+ix*step,j=z+iz*step,px=i*gridStep-worldExtent/2,pz=j*gridStep-worldExtent/2,h=this.terrain.node(i,j);
+      const i=x+ix*step,j=z+iz*step,px=i*gridStep-worldExtent/2,pz=j*gridStep-worldExtent/2,h=this.terrain.sampleNode(i,j);
       p.push(px,h,pz);uv.push(px/87,pz/87);
-      const left=this.terrain.node(Math.max(0,i-1),j),right=this.terrain.node(Math.min(1024,i+1),j);
-      const near=this.terrain.node(i,Math.max(0,j-1)),far=this.terrain.node(i,Math.min(1024,j+1));
+      const left=this.terrain.sampleNode(Math.max(0,i-1),j),right=this.terrain.sampleNode(Math.min(gridSize-1,i+1),j);
+      const near=this.terrain.sampleNode(i,Math.max(0,j-1)),far=this.terrain.sampleNode(i,Math.min(gridSize-1,j+1));
       const sx=right-left,sz=far-near;
       const valley=clamp((left+right+near+far-4*h)/145,0,.24);
       const slope=Math.hypot(sx,sz)/(gridStep*2);
@@ -462,7 +524,11 @@ export class WorldView {
       });
       c.push(255);
     }
-    for(let z=0;z<count-1;z++)for(let x=0;x<count-1;x++){const a=z*count+x;idx.push(a,a+count,a+1,a+1,a+count,a+count+1);}
+    for(let j=0;j<count-1;j++)for(let i=0;i<count-1;i++){
+      const bx=x+i*step,bz=z+j*step;
+      if(cells===chunkCells&&patch&&bx>=patch.i&&bx<patch.i+patch.cells&&bz>=patch.j&&bz<patch.j+patch.cells)continue;
+      const a=j*count+i;idx.push(a,a+count,a+1,a+1,a+count,a+count+1);
+    }
     // Skirts stay submerged or hidden behind the neighbouring higher detail surface.
     const border=[...Array.from({length:count},(_,i)=>i),...Array.from({length:count-1},(_,i)=>(i+1)*count+count-1),
       ...Array.from({length:count-1},(_,i)=>(count-1)*count+count-2-i),...Array.from({length:count-2},(_,i)=>(count-2-i)*count)];
@@ -470,26 +536,39 @@ export class WorldView {
     for(const i of border){p.push(p[i*3],p[i*3+1]-160,p[i*3+2]);uv.push(uv[i*2],uv[i*2+1]);c.push(c[i*4],c[i*4+1],c[i*4+2],255);}
     for(const i of border)normals.push(normals[i*3],normals[i*3+1],normals[i*3+2]);
     border.forEach((a,i)=>{const j=(i+1)%border.length,b=border[j];idx.push(a,b,first+i,b,first+j,first+i);});
-    return meshEntity(this.entry.app,this.terrainRoot,'高程块 '+x+' '+z,p,idx,this.terrainMaterial,normals,c,uv);
+    const tile=meshEntity(this.entry.app,this.terrainRoot,'高程块 '+x+' '+z,p,idx,this.terrainMaterial,normals,c,uv);
+    tile.render!.receiveShadows=true;
+    return tile;
   }
   private updateTiles(x:number,z:number,time:number,leadX:number,leadZ:number){
     if(time-this.tileClock<.38&&time>=this.tileClock)return;
     this.tileClock=time;
+    const patch=this.terrain.priorityArea;
+    if(patch){
+      const range=Math.hypot((patch.i+32)*gridStep-worldExtent*.5-x,(patch.j+32)*gridStep-worldExtent*.5-z);
+      const step=range<1750&&this.level>.83?.5:range<6500?2:16;
+      if(!this.microTile||this.microTile.name!=='priority-'+step){
+        const replacement=this.tile(patch.i,patch.j,step,patch.cells);
+        replacement.name='priority-'+step;
+        this.microTile?.destroy();this.microTile=replacement;
+      }
+    }
     let built=0;
     const initial=this.terrainTiles.size===0;
     const blocks=this.terrain.blocks.map(block=>{
-      const dx=(block.x+32)*gridStep-worldExtent/2-x,dz=(block.z+32)*gridStep-worldExtent/2-z;
+      const dx=(block.x+chunkCells/2)*gridStep-worldExtent/2-x,dz=(block.z+chunkCells/2)*gridStep-worldExtent/2-z;
       const range=Math.hypot(dx,dz);
       return {block,range,next:Math.min(range,Math.hypot(dx-leadX,dz-leadZ))};
     }).sort((a,b)=>a.next-b.next);
     for(const {block,range,next} of blocks){
-      const key=block.z*1025+block.x,tile=this.terrainTiles.get(key);
+      const key=block.z*gridSize+block.x,tile=this.terrainTiles.get(key);
       if(tile&&range>55000&&next>51000){tile.entity.destroy();this.terrainTiles.delete(key);continue;}
       if(!tile&&next>50000)continue;
       const detail=Math.max(.79,this.level);
-      const near=(tile?.step===1?7600:6450)*detail;
-      const mid=(tile?.step===2?10600:9000)*detail;
-      const step=next<near?1:next<mid?2:4;
+      const near=(tile?.step===2?2500:1950)*detail;
+      const mid=(tile?.step===4?7800:6700)*detail;
+      const close=next<(tile?.step===1?1590:1300)*detail&&this.level>.98;
+      const step=close?1:next<near?2:next<mid?4:next<13000?8:16;
       if(tile?.step===step)continue;
       if(built>=(initial?24:6))continue;
       tile?.entity.destroy();
@@ -504,9 +583,24 @@ export class WorldView {
   updateShaders(time:number,ambientTime=time){
     this.camera.commit();
     const p=this.camera.position;this.sky.setPosition(p.x,p.y,p.z);
+    if(!this.indoors){
+      const step=this.pressureTime<0?0:Math.max(0,Math.min(.2,time-this.pressureTime));
+      this.pressureTime=time;
+      this.camRight.set(1,0,0).rotateByQuaternionToRef(this.camera.rotationQuaternion,this.camRight);
+      this.camUp.set(0,1,0).rotateByQuaternionToRef(this.camera.rotationQuaternion,this.camUp);
+      this.camForward.set(0,0,-1).rotateByQuaternionToRef(this.camera.rotationQuaternion,this.camForward);
+      this.graph.pressure.collect(step,p,this.camRight,this.camUp,this.camForward,this.camera.fov,
+        this.entry.canvas.width/Math.max(1,this.entry.canvas.height),this.camera.minZ,this.camera.entity.camera!.farClip);
+      if(this.impactLamp.enabled){
+        const remain=this.glowEnds-time;
+        this.impactLamp.enabled=remain>0;
+        this.impactLamp.light!.intensity=this.glow*Math.min(1,remain*3.9)**2;
+      }
+    }
     this.sea.enabled=!this.indoors&&this.ocean&&!!this.edgeDepth;
     this.terrainRoot.enabled=!this.indoors&&this.ground;
     this.eye.set([p.x,p.y,p.z]);
+    for(const mat of [this.terrainMaterial,this.ridgeMaterial])mat.setParameter('terrainClock',ambientTime);
     for(const m of [this.skyMat,this.seaMat]){
       m.setParameter('clock',m===this.seaMat?time:ambientTime);m.setParameter('quality',this.level);m.setParameter('clouds',this.clouds?1:0);
     }

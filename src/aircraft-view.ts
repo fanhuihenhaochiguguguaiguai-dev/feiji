@@ -7,6 +7,7 @@ import type { CombatConfiguration } from './profile';
 import { groundMount } from './items';
 import { calibrateAircraft,finishAirframe,type AirframeFinish } from './aircraft-materials';
 import { material, primitive, type WorldView } from './renderer';
+import { targetPixels } from './screen-scale';
 
 const zero=new Vec3();
 const tones=['#f0b77f','#f09251','#90e0fa','#c9ac68','#d2a550'];
@@ -36,6 +37,9 @@ export class AircraftView {
   private readonly projectedCenter=new Vec3();
   readonly anchor=new Vector3();
   lod=0;
+  private visualScale=1;
+  private visualTime=-1;
+  private visualGeneration=-1;
   loaded='';
   private pending='';
   private requestId=0;
@@ -59,6 +63,12 @@ export class AircraftView {
   private readonly gauges:Gauge[]=[];
   private readonly rotors:Entity[];
   private nextInstrument=0;
+  private readonly damageMarks:Entity[]=[];
+  private markCursor=0;
+  private markGeneration=-1;
+  private readonly surfaceHit=new Vector3();
+  private readonly hullInverse=new Quaternion();
+  private readonly markRotation=new Quat();
   constructor(readonly world:WorldView,readonly slot:number){
     (slot===0?world.entry.app.root:world.vehicles).addChild(this.pivot);
     const fire=material('高温喷焰外层','#bd6942',0,.5);fire.useLighting=false;fire.emissive.set(1.78,.44,.15);fire.update();
@@ -67,6 +77,7 @@ export class AircraftView {
       const plume=new Entity('加力喷口');this.pivot.addChild(plume);
       primitive(plume,'扩散喷焰','cone',fire,0,0,0,1,1,1);
       primitive(plume,'白炽核心','cone',core,0,-.21,0,.66,.59,.66);
+      for(let ring=0;ring<3;ring++)primitive(plume,'膨胀激波节','torus',core,0,-.33+ring*.26,0,.50-ring*.077,.036,.50-ring*.077);
       return plume;
     });
     this.pivot.once('destroy',()=>{fire.destroy();core.destroy();});
@@ -85,6 +96,7 @@ export class AircraftView {
     const high=group('Exterior'),combat=group('Combat'),low=group('LOD'),cockpit=group('Cockpit');
     if(!high||!combat||!low){root.destroy();throw new Error('机型 LOD 缺失 '+spec.id);}
     this.root?.destroy();
+    for(const mark of this.damageMarks)mark.enabled=false;this.markGeneration=-1;
     for(const {material} of this.paints.values())material.destroy();
     for(const g of this.gauges){g.texture.destroy();g.material.destroy();}
     this.paints.clear();this.gauges.length=this.mounted.length=0;this.originalPoses.clear();
@@ -131,6 +143,27 @@ export class AircraftView {
     }
     this.loaded=spec.id;this.pending='';this.oldPaint='';this.style=-1;this.lastDamage=-1;this.nextInstrument=0;
   }
+  markHit(plane:Airframe,point:Vector3,missile:boolean){
+    const {x,y,z}=this.surfaceHit.copyFrom(point).subtractInPlace(plane.position);
+    plane.orientation.conjugateToRef(this.hullInverse);
+    this.surfaceHit.set(x,y,z).rotateByQuaternionToRef(this.hullInverse,this.surfaceHit);
+    const surface=this.surfaceHit;
+    if(this.loaded!==plane.type.id||surface.lengthSquared()<.04)return;
+    if(this.markGeneration!==plane.generation){
+      this.markGeneration=plane.generation;this.markCursor=0;
+      for(const mark of this.damageMarks)mark.enabled=false;
+    }
+    const slot=this.markCursor++%5;
+    const decal=this.damageMarks[slot]??=primitive(this.pivot,'局部烧蚀','plane',this.world.hullMark,0,0,0,1,1,1);
+    const side=surface.x,up=surface.y,end=surface.z;
+    const face=new Vec3(side/Math.max(1,plane.type.span*.20),up*2.8,end/Math.max(3,plane.type.length*.7)).normalize();
+    this.markRotation.setFromDirections(Vec3.UP,face);
+    decal.setLocalPosition(side+face.x*.038,up+face.y*.038,end+face.z*.038);
+    decal.setLocalRotation(this.markRotation);
+    const size=missile?1.08:.46;
+    decal.setLocalScale(size,1,size*.64);
+    decal.enabled=this.lod===0;
+  }
   dispose(){
     for(const {material} of this.paints.values())material.destroy();
     for(const g of this.gauges){g.texture.destroy();g.material.destroy();}
@@ -150,17 +183,38 @@ export class AircraftView {
     const {position:at,orientation:q}=this.pose.sample(p,alpha);
     this.pivot.setPosition(at.x,at.y,at.z);
     this.pivot.setRotation(q.x,q.y,q.z,q.w);
-    this.pivot.getWorldTransform().transformPoint(this.center,this.projectedCenter);
-    this.anchor.set(this.projectedCenter.x,this.projectedCenter.y,this.projectedCenter.z);
+
     const range=Vector3.Distance(at,this.world.camera.position);
     const height=this.world.entry.canvas.clientHeight;
-    const pixels=Math.max(p.type.span,p.type.length)*height/(2*Math.max(1,range)*Math.tan(this.world.camera.fov*.5));
-    const exterior=range<228||pixels>(this.lod===0?45:57);
-    const combat=range<(this.lod===1?1950:1700)||pixels>(this.lod===1?5.2:6.8);
+    const camera=this.world.camera.position,drawable=Math.max(p.type.span,p.type.length);
+    const viewScale=height/(2*Math.max(1,range)*Math.tan(this.world.camera.fov*.5));
+    this.projectedCenter.set(camera.x-at.x,camera.y-at.y,camera.z-at.z).normalize();
+    const axial=Math.abs(this.projectedCenter.x*this.pose.forward.x+this.projectedCenter.y*this.pose.forward.y+this.projectedCenter.z*this.pose.forward.z);
+    const projected=Math.max(p.type.span,p.type.length*Math.sqrt(Math.max(0,1-axial*axial)));
+    const enemy=this.slot>0&&p.side===1&&p.alive&&!preview;
+    const covered=enemy&&this.world.terrain.terrainMasks(camera.x,camera.y,camera.z,at.x,at.y,at.z);
+    const scale=enemy&&!covered&&range>45?Math.max(1,targetPixels(range,height)/Math.max(1,projected*viewScale)):1;
+    const elapsed=Math.max(0,Math.min(.19,time-this.visualTime));
+    if(p.generation!==this.visualGeneration||!enemy||covered)this.visualScale=scale;
+    else this.visualScale+=(scale-this.visualScale)*(1-Math.exp(-elapsed*13));
+    this.visualGeneration=p.generation;this.visualTime=time;
+    this.pivot.setLocalScale(this.visualScale,this.visualScale,this.visualScale);
+    this.pivot.getWorldTransform().transformPoint(this.center,this.projectedCenter);
+    this.anchor.set(this.projectedCenter.x,this.projectedCenter.y,this.projectedCenter.z);
+    const pixels=drawable*viewScale*this.visualScale;
+    const exterior=range<220&&(pixels>(this.lod===0?52:66));
+    const combat=pixels>(this.lod===1?23:29)&&range<1800;
     this.lod=preview||this.slot===0||exterior?0:combat?1:2;
+    if(covered)this.pivot.enabled=false;
     const high=this.lod===0,mid=this.lod===1;
     this.high.enabled=high&&!inside;this.combat.enabled=mid&&!inside;this.low.enabled=!high&&!mid&&!inside;
     if(this.cockpit)this.cockpit.enabled=inside;
+    if(this.markGeneration!==p.generation){
+      this.markGeneration=-1;this.markCursor=0;
+      for(const decal of this.damageMarks)decal.enabled=false;
+    }else{
+      for(let i=0;i<this.damageMarks.length;i++)this.damageMarks[i].enabled=high&&!inside&&!preview&&i<Math.min(5,this.markCursor);
+    }
     const wear=preview?0:p.down?1:Math.max(0,Math.min(1,(1-p.hp/p.maxHp-.12)*1.2));
     if(paint!==this.oldPaint||Math.abs(wear-this.lastDamage)>.04){
       this.oldPaint=paint;this.lastDamage=wear;
@@ -205,10 +259,13 @@ export class AircraftView {
     }
     for(let i=0;i<this.rotors.length;i++){
       const mesh=this.rotors[i],jet=p.type.engine[i];
-      mesh.enabled=Boolean(jet)&&p.boost>.15&&p.alive&&!inside&&!preview;
+      mesh.enabled=Boolean(jet)&&p.throttle>.61&&p.alive&&!inside&&!preview;
       if(!mesh.enabled)continue;
-      const [x,y,z,r]=jet,length=(3+p.boost*9)*(1-p.damage.engine*.84)*(1+.055*Math.sin(time*75+i*2.9));
-      mesh.setLocalPosition(x,y,z+length*.5);mesh.setLocalEulerAngles(90,0,0);mesh.setLocalScale(r*1.32,length,r*1.22);
+      const [x,y,z,r]=jet,length=(1.1+p.throttle*.93+p.boost*8.1)*(1-p.damage.engine*.84)*(1+.055*Math.sin(time*75+i*2.9));
+      mesh.setLocalPosition(x,y,z+length*.5);
+      mesh.setLocalEulerAngles(90+p.damage.engine*Math.sin(time*11+i)*3,0,0);
+      mesh.setLocalScale(r*(1.04+p.boost*.32),length,r*(1.04+p.boost*.24));
+      for(let ring=2;ring<mesh.children.length;ring++)mesh.children[ring].enabled=p.boost>.29+ring*.09;
     }
     if(inside&&sortie&&time>=this.nextInstrument){
       this.nextInstrument=time+.12;

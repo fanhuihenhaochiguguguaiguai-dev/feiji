@@ -1,27 +1,37 @@
-"""Bake soft smoke, plasma, sparks and optical shock rings for instanced effects."""
+"""Bake original smoke and fire flipbooks and the secondary spark sprite."""
 from pathlib import Path
-from math import atan2, cos, exp, hypot, sin
+import numpy as np
 from PIL import Image
 
 output=Path(__file__).resolve().parents[1]/'public/surface'
 n=128
-sprites={name:Image.new('RGBA',(n,n)) for name in ['combustion','soot','pressure','spark']}
-unit=lambda x:min(1,max(0,x))
-for y in range(n):
-    for x in range(n):
-        u=(x+.5)/n*2-1
-        v=(y+.5)/n*2-1
-        a=atan2(v,u)
-        r=hypot(u,v)
-        folds=.06*sin(9*a+12*r)+.045*cos(13*v+20*u)+.065*sin(5*a-7*r)
-        smoke=unit(1-(r+folds)**2)**1.3
-        light=unit(.71-.38*v+.24*folds+.11*cos(u*14-v*18))
-        sprites['soot'].putpixel((x,y),(int(113+76*light),int(126+70*light),int(131+74*light),int(248*smoke)))
-        core=exp(-5*r**2)
-        sprites['combustion'].putpixel((x,y),(255,int(69+186*core),int(20+228*core),int(245*unit(1-(r+folds)**2)**2)))
-        arc=exp(-((r-(.70+.012*sin(13*a)))/.042)**2)*unit(1-(r/.94)**8)
-        sprites['pressure'].putpixel((x,y),(174,216,236,int(136*arc)))
-        plume=exp(-(u*(3.8+2.3*v))**2-3.2*v*v)*unit(1-r*r)
-        sprites['spark'].putpixel((x,y),(255,int(162+93*plume),int(94+161*plume),int(255*plume)))
-for name,image in sprites.items():
-    image.save(output/(name+'.webp'),lossless=True,method=6,exact=True)
+steps=8
+grid=(np.arange(n,dtype=np.float32)+.5)/n*2-1
+x,y=np.meshgrid(grid,grid)
+a=np.arctan2(y,x)
+r=np.hypot(x,y)
+def image(array):return Image.fromarray(np.uint8(np.rint(np.clip(array,0,255))))
+
+for material in ('smoke','fire'):
+    frames=[]
+    for t in np.linspace(0,1,steps):
+        folds=.11*np.sin(7*a+8*r-t*3)+.062*np.cos(13*y+19*x+t*4)+.023*np.sin(13*a-r*11)
+        mass=np.clip(1-(r*1.12+folds)**2,0,1)
+        edge=np.clip(1-r**8,0,1)
+        density=mass**(1.24+t*.73)*edge
+        shade=np.clip(.58-y*.33+(folds+.06*np.sin(26*x+28*y-t*4))*.91,0,1)
+        if material=='smoke':
+            channels=(89+shade*119,96+shade*117,103+shade*115,238*density)
+        else:
+            core=np.exp(-(3.5+5.3*t)*(r+folds*.6)**2)
+            heat=core*(1-.74*t)
+            channels=(168+87*core,42+207*heat,12+236*heat**1.76,248*density)
+        frames.append(np.stack(channels,axis=-1))
+    image(np.concatenate(frames,axis=1)).save(output/(material+'-frames.webp'),quality=92,method=6,exact=True)
+
+plume=np.exp(-(x*(3.8+2.3*y))**2-3.2*y*y)*np.clip(1-r*r,0,1)
+image(np.stack((np.full_like(x,255),162+93*plume,94+161*plume,255*plume),axis=-1)).save(output/'spark.webp',lossless=True,method=6,exact=True)
+
+edge=np.clip(1-(r+.09*np.sin(9*a+5*r)+.038*np.cos(16*a))**2,0,1)**2.1
+metal=np.exp(-((r-.30)*12)**2)*np.clip(np.cos(12*a+6*r),0,1)
+image(np.stack((18+65*metal,14+54*metal,14+38*metal,227*edge),axis=-1)).save(output/'impact-mark.webp',quality=93,method=6,exact=True)

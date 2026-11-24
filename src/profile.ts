@@ -6,8 +6,9 @@ import { persistSnapshot, readSnapshots, type PilotSnapshot } from './save-store
 import type {Debrief} from './sortie';
 
 export type Backend='auto'|'gpu'|'gl';
-export type Quality='auto'|'high'|'medium'|'low';
-interface Settings {backend:Backend;quality:Quality;mute:boolean;assist:boolean;invert:boolean;sensitivity:number;hud:number;renderScale:number;}
+export type Quality='auto'|'ultra'|'high'|'medium'|'low';
+export const creditWeapon=(part:string)=>part==='weapons'||part==='warhead';
+interface Settings {backend:Backend;quality:Quality;fps:60|90;mute:boolean;invert:boolean;sensitivity:number;hud:number;renderScale:number;}
 interface RecordRow {date:number;name:string;aircraft:string;grade:string;score:number;kills:number;seconds:number;win:boolean;}
 export type InventoryState=Record<string,number>;
 export type AircraftLoadout=Partial<Record<GearSlot,string>>;
@@ -24,7 +25,7 @@ export interface Save {
 export interface CombatConfiguration {
   missile:MissileProfile;paint:string;engine:number;grip:number;radar:number;lockRange:number;
   rounds:number;airMissiles:number;groundStores:number;groundWeapon:'bomb'|'shorebolt';
-  defense:number;gun:number;gunRate:number;missileRate:number;missilePower:number;armor:number;stores:number;spares:number;aircraft:string;
+  defense:number;gun:number;gunRate:number;missileRate:number;missilePower:number;armor:number;stores:number;aircraft:string;
 }
 const key='pixel-sky-af-v4',backup=key+'-recovery';
 const retiredOperations=new Set(['armor','fleet','joint','铁幕突围','海门警戒','三军协同']);
@@ -33,7 +34,7 @@ export const freshProfile=():Save=>({
   version:9,savedAt:0,rewardedLevel:1,daily:blankDay(),credits:2600,xp:0,selected:'j20',unlocked:[...startingFleet],campaign:1,completed:[],improvements:{},
   bases:[],claimed:[],records:[],inventory:{...defaults},loadouts:{},technology:[],
   sorties:0,kills:0,distance:0,victories:0,
-  settings:{backend:'auto',quality:'auto',mute:false,assist:true,invert:false,sensitivity:1,hud:1,renderScale:1}
+  settings:{backend:'auto',quality:'auto',fps:60,mute:false,invert:false,sensitivity:1,hud:1,renderScale:1}
 });
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const ids=(v:unknown):string[]=>Array.isArray(v)?[...new Set(v.filter(x=>typeof x==='string').slice(0,128))]:[];
@@ -55,9 +56,10 @@ export function normalizeProfile(raw:unknown):Save{
   d.completed=ids(input.completed).filter(id=>!retiredOperations.has(id));d.claimed=ids(input.claimed);d.bases=ids(input.bases).filter(x=>['repair','radar','supply'].includes(x));
   d.technology=ids(input.technology).filter(x=>technologies.some(t=>t.id===x));
   const settings=object(input.settings);
+  d.settings.fps=settings.fps===90?90:60;
   if(['auto','gpu','gl'].includes(String(settings.backend)))d.settings.backend=settings.backend as Backend;
-  if(['auto','low','medium','high'].includes(String(settings.quality)))d.settings.quality=settings.quality as Quality;
-  for(const k of ['mute','assist','invert'] as const)if(typeof settings[k]==='boolean')d.settings[k]=settings[k];
+  if(['auto','low','medium','high','ultra'].includes(String(settings.quality)))d.settings.quality=settings.quality as Quality;
+  for(const k of ['mute','invert'] as const)if(typeof settings[k]==='boolean')d.settings[k]=settings[k];
   d.settings.sensitivity=Math.max(.45,number(settings.sensitivity,1,1.55));d.settings.hud=Math.max(.8,number(settings.hud,1,1.23));d.settings.renderScale=Math.max(.65,number(settings.renderScale,1,1));
   if(Array.isArray(input.records))d.records=input.records.filter(r=>r&&typeof r.name==='string'&&!retiredOperations.has(r.name)&&typeof r.aircraft==='string'&&Number.isFinite(r.score)).slice(0,36);
   if(!input.version)d.victories=Math.max(d.completed.length,d.records.filter(r=>r.win).length);
@@ -144,10 +146,12 @@ export function buyUpgrade(p:Save,id:string,u:string){
   if(at>=3)return '已达到最高等级';
   if(!upgradeCompatible(id,u))return '该机不支持对应部件';
   if(p.credits<amount)return '信用点不足';
+  const improvements={...p.improvements,[id+':'+u]:at+1};
+  if(creditWeapon(u))return commit(p,{...p,credits:p.credits-amount,improvements})?'改装已装配':'存档失败，未扣除信用点';
   const [material,quantity]=requirements(u,at);
   if((p.inventory[material]??0)<quantity)return '升级材料不足';
   return commit(p,{...p,credits:p.credits-amount,inventory:{...p.inventory,[material]:p.inventory[material]-quantity},
-    improvements:{...p.improvements,[id+':'+u]:at+1}})?'改装已装配':'存档失败，未扣除材料';
+    improvements})?'改装已装配':'存档失败，未扣除材料';
 }
 export function unlockAircraft(p:Save,id:string){
   if(byAircraft(id).support||byAircraft(id).id!==id)return '该机型由任务编队使用';
@@ -246,7 +250,7 @@ export function combatConfiguration(p:Save,id:string,groundEnabled=true):CombatC
   const warhead=level('warhead'),cadence=level('cadence');
   const payload=get('bomb');
   const groundStock=!groundEnabled||choices.bomb==='none'?0:payload?(plane.bombs||2):plane.bombs;
-  const airStock=plane.support?0:Math.max(minimumPlayerMissiles,plane.missiles-(plane.id==='j20'&&groundStock?4:0));
+  const airStock=plane.support?0:minimumPlayerMissiles;
   const missile=missiles[get('missile')?.id??'interceptor'];
   return {aircraft:plane.id,missile:{...missile,damage:missileDamage(plane,missile,warhead)},paint:get('skin')?.color??'',
     rounds:roundCapacity(plane,stores),
@@ -258,7 +262,7 @@ export function combatConfiguration(p:Save,id:string,groundEnabled=true):CombatC
     radar:(p.bases.includes('radar')?8500:6400)+level('radar')*350+(get('radar')?2000:0)+(p.technology.includes('signal')?500:0),
     lockRange:(get('radar')?550:0)+level('radar')*150, defense:get('counter')?1:0,
     gun:1+level('weapons')*.07,gunRate:1+cadence*.09,missileRate:1+cadence*.06,missilePower:1+warhead*.12,
-    armor:level('armor'),stores:level('stores'),spares:p.inventory.reserve??0};
+    armor:level('armor'),stores:level('stores')};
 }
 export function sortieBlock(p:Save,op:Operation,loadout=combatConfiguration(p,p.selected,op.kind==='ground')){
   if(op.campaign&&op.campaign>p.campaign)return '完成前序战役后解锁';

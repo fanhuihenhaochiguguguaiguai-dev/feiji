@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { PlaneSpec } from './data';
 import { clamp, Terrain } from './terrain';
 import { flightAssist } from './flight-assist';
+import { sectionDrag,sectionLift } from './aero-tables';
 
 export interface Controls {pitch:number; roll:number; yaw:number; throttle:number; boost:boolean; gun:boolean; missile:boolean; bomb:boolean; assist:boolean; steering?:number}
 export const idle:Controls={pitch:0,roll:0,yaw:0,throttle:.74,boost:false,gun:false,missile:false,bomb:false,assist:true};
@@ -32,8 +33,10 @@ export class Airframe {
   firepower=1;
   roundsLimit?:number; missilesLimit?:number; bombsLimit?:number;
   cannon=0; missiles=0; bombs=0; boost=0; throttle=.74; speed=0; stall=0;
+  alpha=0; beta=0; loadG=1;
   gear=0; gearTarget=0; grounded=false;
   gunsAt=0; missileAt=0; bombAt=0; alive=true; down=0;
+  evadeSide=1; evadeReadyAt=0;
   atStage=0; role=0; phase=0; evadeUntil=0; cooldown=0; hitTime=-100;
   generation=0; enginePower=1; storesBonus=0;
   constructor(readonly id:number, public type:PlaneSpec, readonly side:0|1|2){
@@ -53,6 +56,7 @@ export class Airframe {
     this.hp=this.maxHp;this.alive=true;this.down=this.stall=this.boost=this.hitIntensity=0;this.hitTime=-100;
     this.gear=this.gearTarget=this.type.gearFixed?1:0;this.grounded=false;
     this.throttle=.74;this.gunsAt=this.missileAt=this.bombAt=0;
+    this.alpha=this.beta=0;this.loadG=1;this.evadeSide=1;this.evadeReadyAt=0;
     this.phase=0;this.atStage=this.cooldown=this.evadeUntil=0;this.lockAt=null;
     Object.assign(this.controls,idle);
   }
@@ -93,13 +97,18 @@ export function advanceFlight(p:Airframe,input:Controls,dt:number,world:Terrain,
   const pull=climbing?.68+.65*Math.sqrt(input.pitch):1;
   let pitchRate=input.pitch*t.pitch*responsiveness*t.grip*p.handling*pull;
   if(climbing&&input.assist&&localUp.y>0){
-    // Arcade assist anticipates the remaining pitch travel before a steep climb.
+    const margin=clamp((r/t.stall-1)*2,0,1),bodyAlpha=clamp((p.alpha-.31)/.42,0,1);
+    const load=clamp((p.loadG-4.3)/2.4,0,1);
     const cap=(1.31-incline)*3.7;
-    pitchRate=Math.min(pitchRate,cap,2.05);
+    pitchRate=Math.min(pitchRate*(.74+margin*.26)*(1-.51*bodyAlpha)*(1-.26*load),cap,2.05);
   }
+  const {x:rollX,y:yawY,z:rollZ}=p.angular;
   p.angular.x+=(pitchRate+assist.pitch-p.angular.x)*(climbing?1-Math.pow(1-rate,1.19):rate);
   p.angular.y+=(input.yaw*t.yaw*responsiveness*turning*t.grip*p.handling+assist.yaw-p.angular.y)*rate;
   p.angular.z+=(input.roll*t.roll*responsiveness*t.grip*p.handling+assist.roll+rollShock+(p.damage.right-p.damage.left)*.46-p.angular.z)*rate;
+  p.angular.x+=yawY*rollZ*.12*dt;
+  p.angular.y+=rollX*rollZ*.29*dt;
+  p.angular.z-=rollX*yawY*.20*dt;
   if(p.grounded){p.angular.z*=.76;p.angular.y*=.82;p.angular.x=clamp(p.angular.x,-.02,.72);}
   const spin=p.angular.length();
   if(spin>.0001){
@@ -110,24 +119,28 @@ export function advanceFlight(p:Airframe,input:Controls,dt:number,world:Terrain,
   ahead.rotateByQuaternionToRef(p.orientation,p.forward);
   above.rotateByQuaternionToRef(p.orientation,localUp);
   right.rotateByQuaternionToRef(p.orientation,localRight);
-  p.throttle+=(input.throttle-p.throttle)*(1-Math.exp(-dt*3.1));
+  const energyFloor=p.side===0&&input.assist&&!p.grounded&&input.pitch>.15?
+    clamp((1.42-r/t.stall)*1.7,0,.92):0;
+  p.throttle+=(Math.max(input.throttle,energyFloor)-p.throttle)*(1-Math.exp(-dt*3.1));
   p.boost+=((input.boost&&t.boost?1:0)-p.boost)*(1-Math.exp(-dt*5.1));
   p.gear+=(p.gearTarget-p.gear)*(1-Math.exp(-dt*2.65));
-  const density=clamp(1-p.position.y/18500,.62,1.08);
+  const density=clamp(Math.exp(-p.position.y/14900),.56,1.08);
   const axial=Vector3.Dot(p.velocity,p.forward),cross=Vector3.Dot(p.velocity,localRight),vertical=Vector3.Dot(p.velocity,localUp);
   const aoa=Math.atan2(-vertical,Math.max(t.stall*.5,axial));
+  p.alpha=aoa;p.beta=Math.atan2(cross,Math.hypot(axial,vertical)+.01);
   p.stall=p.grounded?0:clamp((t.stall-r)/(t.stall*.45)+Math.max(0,Math.abs(aoa)-.39)*1.7,0,1);
-  const factor=clamp((r/t.stall-.50)*1.76,.015,1)*clamp(1.23-Math.abs(aoa)*1.31,.14,1);
+  const factor=clamp((r/t.stall-.49)*1.8,.015,1);
   const loadLimit=t.support?3.0:t.props.length?4.48:5.92;
-  const lift=clamp((1.04+aoa*1.82)*(r/t.trim)**2*factor*density,-1.17,loadLimit)*9.81;
+  const lift=clamp(sectionLift(aoa,t.props.length?1.08:t.era==='stealth'?.94:1)*(r/t.trim)**2*factor*density,-1.17,loadLimit)*9.81;
+  p.loadG=lift/9.81;
   const nominal=12+t.trim*.128;
   const thrust=(3+nominal*p.throttle+t.boost*p.boost)*density*p.enginePower*(1-p.damage.engine*.35)*t.acceleration*(.70+.30*damage);
-  const induced=(aoa*aoa*19+Math.abs(cross)*.014)*clamp(r/t.trim,.25,1.7);
+  const induced=(sectionDrag(aoa,p.beta,r/Math.max(298,340-p.position.y*.0025))+Math.abs(cross)*.009)*clamp(r/t.trim,.25,1.7);
   const drag=(3+nominal+t.boost)*density*(r/t.maxSpeed)**2+r*p.gear*.010+induced+(Math.abs(p.angular.x)+Math.abs(p.angular.y))*2.02;
   acc.copyFrom(p.forward).scaleInPlace(thrust);
   acc.addInPlaceFromFloats(-p.velocity.x*drag/Math.max(r,1),-9.81-p.velocity.y*drag/Math.max(r,1),-p.velocity.z*drag/Math.max(r,1));
   acc.addInPlaceFromFloats(localUp.x*(lift-vertical*factor*2.25),localUp.y*(lift-vertical*factor*2.25),localUp.z*(lift-vertical*factor*2.25));
-  acc.addInPlaceFromFloats(-cross*localRight.x*2.78,-cross*localRight.y*2.78,-cross*localRight.z*2.78);
+  acc.addInPlaceFromFloats(-cross*localRight.x*(1.32+factor*1.46),-cross*localRight.y*(1.32+factor*1.46),-cross*localRight.z*(1.32+factor*1.46));
   acc.y+=assist.vertical;
   p.previous.copyFrom(p.position);
   p.velocity.addInPlaceFromFloats(acc.x*dt,acc.y*dt,acc.z*dt);

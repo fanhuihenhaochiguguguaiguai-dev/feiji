@@ -43,7 +43,7 @@ export function gearSlot(kind:ItemKind):GearSlot|undefined{
 export const gears=items.filter(i=>gearSlot(i.kind)!==undefined);
 export const stockHooks=(plane:PlaneSpec)=>plane.bombs>0||plane.id==='j20';
 export const groundMount=(plane:PlaneSpec)=>plane.id==='j20'?[0,-.57,.55]:[plane.span*.13,-.87,.48];
-export const minimumPlayerMissiles=10;
+export const minimumPlayerMissiles=20;
 export function missileRails(plane:PlaneSpec){
   return plane.rails.length||plane.support?plane.rails:[
     [-plane.span*.19,-.36,plane.length*.045],
@@ -75,7 +75,7 @@ export function missileDamage(plane:PlaneSpec,profile:MissileProfile,level:numbe
   const airframe=plane.era==='cold'?1.11:plane.era==='stealth'?.96:plane.id==='a10'?1.06:1;
   return profile.damage*airframe*(1+level*.12);
 }
-// Every stock enemy survives two impacts from any currently available upgraded air-to-air loadout.
+// Durability floor used by the unmodified V18 progression, before the uniform scenario adjustment.
 export const minimumEnemyDurability=71+Math.ceil(2*Math.max(...fleet.flatMap(plane=>
   Object.values(missiles).filter(weapon=>!plane.support&&compatible(plane,itemById[weapon.id]!))
     .map(weapon=>missileDamage(plane,weapon,3)))));

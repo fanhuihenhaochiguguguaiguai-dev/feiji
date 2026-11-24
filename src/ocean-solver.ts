@@ -49,6 +49,14 @@ export class OceanSpectrum {
       this.modes.push({i,j,phase:random(x,z)*Math.PI*2,omega:Math.sqrt(9.81*k),amplitude:energy*.5});
     }
   }
+  coefficients(){
+    const spectrum=new Float32Array(total*4);
+    for(const mode of this.modes){
+      spectrum.set([mode.phase,mode.omega,mode.amplitude,1],4*mode.i);
+      spectrum.set([mode.phase,mode.omega,mode.amplitude,-1],4*mode.j);
+    }
+    return spectrum;
+  }
   sample(time:number,out:Uint8Array){
     this.re.fill(0);this.im.fill(0);
     for(const m of this.modes){

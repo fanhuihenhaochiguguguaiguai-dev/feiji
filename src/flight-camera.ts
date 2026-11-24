@@ -14,7 +14,9 @@ export class FlightCamera {
   private readonly focus=new Vector3();
   private collapsed=false;
   private lookPitch=0;
-  private field=1.012;
+  private field=.925;
+  private readonly spring=new Vector3();
+  private readonly displacement=new Vector3();
   private readonly drift=new Vector3();
   private readonly levelForward=new Vector3(0,0,-1);
   update(camera:FlightCameraView,plane:Airframe,target:Airframe|null,terrain:Terrain,dt:number,time:number,inside:boolean,reset:boolean,pose:Pick<FlightPose,'position'|'orientation'|'forward'>=plane){
@@ -26,13 +28,16 @@ export class FlightCamera {
       camera.fov=1.20+plane.boost*.068;camera.minZ=.11;return;
     }
     camera.rotationQuaternion=null;camera.minZ=.54;
-    const normal=pose.forward,span=Math.max(10,plane.type.span),dist=span*1.46+9+plane.boost*4.2;
+    const normal=pose.forward,span=plane.type.span;
+    const size=Math.max(span,plane.type.length*.67);
+    const dist=clamp(size*1.48,11,48)+plane.boost*1.5;
+    const ride=clamp(size*.48,4.3,12.4);
     const horizontal=Math.hypot(normal.x,normal.z);
     if(horizontal>.15)this.levelForward.set(normal.x/horizontal,0,normal.z/horizontal);
     const level=this.levelForward,trail=Math.max(.43,horizontal);
     const shock=reset?0:Math.max(0,1-(time-plane.hitTime)*5)*plane.hitIntensity;
-    this.goal.set(p.x-level.x*trail*dist,p.y-normal.y*dist*.82+span*.34+6.1,p.z-level.z*trail*dist);
-    this.goal.y=Math.max(this.goal.y+.20*shock,terrain.at(this.goal.x,this.goal.z,time)+7);
+    this.goal.set(p.x-level.x*trail*dist,p.y-normal.y*dist*.77+ride,p.z-level.z*trail*dist);
+    this.goal.y=Math.max(this.goal.y+.20*shock,terrain.at(this.goal.x,this.goal.z,time)+3.8);
     this.goal.addInPlaceFromFloats(-plane.hitFrom.x*shock*.32,0,-plane.hitFrom.z*shock*.32);
     const eye=p.y+4.9;
     let blocked=terrain.obstruction(p.x,eye,p.z,this.goal.x,this.goal.y,this.goal.z,time,2.0);
@@ -44,20 +49,30 @@ export class FlightCamera {
     if(this.collapsed){
       const factor=Math.max(.41,blocked-.13);
       this.goal.set(p.x+(this.goal.x-p.x)*factor,eye+(this.goal.y-eye)*factor+7,p.z+(this.goal.z-p.z)*factor);
-      this.goal.y=Math.max(this.goal.y,terrain.at(this.goal.x,this.goal.z,time)+7);
+      this.goal.y=Math.max(this.goal.y,terrain.at(this.goal.x,this.goal.z,time)+3.8);
     }
-    Vector3.LerpToRef(camera.position,this.goal,reset||this.collapsed?1:1-Math.exp(-dt*13),camera.position);
+    if(reset||this.collapsed){
+      camera.position.copyFrom(this.goal);this.spring.setAll(0);
+    }else{
+      const frame=Math.min(.065,dt),stiffness=12.5,decay=Math.exp(-stiffness*frame);
+      camera.position.subtractToRef(this.goal,this.displacement);
+      for(const axis of ['x','y','z'] as const){
+        const difference=this.displacement[axis],slope=this.spring[axis]+difference*stiffness;
+        camera.position[axis]=this.goal[axis]+(difference+slope*frame)*decay;
+        this.spring[axis]=(this.spring[axis]-slope*stiffness*frame)*decay;
+      }
+    }
     if(terrain.obstruction(p.x,eye,p.z,camera.position.x,camera.position.y,camera.position.z,time,1.8)<=1){
-      camera.position.copyFrom(this.goal);camera.position.y+=5.0;
+      camera.position.copyFrom(this.goal);camera.position.y+=3.0;this.spring.setAll(0);
     }
-    camera.position.y=Math.max(camera.position.y,terrain.at(camera.position.x,camera.position.z,time)+7);
-    const wide=1.012+plane.boost*.099+Math.min(.045,Math.abs(plane.angular.y)*.036);
+    camera.position.y=Math.max(camera.position.y,terrain.at(camera.position.x,camera.position.z,time)+3.8);
+    const wide=.925+plane.boost*.026+Math.min(.008,Math.abs(plane.angular.y)*.015);
     this.field=reset?wide:this.field+(wide-this.field)*(1-Math.exp(-dt*6));
     camera.fov=this.field;
     this.aim.copyFrom(p).addInPlaceFromFloats(level.x*125,0,level.z*125);
     const subjectPitch=Math.atan2(p.y-camera.position.y,Math.hypot(p.x-camera.position.x,p.z-camera.position.z));
     const nosePitch=Math.asin(clamp(normal.y,-1,1));
-    const desired=subjectPitch+Math.atan(.51*Math.tan(camera.fov*.5));
+    const desired=subjectPitch+Math.atan(.31*Math.tan(camera.fov*.5));
     const pitch=clamp(clamp(desired,nosePitch-.43,nosePitch+.34),-1.32,1.32);
     this.lookPitch=reset?pitch:this.lookPitch+(pitch-this.lookPitch)*(1-Math.exp(-dt*9.5));
     const aimDistance=Math.hypot(this.aim.x-camera.position.x,this.aim.z-camera.position.z);

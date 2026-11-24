@@ -103,15 +103,11 @@ input{accent-color:#e9b665}
 .target-pin.locked{width:33px;height:31px;border:2px solid #ffce71;box-shadow:0 0 7px #fba75683;color:#fff0ad}
 .target-pin.ally{border-color:#81e9ed;color:#b8f2f0}.target-pin.off{width:8px;height:8px;rotate:45deg;background:#ffd1a699}.target-pin.off span{display:none}
 .flight-controls{position:absolute;left:var(--edge);bottom:var(--heel);display:flex;flex-direction:column;align-items:start;gap:6px;width:clamp(130px,22vw,206px);color:#d9e9df}
-.defense-controls{display:flex;align-items:center;gap:7px}
-.defense-controls>div{display:grid;gap:3px;justify-items:start}
 #counter{position:relative;isolation:isolate;pointer-events:auto;border-radius:50%;min-height:58px;min-width:58px;padding:4px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;color:#e1f7f2;border-color:#85c1bcba;background:#122d3bdb;touch-action:none}
 #counter svg{width:17px;height:17px}#counter span,#counter b{font-size:.67rem;line-height:1;font-variant-numeric:tabular-nums}
 #counter::before{content:'';position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(#f8be77 var(--cool,0%),transparent 0);mask:radial-gradient(transparent calc(100% - 2px),#000 calc(100% - 1px));pointer-events:none}
 #counter.armed{color:#fff3ca;border-color:#ffe680;background:#594327db;box-shadow:0 0 17px #efae5364}
 #counter-state{font-size:.69rem;white-space:nowrap;color:#ddf4f1}
-#assist{pointer-events:auto;font-size:.65rem;min-height:36px;touch-action:none;padding:4px 7px;background:#13283bb3}
-#assist.on{border-color:#7bc6b9;color:#c5f6e5;box-shadow:none}
 #touch-guide{display:none;position:absolute;left:50%;bottom:calc(var(--heel) + 5px);translate:-50% 0;color:#ecf1e0;font-size:.75rem;white-space:nowrap}
 #application[data-touch="true"] #touch-guide:not([hidden]){display:block}
 .armor{grid-row:2;grid-column:2;min-width:86px;padding:3px 7px 4px;background:linear-gradient(90deg,#172639b0,transparent);border-left:1px solid #b5cbd766;text-align:left}.armor span{display:block;font-size:.82em;white-space:nowrap}.armor i{display:block;height:3px;background:#313d45;margin-top:3px}.armor em{height:100%;display:block;background:#7bdfad}.armor em.critical{background:#ff855f}
@@ -120,7 +116,7 @@ input{accent-color:#e9b665}
 .combat-controls{position:absolute;right:var(--right);bottom:var(--heel);display:grid;--combat-cell:clamp(51px,10.1dvh,68px);grid-template-columns:repeat(4,var(--combat-cell));width:max-content;gap:6px;justify-items:center;align-items:end}
 .combat-controls button{border-radius:50%;background:linear-gradient(140deg,#395169a9,#182235e4);border:1px solid #b1c9de8b;pointer-events:auto;width:clamp(44px,8.9dvh,58px);height:clamp(44px,8.9dvh,58px);min-height:44px;padding:0;font-size:.64rem;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;touch-action:none}
 .combat-controls svg{width:17px;height:17px}.combat-controls .fire{width:clamp(50px,10.1dvh,68px);height:clamp(50px,10.1dvh,68px);border-color:#f0c675;background:radial-gradient(circle at 15% 0,#775b36c8,#23354bdd);color:#ffe0a0}.combat-controls .fire svg{width:23px;height:23px}
-.combat-controls b{font-variant-numeric:tabular-nums}.combat-controls .selected-weapon{outline:1px solid #f9d289;outline-offset:2px}.combat-controls small{font-size:.58rem;line-height:1}.combat-controls .pressed{background:#ad834ddb;color:#fff5d6}
+.combat-controls b{font-variant-numeric:tabular-nums}.combat-controls small{font-size:.58rem;line-height:1}.combat-controls .pressed{background:#ad834ddb;color:#fff5d6}
 #application[data-hit="true"] .lens{box-shadow:inset 0 0 70px 12px #aa3e3d70}
 @media (max-height:495px) and (orientation:landscape){
  :root{--edge:max(10px,env(safe-area-inset-left));--right:max(10px,env(safe-area-inset-right));--heel:max(7px,env(safe-area-inset-bottom))}
@@ -152,8 +148,8 @@ input{accent-color:#e9b665}
 .target-pin.off span:not([hidden]){display:block;top:15px;font-size:.75em}
 .target-pin span{background:#0b1a26b5;padding:2px 4px;border-radius:2px}
 .combat-controls .fire{border-width:1.5px;background:radial-gradient(circle at 28% 14%,#815c33c9,#273447ed 74%);box-shadow:inset 0 0 0 3px #ffdeb119,0 2px 13px #1421319b}
-.combat-controls .selected-weapon{outline:none;box-shadow:0 0 13px #f1ad6d68,inset 0 0 0 4px #efc27f50}
-#view,#boost,#next-target,#weapon-mode,#assist,#counter{border-color:#9ac7d482;box-shadow:inset 0 1px 0 #cbdff04c,0 2px 9px #1422319e}
+
+#view,#boost,#counter{border-color:#9ac7d482;box-shadow:inset 0 1px 0 #cbdff04c,0 2px 9px #1422319e}
 #counter.armed{border-color:#ffe680;box-shadow:0 0 17px #efae5364}
 .fleet-strip{padding:7px 4px;background:linear-gradient(0deg,#091525ea,#1123338a 76%,transparent);scroll-snap-type:x proximity}
 .fleet-strip>button{position:relative;height:86px;min-height:86px;overflow:hidden;display:flex;justify-content:flex-end;align-items:flex-start;gap:1px;flex-direction:column;padding:6px 8px;background:linear-gradient(148deg,#344e68de,#142739 51%,#101a2afa);scroll-snap-align:start}
@@ -211,7 +207,6 @@ input{accent-color:#e9b665}
 .pilot-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;border:1px solid #89a4b662;padding:8px}
 .route-terminal.missions .route-body{display:flex;flex-direction:column}.route-terminal.missions .mission-grid{min-height:180px}
 .route-terminal .settings-grid,.route-terminal .facility-grid{min-height:max-content}.route-page .upgrade-item .item-art{width:26px}
-#spares{pointer-events:auto;touch-action:none;min-height:31px;padding:3px 6px;font-size:.66rem;color:#edd5a3}
 @media(max-height:470px) and (orientation:landscape){
  .route-page .station-heading{min-height:46px;padding-top:5px;padding-bottom:5px;gap:6px}.route-crumb{font-size:.57rem}.route-page .station-heading button{min-height:34px}
  .route-body{padding-top:8px}.route-intro{min-height:93px;padding:8px 12px;margin-bottom:8px}.route-intro p{font-size:.71rem}
@@ -264,7 +259,7 @@ input{accent-color:#e9b665}
 .combat-controls button:active,#counter:active{border-color:#f9d08f}
 .combat-controls .fire{border-top:2px solid #ffe0a1;background:linear-gradient(145deg,#755436f3,#2e3b4fee 63%);color:#fff1cb}
 .combat-controls .fire span{font-weight:730}
-.combat-controls .selected-weapon{border-color:#fbe1a9;box-shadow:inset 0 0 0 2px #daa76588,inset 0 2px 7px #ebbd7452}
+
 #counter::before{inset:0;border-radius:inherit;mask:linear-gradient(black 0 0) content-box,linear-gradient(black 0 0);mask-composite:exclude;padding:2px}
 .hud-left,.hud-right{filter:drop-shadow(0 1px 2px #091825b5)}
 .hud-middle{background:linear-gradient(90deg,transparent,#14293e72,transparent)}
@@ -372,3 +367,61 @@ input{accent-color:#e9b665}
 .power-control input{accent-color:#e6b571}
 .target-pin[data-obscured="true"]{border-style:dashed;color:#e2d7dc}
 @media (max-height:440px) and (orientation:landscape){.credit-mark{width:27px;height:21px}}
+
+/* Route chrome and combat HUD are scoped away from the three lobby entries. */
+#section :is(.glass,.asset-card,.mission-details), #overlay :is(.glass,.debrief),
+#application :is(.tactical,.acquisition,.receipt) {
+  border-color:#a4b6c67c;
+  box-shadow:inset 0 1px #e8f3fc26,inset 0 -1px #101f3280,0 10px 24px #050d1b5c;
+}
+#section :is(.glass,.asset-card) {
+  background-image:linear-gradient(142deg,#53698240,#1a2c3fe8 54%,#121e2ee8);
+}
+#section :is(.station-heading,.section-wallet) {
+  background-image:linear-gradient(100deg,#243c55ec,#122232df);
+  border-color:#889ead66;
+}
+#section :is(.stat-grid,.mount-counts,.upgrade-item) :is(dt,small) {
+  color:#b9ccdd;
+}
+#navigation button {
+  background-image:linear-gradient(150deg,#52698266,#1c2c3ddd 55%,#132131e6);
+}
+#navigation button.on,#section .gold {
+  border-color:#d3b77b;
+  text-shadow:0 1px 2px #241c12aa;
+}
+#boot-progress{
+  width:min(245px,78%);height:8px;vertical-align:middle;accent-color:#e1bb71;
+}
+#boot-percent{
+  display:inline-block;min-width:4ch;margin-left:8px;color:#f4d18f;font-variant-numeric:tabular-nums;
+}
+#hud .flight-actions,#hud .combat-controls {
+  --action-size:clamp(39px,11.5dvh,72px);
+  display:grid;grid-template-columns:var(--action-size);gap:5px;justify-items:stretch;
+}
+#hud .flight-actions button,#hud .combat-controls .fire {
+  display:flex;position:relative;flex-direction:column;align-items:center;justify-content:center;
+  width:var(--action-size);height:var(--action-size);min-height:0;min-width:0;padding:1px;
+  gap:1px;border-radius:6px;border:1px solid #b5c9d58a;
+  color:#ebf4fa;background:linear-gradient(151deg,#3e566ebd,#122232b5);
+  box-shadow:inset 0 1px #d5ecff54,0 1px 11px #0813228e;
+  pointer-events:auto;touch-action:none;font-size:clamp(.52rem,2.25dvh,.85rem);line-height:1;
+}
+#hud :is(.flight-actions,.combat-controls) :is(span,b,small){white-space:nowrap;font-variant-numeric:tabular-nums}
+#hud .flight-actions #counter span{font-size:clamp(.48rem,1.95dvh,.72rem)}
+#hud :is(.flight-actions,.combat-controls) :is(svg,#missile-art:not([hidden])){
+  width:clamp(12px,4.8dvh,26px);height:clamp(10px,3.9dvh,24px);flex:none;
+}
+#hud :is(.flight-actions,.combat-controls) small {
+  color:#efd094;font-size:clamp(.43rem,1.65dvh,.67rem);line-height:1;
+}
+#hud .flight-actions button:is(:active,.on,.pressed),#hud .combat-controls button:is(:active,.pressed,[data-lock="ready"]){
+  background-image:linear-gradient(132deg,#756045c8,#273b4edb);border-color:#e2bc78;color:#fff2c9;
+}
+@media(max-height:390px) and (orientation:landscape){
+  #hud .flight-actions,#hud .combat-controls{gap:3px}
+  #hud .flight-controls{gap:3px}
+  #hud .flight-controls .power-control{padding-block:1px}
+}

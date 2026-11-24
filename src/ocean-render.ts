@@ -1,7 +1,7 @@
 import { ADDRESS_CLAMP_TO_EDGE,ADDRESS_REPEAT,FILTER_LINEAR,PIXELFORMAT_RGBA8,Texture,type GraphicsDevice,type ShaderMaterial } from 'playcanvas';
 import { OceanSpectrum, ShallowWake, heightPerByte, oceanSize, pressureStrength, swellPeriod, wakeCell, type WaterMotion } from './ocean-solver';
 
-interface OceanPacket {cycle:number;time:number;swell:Uint8Array;pressure:Uint8Array;x:number;z:number;}
+interface OceanPacket {cycle:number;time:number;swell:Uint8Array;pressure:Uint8Array;x:number;z:number;fft?:string;benchmark?:{cpuMs:number;gpuMs:number;maxError:number};}
 const empty=new Uint8Array(oceanSize**2*4);
 for(let i=0;i<empty.length;i+=4){empty[i]=empty[i+2]=empty[i+3]=128;}
 const repeat=(n:number)=>(n%oceanSize+oceanSize)%oceanSize;
@@ -26,7 +26,7 @@ export class OceanRender {
   private pending=false;
   private cycle=0;
   private updated=-1;
-  constructor(device:GraphicsDevice,material:ShaderMaterial){
+  constructor(private readonly device:GraphicsDevice,material:ShaderMaterial){
     const make=(name:string,repeat:boolean)=>new Texture(device,{name,width:oceanSize,height:oceanSize,format:PIXELFORMAT_RGBA8,
       mipmaps:false,minFilter:FILTER_LINEAR,magFilter:FILTER_LINEAR,addressU:repeat?ADDRESS_REPEAT:ADDRESS_CLAMP_TO_EDGE,
       addressV:repeat?ADDRESS_REPEAT:ADDRESS_CLAMP_TO_EDGE});
@@ -71,7 +71,7 @@ export class OceanRender {
     if(this.pending||s.time-this.updated<(this.worker?.09:.16))return;
     this.updated=s.time;
     if(this.worker){
-      this.pending=true;this.worker.postMessage({cycle:this.cycle,water:s});
+      this.pending=true;this.worker.postMessage({cycle:this.cycle,water:s,compute:this.device.isWebGPU&&this.device.supportsCompute});
     }else{
       if(!this.fallback){this.fallback={sea:new OceanSpectrum(),patch:new ShallowWake()};this.fallback.patch.setBed(this.bed);}
       const p=this.fallback,swell=new Uint8Array(empty.length),pressure=new Uint8Array(empty.length);
@@ -88,6 +88,6 @@ export class OceanRender {
     const p=this.packet;
     if(!p)return {active:false,foam:0,time:0,worker:!!this.worker};
     let foam=0;for(let i=1;i<p.pressure.length;i+=4)foam=Math.max(foam,p.pressure[i]);
-    return {active:true,foam,time:p.time,worker:!!this.worker};
+    return {active:true,foam,time:p.time,worker:!!this.worker,fft:p.fft??'cpu',benchmark:p.benchmark};
   }
 }

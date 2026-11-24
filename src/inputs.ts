@@ -12,7 +12,6 @@ export class FlightInput {
   private missile=false;
   private bomb=false;
   readonly values:Controls={...idle};
-  selected:'gun'|'missile'|'bomb'='gun';
   on=false;
   constructor(canvas:HTMLCanvasElement,readonly action:(name:string)=>void){
     this.touch=new TouchFlightController(canvas,()=>this.on);
@@ -35,17 +34,35 @@ export class FlightInput {
         if(kind==='missile')this.missile=true;if(kind==='bomb')this.bomb=true;
       });
     }
+    const evade=document.getElementById('evade')!;
+    let gesture:{id:number;x:number}|null=null;
+    evade.addEventListener('pointerdown',e=>{
+      if(!this.on||gesture)return;
+      e.preventDefault();evade.setPointerCapture(e.pointerId);
+      gesture={id:e.pointerId,x:e.clientX};evade.classList.add('pressed');
+    });
+    evade.addEventListener('pointerup',e=>{
+      if(gesture?.id!==e.pointerId)return;
+      const dx=e.clientX-gesture.x;
+      this.action(dx<-12?'evade-left':dx>12?'evade-right':'evade');
+      gesture=null;evade.classList.remove('pressed');
+    });
+    for(const n of ['pointercancel','lostpointercapture'])evade.addEventListener(n,()=>{
+      gesture=null;evade.classList.remove('pressed');
+    });
+    evade.addEventListener('click',e=>{if(this.on&&e.detail===0)this.action('evade');});
     this.slider.addEventListener('input',()=>{this.throttle=Number(this.slider.value)/100;});
     addEventListener('keydown',e=>{
       if(e.code==='Escape'){if(!e.repeat)this.action('pause');return;}
       if(!this.on||(e.target as HTMLElement)?.closest('select,input'))return;
-      if(['Space','Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+      if((e.code==='Enter'||e.code==='Space')&&(e.target as Element)?.closest('button'))return;
+      if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
       this.keys.add(e.code);
       if(e.repeat)return;
-      if(e.code==='Space'||e.code==='Enter'&&this.selected==='gun')this.gun=true;
-      if(e.code==='KeyF'||e.code==='Enter'&&this.selected==='missile')this.missile=true;
-      if(e.code==='KeyB'||e.code==='Enter'&&this.selected==='bomb')this.bomb=true;
-      const commands:Record<string,string>={KeyC:'view',KeyG:'gear',KeyT:'lock',KeyX:'weapon',KeyZ:'counter',KeyH:'assist'};
+      if(e.code==='Space')this.gun=true;
+      if(e.code==='KeyF')this.missile=true;
+      if(e.code==='KeyB')this.bomb=true;
+      const commands:Record<string,string>={KeyC:'view',KeyG:'gear',KeyU:'turn',KeyZ:'counter',KeyJ:'evade-left',KeyK:'evade',KeyL:'evade-right'};
       if(commands[e.code])this.action(commands[e.code]);
     });
     addEventListener('keyup',e=>this.keys.delete(e.code));addEventListener('blur',()=>this.reset(false));
@@ -55,7 +72,7 @@ export class FlightInput {
     if(defaultThrottle!==false){this.throttle=defaultThrottle;this.slider.value=String(defaultThrottle*100);}
     for(const node of document.querySelectorAll('.pressed'))node.classList.remove('pressed');
   }
-  read(dt:number,assist:boolean,invert:boolean,sensitivity:number){
+  read(dt:number,invert:boolean,sensitivity:number){
     const axes=(a:string,b:string)=>Number(this.keys.has(a))-Number(this.keys.has(b));
     const touch=this.touch.read(dt,sensitivity);
     const r=this.values;
@@ -65,13 +82,14 @@ export class FlightInput {
     r.yaw=clamp(axes('KeyQ','KeyE')+r.steering*.89,-1,1);
     const delta=axes('KeyR','KeyV');
     if(delta){this.throttle=clamp(this.throttle+delta*dt*.57,.12,1);this.slider.value=String(Math.round(this.throttle*100));}
-    r.throttle=this.throttle;r.assist=assist;
+    r.throttle=this.throttle;r.assist=true;
     r.boost=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight');
-    r.gun=this.gun||this.keys.has('Space')||this.selected==='gun'&&this.keys.has('Enter');
+    r.gun=this.gun||this.keys.has('Space');
     for(const action of this.held.values()){
       if(action==='boost')r.boost=true;
       if(action==='gun')r.gun=true;
     }
+    if(r.boost)r.throttle=Math.max(r.throttle,.98);
     r.missile=this.missile;r.bomb=this.bomb;
     this.gun=this.missile=this.bomb=false;
     return r;

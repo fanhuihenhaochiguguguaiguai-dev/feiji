@@ -49,36 +49,30 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     }`:
     `precision highp float;attribute ${v3} position;uniform ${m4} matrix_model;uniform ${m4} matrix_viewProjection;
     ${ocean?'uniform float clock;uniform float waveHeight;uniform vec3 pressureOrigin;'+textures(waterSamplers):''}varying ${v3} vWorld;void main(){${vertexBody}}`;
-  const samplers=ocean?['weatherTex','depthTex','waveTex',...waterSamplers]:['weatherTex','deckDome'];
+  const samplers=ocean?['weatherTex','depthTex','waveTex','airLut',...waterSamplers]:['weatherTex','deckDome','airLut'];
   const declarations=textures(samplers)+(ocean?(gpu?'uniform pressureOrigin:vec3f;\nuniform washCenter:vec4f;\nuniform washTrack:vec2f;':
     'uniform vec3 pressureOrigin;uniform vec4 washCenter;uniform vec2 washTrack;'):'');
   const floatHead=shared.map(n=>gpu?'uniform '+n+':'+type(n)+';\n':'uniform '+type(n)+' '+n+';').join('');
   const sky=fn('airRadiance',[['dir',v3],['sun',v3],['low',v3],['high',v3],['solar',v3]],v3,`
     ${let_('angle',f,'clamp(dot(dir,sun),-1.,1.)')}
     ${let_('altitude',f,'max(dir.y,0.)')}
-    ${let_('airmass',f,'1./(altitude+.134+sqrt(altitude+.022)*.31)')}
-    ${let_('rayleigh',f,'.75*(1.+angle*angle)')}
-    ${let_('mie',f,'.039/pow(max(.016,1. + .7225 - 1.7*angle),1.5)')}
-    ${let_('glow',f,'mie*(.16+.035*airmass)')}
-    ${let_('slant',f,'1.-exp(-airmass*.24)')}
+    ${let_('lut',v3,sample('airLut',v2+'(angle*.5+.5,altitude)','0.')+'.rgb')}
+    ${let_('rayleigh',f,'lut.g*1.5')}
+    ${let_('glow',f,'lut.b*lut.b*.90')}
+    ${let_('slant',f,'lut.r')}
     return mix(high*high*(.81+.12*rayleigh),low*low*.84,slant)*(.81+.19*rayleigh)+solar*solar*glow;
-  `);
-  const tone=fn('film',[['l',v3],['gain',f]],v3,`
-    ${let_('x',v3,`max(l*gain,${v3}(0.))`)}
-    ${let_('y',v3,`clamp((x*(2.51*x+${v3}(.03)))/(x*(2.43*x+${v3}(.59))+${v3}(.14)),${v3}(0.),${v3}(1.))`)}
-    return pow(y,${v3}(.454545));
   `);
   const drift=`${v2}(.00014,-.000085)*clock`;
   const cloud=fn('cloudVolume',[['ray',v3],['eye',v3],['sun',v3],['solar',v3],['clock',f],['cover',f],['baseHeight',f],['quality',f]],v4,`
     ${let_('sgn',f,'step(0.,ray.y)*2.-1.')}
     ${let_('invY',f,'sgn/max(abs(ray.y),.034)')}
-    ${let_('thickness',f,'mix(880.,1530.,smoothstep(400.,900.,baseHeight))')}
+    ${let_('thickness',f,'mix(960.,1700.,smoothstep(400.,900.,baseHeight))')}
     ${let_('a',f,'(baseHeight-eye.y)*invY')}
     ${let_('b',f,'(baseHeight+thickness-eye.y)*invY')}
     ${let_('start',f,'max(0.,min(a,b))')}
     ${let_('stop',f,'min(31500.,max(a,b))')}
     if(stop<=start){return ${v4}(0.);}
-    ${let_('stepCount',f,'2.+step(.78,quality)+2.*step(1.06,quality)')}
+    ${let_('stepCount',f,'2.+step(.78,quality)+2.*step(1.06,quality)-step(14700.,start)*step(.78,quality)')}
     ${let_('segment',f,'(stop-start)/stepCount')}
     ${let_('optical',f,'0.',true)}
     ${let_('result',v3,`${v3}(0.)`,true)}
@@ -90,7 +84,7 @@ export function environmentSource(gpu:boolean,ocean:boolean){
       ${let_('p',v3,'eye+ray*(start+(samples+.52)*segment)')}
       ${let_('h',f,'clamp((p.y-baseHeight)/thickness,0.,1.)')}
       ${let_('q',v2,`p.xz*.000105+${drift}+${v2}(.175+h*.072,.286-h*.044)`)}
-      ${let_('volume',v3,sample('weatherTex','q','0.0')+'.rgb')}
+      ${let_('volume',v3,sample('weatherTex','q','clamp((start+samples*segment)*.000085,0.,2.)')+'.rgb')}
       ${let_('erosion',f,'volume.g',true)}
       if(quality>1.06){erosion=${sample('weatherTex',`q*2.37+${v2}(.43,h*.23)`,'0.0')}.g;}
       ${let_('shaping',f,'smoothstep(0.,.22,h)*(1.-smoothstep(.53,1.,h))')}
@@ -108,7 +102,7 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     if(cloudBase<600.){
       ${let_('heading',f,gpu?'atan2(dir.z,dir.x)':'atan(dir.z,dir.x)')}
       ${let_('panorama',v2,`${v2}(fract(heading*.159154943+1.),.5-asin(clamp(dir.y,-1.,1.))*.318309886)`)}
-      return ${v4}(${sample('deckDome','panorama')}.rgb,1.);
+      return ${v4}(pow(${sample('deckDome','panorama')}.rgb,${v3}(2.2)),1.);
     }
     ${let_('height',f,'dir.y')}
     ${let_('toward',f,'clamp(dot(dir,sunDir),0.,1.)')}
@@ -119,14 +113,14 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     ${let_('high',f,sample('weatherTex','crest','1.0')+'.g')}
     ${let_('bands',f,sample('weatherTex',`crest*${v2}(.48,1.42)+${v2}(.37,-.06)`,'2.0')+'.r')}
     ${let_('density',f,'high*.64+bands*.36')}
-    ${let_('feather',f,'smoothstep(.486+cover*.58,.639+cover*.67,density)*smoothstep(-.016,.067,height)*.69*clouds')}
+    ${let_('feather',f,'smoothstep(.444+cover*.56,.624+cover*.68,density)*smoothstep(-.016,.067,height)*.69*clouds')}
     ${let_('backlit',v3,`mix(${v3}(.025,.043,.078),sunColor*sunColor*.59,smoothstep(-.18,.22,high-bands+toward*.11))`)}
     lit=mix(lit,mix(sunColor*sunColor*.54+${v3}(.08,.11,.15),backlit,deck),feather);
     ${let_('volume',v4,`${v4}(0.)`,true)}
     if(clouds>.5){volume=cloudVolume(dir,eye,sunDir,sunColor,clock,cover,cloudBase,quality);}
     lit+=sunColor*sunColor*(disk*3.2);
     lit=lit*(1.-volume.a)+volume.rgb;
-    return ${v4}(film(lit,exposure),1.);
+    return ${v4}(lit*exposure,1.);
   `;
   const slope=waves.map((w,i)=>
     let_('wave'+i,f,`cos(dot(p,${v2}(${num(w.x)},${num(w.z)}))-clock*${w.rate})`)+
@@ -183,7 +177,7 @@ export function environmentSource(gpu:boolean,ocean:boolean){
     ${let_('airWash',f,`${u('washTrack')}.x*exp(-max(0.,clock-${u('washTrack')}.y)*2.1)*smoothstep(.3,2.6,depth)*rippleFade*(pressureRings*.78*brokenCrests+slipstream*.73)`)}
     ${let_('foamLit',v3,`water+${v3}(.48,.70,.84)*(wakeFoam*.88+airWash*.67)+${v3}(.30,.43,.50)*spectrum.g*detail*.24`)}
     ${let_('veil',f,'(1.-exp(-range*.000043))*(1.-smoothstep(400.,4900.,eye.y)*.38)')}
-    return ${v4}(film(mix(foamLit,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil),exposure),1.);
+    return ${v4}(mix(foamLit,airRadiance(-view,sunDir,horizon,zenith,sunColor),veil)*exposure,1.);
   `;
   const args:[string,string][]=[['coords',v3],...shared.map(n=>[n,type(n)] as [string,string])];
   const shade=fn('renderWorld',args,v4,ocean?seaBody:skyBody);
@@ -191,5 +185,5 @@ export function environmentSource(gpu:boolean,ocean:boolean){
   const head=gpu?'varying vWorld:'+v3+';\n':'precision highp float;varying vec3 vWorld;';
   const main=gpu?`@fragment fn fragmentMain(input:FragmentInput)->FragmentOutput{var output:FragmentOutput;output.color=renderWorld(${params});return output;}`:
     `void main(){gl_FragColor=renderWorld(${params});}`;
-  return {vertex,fragment:head+declarations+floatHead+sky+tone+(ocean?'':cloud)+shade+main,samplers};
+  return {vertex,fragment:head+declarations+floatHead+sky+(ocean?'':cloud)+shade+main,samplers};
 }
