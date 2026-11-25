@@ -3,6 +3,7 @@ extends SceneTree
 const BATTLE = preload("res://game/battle.gd")
 const DATA = preload("res://game/catalogue.gd")
 const PROFILE = preload("res://game/profile.gd")
+const HUD = preload("res://game/hud.gd")
 const STEP := 1.0 / 90.0
 var failed := 0
 
@@ -19,6 +20,7 @@ func run() -> void:
 	var results := []
 	for scenario in ["static", "moving", "turning", "owner_turn", "unlocked", "close_crossing"]:
 		results.append(_check(fight, scenario))
+	results.append(_check_touch_lock(fight))
 	fight.queue_free()
 	await process_frame
 	print(JSON.stringify({"scenarios":results,"failures":failed}, "\t"))
@@ -82,3 +84,48 @@ func _check(fight: Node, scenario: String) -> Dictionary:
 	if not ok:
 		failed += 1
 	return {"scenario":scenario,"lock":lock_seen,"target_bound":bound,"hit":hit,"turn_deg":max_turn,"step_deg":max_step,"curve_m":max_offset,"passed":ok}
+
+func _check_touch_lock(fight: Node) -> Dictionary:
+	while not fight.shots.is_empty():
+		fight._expire(fight.shots.back())
+	var at := fight.world.local_position(Vector3(11450.0, 1900.0, 5150.0)) as Vector3
+	var opponent = fight.fleet[1]
+	fight.player.reset(at, Vector3.FORWARD, 240.0, 4200.0)
+	opponent.reset(at + Vector3(36, 0, -910), Vector3.LEFT, 230.0, 3000.0)
+	fight._reset_player_spawn()
+	fight.seek_due = 0.0
+	for i in 83:
+		fight.time += STEP
+		fight._targeting(STEP)
+	var displayed_lock: bool = fight.is_locked()
+	var hud := HUD.new()
+	hud.fight = fight
+	hud.typeface = ThemeDB.fallback_font
+	hud.size = Vector2(1280, 576)
+	root.add_child(hud)
+	var touch := InputEventScreenTouch.new()
+	touch.index = 2
+	touch.position = hud.artifacts[4].centre
+	touch.pressed = true
+	hud._input(touch)
+	touch.pressed = false
+	hud._input(touch)
+	# A locked contact crosses the cone boundary between the tap and the firing tick.
+	opponent.position = at + Vector3(302, 0, -920)
+	fight._physics_process(STEP)
+	var cast: Dictionary = fight.shots[0] if not fight.shots.is_empty() else {}
+	var bound: bool = cast.get("target") == opponent
+	var turn := 0.0
+	var hit_before: int = fight.shots_hit
+	var nose: Vector3 = cast.get("nose", Vector3.FORWARD)
+	for i in 240:
+		if not cast.get("active", false):
+			break
+		fight._physics_process(STEP)
+		turn = maxf(turn, rad_to_deg(nose.angle_to(cast.nose)))
+	var hit: bool = fight.shots_hit > hit_before
+	var ok := displayed_lock and bound and turn > 5.0 and hit
+	if not ok:
+		failed += 1
+	hud.free()
+	return {"scenario":"touch_lock_lost_before_fire", "displayed_lock":displayed_lock,"target_bound":bound,"turn_deg":turn,"hit":hit,"passed":ok}

@@ -1,6 +1,6 @@
 V18.3 environment sources
 
-Relief and hangar ridge geometry adapted from the U.S. Geological Survey 3D Elevation Program, National Map seamless elevation service. Public-domain source data. This scene is a fictional adaptation with remapped elevation and approximated shoreline depth.
+Relief for the coastal and alpine areas and hangar ridge geometry adapted from the U.S. Geological Survey 3D Elevation Program, National Map seamless elevation service. Public-domain source data. These scenes are fictional adaptations with remapped elevation, an authored alpine flight corridor and approximated shoreline depth.
 https://www.usgs.gov/3d-elevation-program/about-3dep-products-services
 https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
 Source survey request bbox -136.62,58.43,-135.87,58.82 (EPSG:4326). The service adjusted the delivered raster to -136.62,58.25,-135.87,59.00 to preserve its square pixels. Fetched on 2026-11-25, 1281 x 1281 float GeoTIFF with bilinear sampling.
@@ -12,3 +12,4 @@ https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky
 https://polyhaven.com/license
 
 Rock 04 and Gravelly Sand textures by Poly Haven, CC0 1.0. The existing 1K diffuse and GL normal are packed with the original 1K displacement and roughness maps. See PolyHaven-CC0.txt for asset links.
+The alpine snow texture uses the CC0 gravel color and displacement as its grain source.

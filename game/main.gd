@@ -557,9 +557,9 @@ func _show_loading(title: String) -> void:
 
 func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dictionary:
 	var start := Battle.start_position(mode, operation, runway)
-	Landscape.prepare_relief()
 	var tiles := Landscape.opening_tiles(start)
 	var seed_value := int(catalogue.source.theatres[int(operation.get("region", 0))].seed)
+	Landscape.prepare_relief(seed_value)
 	var ids := [str(profile.state.selected)]
 	if mode == "free":
 		ids.append_array(Battle.FREE_ROSTER)

@@ -48,11 +48,13 @@ constexpr int relief_side = 1025;
 constexpr double relief_size = 24576.0;
 constexpr double relief_x = -6250.0;
 constexpr double relief_z = -6200.0;
-int16_t relief[relief_side * relief_side];
-bool has_relief = false;
+int16_t relief[2][relief_side * relief_side];
+bool has_relief[2]{};
 
-double relief_mask(double x, double z, int64_t seed) {
-    if (!has_relief || seed != 413) return 0.0;
+int field_for(int64_t seed) { return seed == 413 ? 0 : (seed == 704 ? 1 : -1); }
+
+double relief_mask(double x, double z, int field) {
+    if (field < 0 || !has_relief[field]) return 0.0;
     const double local_x = x - relief_x;
     const double local_z = z - relief_z;
     double weight = smooth(local_x / 2100.0) * smooth((relief_size-local_x) / 2100.0)
@@ -62,11 +64,11 @@ double relief_mask(double x, double z, int64_t seed) {
     return weight * smooth((dx*dx + dz*dz - 3700.0*3700.0) / (4900.0*4900.0 - 3700.0*3700.0));
 }
 
-double relief_sample(double x, double z) {
-    x = (x-relief_x) * (relief_side-1) / relief_size;
-    z = (z-relief_z) * (relief_side-1) / relief_size;
+double relief_sample(double x, double z, int field) {
+    x = bound((x-relief_x) * (relief_side-1) / relief_size, 0, relief_side-1.00001);
+    z = bound((z-relief_z) * (relief_side-1) / relief_size, 0, relief_side-1.00001);
     const auto a = ilower(x), b = ilower(z);
-    const int16_t *row = relief + b * relief_side + a;
+    const int16_t *row = relief[field] + b * relief_side + a;
     return 0.25 * blend(blend(row[0], row[1], x-a),
         blend(row[relief_side], row[relief_side+1], x-a), z-b);
 }
@@ -83,22 +85,24 @@ double transported_height(double centre, double north, double south, double east
 }
 
 double terrain_height(double x,double z,int64_t seed) {
-    const double mask = relief_mask(x,z,seed);
-    if (mask >= 1.0) return relief_sample(x,z);
+    const int field = field_for(seed);
+    const double mask = relief_mask(x,z,field);
+    if (mask >= 1.0) return relief_sample(x,z,field);
     const double original = transported_height(base_height(x,z,seed),
         base_height(x,z-erosion_spacing,seed), base_height(x,z+erosion_spacing,seed),
         base_height(x+erosion_spacing,z,seed), base_height(x-erosion_spacing,z,seed));
-    return mask > 0.0 ? blend(original, relief_sample(x,z), mask) : original;
+    return mask > 0.0 ? blend(original, relief_sample(x,z,field), mask) : original;
 }
 
 void tile_heights(float* output, int64_t size, double x, double z, double step, int64_t seed) {
-    if (has_relief && seed == 413 && x > relief_x && z > relief_z &&
+    const int field = field_for(seed);
+    if (field >= 0 && has_relief[field] && x > relief_x && z > relief_z &&
         x + (size-1)*step < relief_x + relief_size && z + (size-1)*step < relief_z + relief_size &&
-        relief_mask(x,z,seed) == 1.0 && relief_mask(x+(size-1)*step,z+(size-1)*step,seed) == 1.0 &&
+        relief_mask(x,z,field) == 1.0 && relief_mask(x+(size-1)*step,z+(size-1)*step,field) == 1.0 &&
         (x > 4600.0 || z > 5300.0 || z+(size-1)*step < -4600.0)) {
         for (int64_t y=0; y<size; ++y)
             for (int64_t i=0; i<size; ++i)
-                output[y*size+i] = static_cast<float>(relief_sample(x+i*step,z+y*step));
+                output[y*size+i] = static_cast<float>(relief_sample(x+i*step,z+y*step,field));
         return;
     }
     if (step != erosion_spacing) {
@@ -123,10 +127,10 @@ void tile_heights(float* output, int64_t size, double x, double z, double step, 
         fill_row(strip[south],y+1);
         for (int64_t i=1; i<=size; ++i) {
             const double px = x+(i-1)*step, pz = z+y*step;
-            const double mask = relief_mask(px,pz,seed);
+            const double mask = relief_mask(px,pz,field);
             const double h = transported_height(strip[centre][i],
                 strip[north][i],strip[south][i],strip[centre][i+1],strip[centre][i-1]);
-            output[y*size+i-1] = static_cast<float>(mask > 0.0 ? blend(h,relief_sample(px,pz),mask) : h);
+            output[y*size+i-1] = static_cast<float>(mask > 0.0 ? blend(h,relief_sample(px,pz,field),mask) : h);
         }
     }
 }
@@ -152,18 +156,19 @@ double number(GDExtensionConstVariantPtr v) { double n=0; to_float(&n,const_cast
 
 void load_relief(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
                  GDExtensionInt nargs,GDExtensionVariantPtr,GDExtensionCallError *err) {
-    if (nargs != 2 || integer(args[1]) != relief_side*relief_side*2) {
+    const int field = nargs == 3 ? field_for(integer(args[2])) : -1;
+    if (field < 0 || integer(args[1]) != relief_side*relief_side*2) {
         err->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
         return;
     }
-    if (!has_relief) {
+    if (!has_relief[field]) {
         Slot bytes;
         to_bytes(&bytes,const_cast<void *>(args[0]));
         const auto *src = byte_index(&bytes,0);
         for (int i=0; i<relief_side*relief_side; ++i)
-            relief[i] = static_cast<int16_t>(src[i*2] | uint16_t(src[i*2+1]) << 8);
+            relief[field][i] = static_cast<int16_t>(src[i*2] | uint16_t(src[i*2+1]) << 8);
         get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY)(&bytes);
-        has_relief = true;
+        has_relief[field] = true;
     }
     err->error = GDEXTENSION_CALL_OK;
 }
@@ -250,9 +255,9 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     const char *tile_labels[]{"x","z","size","step","seed"};
     bind(sample_name,sample,GDEXTENSION_VARIANT_TYPE_FLOAT,sample_args,sample_labels,3);
     bind(tile_name,tile,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,tile_args,tile_labels,5);
-    const GDExtensionVariantType relief_args[]{GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,GDEXTENSION_VARIANT_TYPE_INT};
-    const char *relief_labels[]{"elevations","byte_count"};
-    bind(relief_name,load_relief,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,relief_labels,2);
+    const GDExtensionVariantType relief_args[]{GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,GDEXTENSION_VARIANT_TYPE_INT,GDEXTENSION_VARIANT_TYPE_INT};
+    const char *relief_labels[]{"elevations","byte_count","seed"};
+    bind(relief_name,load_relief,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,relief_labels,3);
 }
 void deinitialize(void *,GDExtensionInitializationLevel level) {
     if(level!=GDEXTENSION_INITIALIZATION_SCENE)return;

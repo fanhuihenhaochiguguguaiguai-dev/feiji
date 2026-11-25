@@ -6,6 +6,7 @@ uniform vec4 wake;
 uniform float wake_strength = 0.0;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
 uniform vec4 scatter_color : source_color = vec4(0.098, 0.264, 0.277, 1.0);
+uniform vec4 air_color : source_color = vec4(0.53, 0.64, 0.75, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D coast_depth : repeat_disable, filter_linear;
 uniform vec4 coast_area = vec4(0.0);
@@ -74,7 +75,7 @@ void fragment() {
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
 	float angle = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	vec3 water = deep.rgb;
+	vec3 water = deep.rgb + air_color.rgb * 0.045;
 	if (coast_area.w > 0.5 && distance_m < 2200.0) {
 		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
 		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
@@ -93,4 +94,5 @@ void fragment() {
 	ROUGHNESS = mix(0.30 + fresnel * 0.14, 0.54, foam);
 	METALLIC = 0.0;
 	SPECULAR = (0.23 + 0.24 * fresnel) * (1.0 - foam * 0.58);
+	FOG = vec4(air_color.rgb * 0.78, smoothstep(1800.0, 16600.0, distance_m));
 }

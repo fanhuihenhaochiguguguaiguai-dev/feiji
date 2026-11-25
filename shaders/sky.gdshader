@@ -62,9 +62,11 @@ void sky() {
 		vec3 photo = texture(panorama, uv).rgb * panorama_range;
 		vec3 scatter = texture(scattering, vec2(angle * 0.5 + 0.5, clamp(ray.y, 0.0, 1.0))).rgb;
 		vec3 base = photo * mix(0.51, 0.44, storm);
+		float clear_air = (1.0 - smoothstep(0.22, 0.60, dot(base, vec3(0.21, 0.72, 0.07)))) * (1.0 - storm);
+		base *= mix(vec3(1.0), vec3(0.60, 0.87, 1.13), clear_air);
 		base = mix(base, vec3(dot(base, vec3(0.21, 0.72, 0.07))) * vec3(0.87, 0.96, 1.12), storm * 0.57);
-		base = mix(base, air_color.rgb, (1.0 - smoothstep(-0.095, 0.135, ray.y)) * 0.35);
 		base += scatter * air_color.rgb * (0.17 + phase * 0.11);
+		base = mix(base, air_color.rgb * 0.78, 1.0 - smoothstep(-0.012, 0.073, ray.y));
 		if (!AT_CUBEMAP_PASS) {
 			vec2 cloud = clamp(HALF_RES_COLOR.rg, vec2(0.0), vec2(1.0));
 			vec3 shade = air_color.rgb * 0.58;

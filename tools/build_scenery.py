@@ -35,8 +35,56 @@ def relief():
     # Preserve the coastline. Water depth here is an authored approximation.
     land = ground >= 2.0
     ground = np.where(land, np.maximum(ground - 1.5, 0) * 0.48, -np.minimum(88, distance_transform_edt(~land) * 2.4))
-    (OUTPUT / "bay.height").write_bytes(gzip.compress(np.rint(ground * 4).astype("<i2").tobytes(), mtime=0))
+    # Bring the main ridges up while retaining the surveyed shoreline and low islands.
+    ranged = np.clip((ground - 125) / 420, 0, 1)
+    battle = ground + np.maximum(ground, 0) * 0.17 * ranged * ranged * (3 - 2 * ranged)
+    (OUTPUT / "bay.height").write_bytes(gzip.compress(np.rint(battle * 4).astype("<i2").tobytes(), mtime=0))
+    relief_colors(battle, "bay")
+    # Use the inland massif for the alpine route. The valley floor remains open at the entry.
+    alpine_z, alpine_x = np.meshgrid(np.linspace(.062, .233, EDGE), np.linspace(.14, .49, EDGE), indexing="ij")
+    massif = map_coordinates(source, ((source.shape[0] - 1) * alpine_z, (source.shape[1] - 1) * alpine_x), order=3)
+    ridge_detail = gaussian_filter(massif, 1.15) - gaussian_filter(massif, 8.5)
+    frost = 50 + np.maximum(massif * 0.72 + ridge_detail * 1.16, 0)
+    world_z, world_x = np.meshgrid(np.arange(EDGE) * 24 - 6200, np.arange(EDGE) * 24 - 6250, indexing="ij")
+    along = 5250 - world_z
+    centre = 11450 - along * .15 + np.sin(along / 810) * 105
+    bank = np.clip((1060 - np.abs(world_x - centre)) / 760, 0, 1)
+    approach = np.clip((along + 1600) / 970, 0, 1) * np.clip((5600 - along) / 1900, 0, 1)
+    floor = 190 + np.maximum(massif, 0) * .14 + ridge_detail * .20
+    frost -= np.maximum(frost - floor, 0) * (bank * bank * (3 - 2 * bank)) * approach
+    (OUTPUT / "frost.height").write_bytes(gzip.compress(np.rint(frost * 4).astype("<i2").tobytes(), mtime=0))
+    relief_colors(frost, "frost")
     return ground
+
+
+def relief_colors(ground, name):
+    # Align this map to the clipmap lattice, using one sample every 24 meters.
+    axes = np.arange(EDGE) * 24 - 6144
+    x, z = np.meshgrid(axes, axes)
+    height = map_coordinates(ground, ((z + 6200) / 24, (x + 6250) / 24), order=1, mode="nearest")
+    shoulder = gaussian_filter(height, 5.1)
+    cut = gaussian_filter(height, 1.25) - shoulder
+    dz, dx = np.gradient(gaussian_filter(height, 1.25), 24)
+    slope = np.clip(np.hypot(dx, dz), 0, 1)
+    stratum = .5 + .5 * np.sin(height * .050 + gaussian_filter(height, 14) * .035 + (x - z * .61) * .0018)
+    crest = np.clip((height - 85) / 215, 0, 1) * np.clip(cut / 33 + .42, 0, 1)
+    crease = np.clip(-cut / 26, 0, 1)
+    sea_cliff = np.clip((height - 5) / 34, 0, 1) * np.clip((140 - height) / 90, 0, 1)
+    neutral = .945 - crease * .19 - slope * (.085 + stratum * .095) + crest * .071
+    color = np.stack((neutral - crest * .05, neutral - sea_cliff * .023, neutral + crest * .049 - sea_cliff * .095), axis=-1)
+    if name == "frost":
+        # Broad rock exposures sit on steep faces and concave gullies. Broad slopes hold snow.
+        exposed = np.clip((slope + crease * .42 + (stratum - .5) * .17 - .16) / .45, 0, 1)
+        exposed = (exposed * exposed * (3 - 2 * exposed))[..., None]
+        powder = np.array((.98, .99, 1.0)) * (1.0 - crease * .105)[..., None]
+        schist = np.array((.37, .45, .56)) * (.88 + stratum * .24)[..., None]
+        color = powder + (schist - powder) * exposed
+    boundary = np.minimum.reduce((x + 6144, 18432 - x, z + 6144, 18432 - z))
+    weight = (np.clip((boundary - 1536) / 1700, 0, 1) * np.clip(height / 16, 0, 1))[..., None]
+    rgb = 1 + (color - 1) * weight
+    rgba = np.concatenate((rgb, np.full_like(height[..., None], .5)), axis=-1)
+    pixels = np.rint(np.clip(rgba, 0, 1) * 255).astype(np.uint8)
+    Image.fromarray(pixels).save(OUTPUT / f"{name}-color.png", optimize=True)
 
 
 def hangar_ridges(ground):
@@ -123,6 +171,13 @@ def pack_surfaces():
                 alpha = Image.open(source).convert("L")
             texture.putalpha(alpha.resize(texture.size, Image.Resampling.LANCZOS))
             texture.save(OUTPUT / f"{kind}-{'height' if color else 'rough'}.webp", lossless=True, method=5)
+            if kind == "sand" and color:
+                # Powdered gravel gives the snowfield a granular profile without adding a normal map.
+                gray = np.array(texture.convert("L").resize((512, 512), Image.Resampling.LANCZOS), dtype=np.float32)
+                snow = (.72 + gray / 255 * .25)[..., None] * np.array((.96, .982, 1.0))
+                powder = Image.fromarray(np.rint(snow * 255).astype(np.uint8)).convert("RGBA")
+                powder.putalpha(alpha.resize(powder.size, Image.Resampling.LANCZOS))
+                powder.resize(texture.size, Image.Resampling.LANCZOS).save(OUTPUT / "snow-height.webp", lossless=True, method=5)
 
 
 OUTPUT.mkdir(parents=True, exist_ok=True)

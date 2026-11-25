@@ -15,9 +15,9 @@ const LOWLAND = preload("res://assets/environment/sand-height.webp")
 const NORMAL_ROCK = preload("res://assets/environment/rock-rough.webp")
 const NORMAL_LOWLAND = preload("res://assets/environment/sand-rough.webp")
 const ATMOSPHERE = preload("res://assets/environment/air-scattering.png")
-const FIELD_DATA := "res://assets/environment/bay.height"
 const PANORAMA_RANGE := 2.34
-static var relief_ready := false
+const FIELDS := {413:"bay", 704:"frost"}
+static var relief_ready := {}
 
 const DENSITY = preload("res://assets/surface/cloud-density.png")
 
@@ -35,6 +35,7 @@ var stream_clock := 0.0
 var completed_tiles: Dictionary = {}
 var neutral_control: Image
 var neutral_color: Image
+var relief_color: Image
 var prefetch_centre := Vector2i.MAX
 var candidate_tiles: Array[Vector2i] = []
 var coast_job: Thread
@@ -59,7 +60,9 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	climate = theatre
 	coast_enabled = DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
-	prepare_relief()
+	prepare_relief(seed_value)
+	if FIELDS.has(seed_value):
+		relief_color = (load("res://assets/environment/%s-color.png" % FIELDS[seed_value]) as Texture2D).get_image()
 	flight_environment = add_environment(self, theatre)
 	cloud_material = flight_environment.sky.sky_material
 	rider = Node3D.new()
@@ -80,10 +83,17 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	terrain.material.set_dual_scaling_enabled(false)
 	terrain.material.set_shader_param("blend_sharpness", 0.26)
 	terrain.material.texture_filtering = Terrain3DMaterial.LINEAR_ANISOTROPIC
-	terrain.assets.set_texture_asset(0, _surface("砂砾地表", Color("#b2c1ce") if theatre.snow else Color("#b3b9a8"), 0.14, LOWLAND, NORMAL_LOWLAND))
-	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#bbc4ce") if theatre.snow else Color("#a6aaa5"), 0.155, ROCK, NORMAL_ROCK))
-	terrain.material.set_shader_param("auto_base_texture", 0)
-	terrain.material.set_shader_param("auto_overlay_texture", 1)
+	var snow: bool = theatre.snow
+	var coast := seed_value == 413
+	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
+	terrain.assets.set_texture_asset(0, _surface("积雪" if snow else "砂砾地表", Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")), 0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45))
+	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#a8b6ca") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.155, ROCK, NORMAL_ROCK))
+	# Terrain3D's automatic overlay weight rises on flatter surfaces. Alpine rock exposure is baked.
+	terrain.material.set_shader_param("auto_base_texture", 1 if coast else 0)
+	terrain.material.set_shader_param("auto_overlay_texture", 0 if snow or coast else 1)
+	if coast:
+		terrain.material.set_shader_param("auto_slope", 2.7)
+		terrain.material.set_shader_param("auto_height_reduction", 0.026)
 	terrain.set_clipmap_target(rider)
 	for coord in opening_tiles(start):
 		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else bake_tile(coord, seed_value)
@@ -94,26 +104,26 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	_make_sea()
 	_make_runway()
 
-static func prepare_relief() -> void:
-	if relief_ready:
+static func prepare_relief(seed_id: int) -> void:
+	if relief_ready.has(seed_id) or not FIELDS.has(seed_id):
 		return
-	relief_ready = true
 	const BYTES := 1025 * 1025 * 2
-	var elevations := FileAccess.get_file_as_bytes(FIELD_DATA).decompress(BYTES, FileAccess.COMPRESSION_GZIP)
+	var elevations := FileAccess.get_file_as_bytes("res://assets/environment/%s.height" % FIELDS[seed_id]).decompress(BYTES, FileAccess.COMPRESSION_GZIP)
 	if elevations.size() == BYTES:
-		ClassDB.class_call_static("SkyTerrainKernel", "load_relief", elevations, elevations.size())
+		ClassDB.class_call_static("SkyTerrainKernel", "load_relief", elevations, elevations.size(), seed_id)
+		relief_ready[seed_id] = true
 
 static func add_environment(host: Node3D, theatre: Dictionary, studio := false) -> Environment:
 	var storm: bool = int(theatre.seed) == 116
 	var daylight: bool = theatre.snow
-	var light := Color(1.0, 0.81, 0.65) if studio else Color(1.0, 0.94, 0.86)
+	var light := Color(1.0, 0.81, 0.65) if studio else (Color(1.0, 0.956, 0.88) if daylight else Color(1.0, 0.87, 0.73))
 	if storm:
 		light = Color(0.76, 0.83, 0.95)
-	var air := Color("#91a8bf") if daylight else (Color("#788eaa") if storm else Color("#9babc1"))
-	var bearing := Vector3(-0.65, 0.72, -0.24).normalized()
+	var air := Color("#9eb9d2") if daylight else (Color("#788eaa") if storm else Color("#849cb5"))
+	var bearing := Vector3(-0.88, 0.31, -0.36).normalized()
 	var photo_sun := 0.595
 	if daylight:
-		bearing = Vector3(-0.39, 0.744, -0.558).normalized()
+		bearing = Vector3(-0.74, 0.59, 0.33).normalized()
 		photo_sun = 0.595
 	elif storm:
 		bearing = Vector3(0.50, 0.218, -0.84).normalized()
@@ -146,7 +156,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 		env.sky.sky_material = panorama
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_sky_contribution = 0.83
-	env.ambient_light_energy = 0.82 if studio else 0.76
+	env.ambient_light_energy = 0.82 if studio else (0.70 if daylight else 0.78)
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.97 if studio else 1.02
 	env.fog_enabled = not studio
@@ -157,7 +167,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	host.add_child(env_node)
 	var sun := DirectionalLight3D.new()
 	sun.light_color = light
-	sun.light_energy = (0.78 if storm else 1.21) if not studio else 1.18
+	sun.light_energy = (0.78 if storm else 1.34) if not studio else 1.18
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 160.0 if studio else 450.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -171,7 +181,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 		fill.rotation_degrees = Vector3(-31, -42, 0)
 	return env
 
-func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D) -> Terrain3DTextureAsset:
+func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D, normal_strength := 0.45) -> Terrain3DTextureAsset:
 	var asset := Terrain3DTextureAsset.new()
 	asset.set_asset_name(label)
 	asset.set_albedo_texture(albedo)
@@ -180,7 +190,7 @@ func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2
 	asset.set_uv_scale(texture_scale)
 	asset.set_detiling_rotation(0.0)
 	asset.set_detiling_shift(0.0)
-	asset.set_normal_depth(0.45)
+	asset.set_normal_depth(normal_strength)
 	return asset
 
 static func bake_tile(coord: Vector2i, seed_id: int) -> PackedFloat32Array:
@@ -236,6 +246,7 @@ func _make_sea() -> void:
 	ocean = Ocean.new()
 	add_child(ocean)
 	ocean.setup(climate)
+	ocean.material.set_shader_parameter("air_color", flight_environment.fog_light_color)
 	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
 
 func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
@@ -251,6 +262,13 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 		region.sanitize_maps()
 		neutral_control = region.control_map
 		neutral_color = region.color_map
+	if relief_color:
+		const SAMPLES := SIZE / 4
+		var source := Rect2i(coord * SAMPLES + Vector2i(255, 255), Vector2i.ONE * (SAMPLES + 2))
+		if Rect2i(Vector2i.ZERO, relief_color.get_size()).encloses(source):
+			var colors := relief_color.get_region(source)
+			colors.resize(SIZE + 8, SIZE + 8, Image.INTERPOLATE_BILINEAR)
+			region.color_map = colors.get_region(Rect2i(2, 2, SIZE, SIZE))
 	region.calc_height_range()
 	terrain.data.add_region(region, false)
 	current[coord] = region

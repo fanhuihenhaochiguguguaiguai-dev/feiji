@@ -32,6 +32,8 @@ var player: Airframe
 var fleet: Array[Airframe] = []
 var target: Airframe
 var locked_time := 0.0
+var queued_missile_target: Airframe
+var queued_missile_life := -1
 var seek_due := 0.0
 var target_lost_until := 0.0
 var launched_from_runway := false
@@ -383,9 +385,11 @@ func _targeting(dt: float) -> void:
 			if align < cos(LOCK_ANGLE * (1.25 if held else 1.0)):
 				continue
 			var rank := align * 2.7 - distance / 6300.0 + (0.28 if held else 0.0)
-			if rank > score and not world.obstruction(player.position, jet.position):
+			if (rank > score or (held and was_locked)) and not world.obstruction(player.position, jet.position):
 				score = rank
 				best = jet
+				if held and was_locked:
+					break
 		if best != target:
 			if target and not best:
 				target_lost_until = time + 0.48
@@ -416,6 +420,9 @@ func set_weapon_trigger(weapon: String, pressed: bool) -> void:
 	action[weapon] = pressed
 	if pressed:
 		action[weapon + "_queued"] = time + 0.19
+		if weapon == "missile":
+			queued_missile_target = target if is_locked() else null
+			queued_missile_life = queued_missile_target.life_id if queued_missile_target else -1
 
 func _trigger_held(weapon: String, key: Key) -> bool:
 	return bool(action.get(weapon, false)) or time <= float(action.get(weapon + "_queued", -1.0)) or Input.is_physical_key_pressed(key)
@@ -424,6 +431,7 @@ func _reset_player_spawn() -> void:
 	camera_fresh = true
 	target = null
 	locked_time = 0.0
+	queued_missile_target = null
 	target_lost_until = 0.0
 	countered_until = 0.0
 	boost_until = 0.0
@@ -504,8 +512,13 @@ func _update_player(dt: float) -> void:
 		action.erase("gun_queued")
 		_fire(player, false, target)
 	if _trigger_held("missile", KEY_F) and time >= player.missile_at:
-		action.erase("missile_queued")
-		_fire(player, true, target if is_locked() else null)
+		var intended := target if is_locked() else null
+		if time <= float(action.get("missile_queued", -1.0)) and queued_missile_target:
+			if queued_missile_target.hp > 0.0 and queued_missile_target.life_id == queued_missile_life:
+				intended = queued_missile_target
+		if _fire(player, true, intended):
+			action.erase("missile_queued")
+			queued_missile_target = null
 	if mode == "training" and task.lesson == "flight" and time >= 15.0 and miles >= 320.0 and not player.grounded:
 		finish(true)
 
@@ -560,7 +573,7 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 		velocity = n * float(gun[1]) + originator.velocity * 0.60
 		power = gun[3] * originator.type.gunPower * (damage_modifiers.x if originator == player else 0.6)
 		originator.shot_at = time + (float(gun[0]) if originator == player else 0.30)
-		effects.puff(start + n * 3.0, n * 130.0, 0.65, 0.11, 2)
+		effects.puff(start + n * 1.8, n * 22.0, 1.35, 0.09, 1)
 	else:
 		if intended and originator == player and start.distance_squared_to(intended.position) > 420.0 * 420.0:
 			# Clear the side of the airframe on launch, then settle into autonomous tracking.
@@ -631,8 +644,9 @@ func _update_shots(dt: float) -> void:
 				cast.trail.append(at)
 				if cast.trail.size() > 62:
 					cast.trail.pop_front()
-				if cast.age < 0.35:
-					effects.puff(at, -direction * 12.0, 0.73, 0.56, 1)
+				if cast.sample_count == 1:
+					effects.puff(at - direction * 2.1, -direction * 18.0, 1.8, 0.15, 1)
+					effects.puff(at - direction * 4.0, -direction * 14.0, 2.6, 0.82, 0, 0.62)
 		elif not guided:
 			velocity.y -= 9.81 * dt
 		var toward := at + velocity * dt
@@ -665,7 +679,7 @@ func _update_shots(dt: float) -> void:
 		cast.velocity = velocity
 		cast.nose = direction
 		if guided:
-			effects.move_projectile(int(cast.slot), toward, direction)
+			effects.move_projectile(int(cast.slot), toward, direction, cast.age > MISSILE_ARM_TIME)
 	if warning and not warning_before:
 		audio.play_at("warn", player.position)
 

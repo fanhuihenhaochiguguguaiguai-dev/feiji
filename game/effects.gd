@@ -9,7 +9,7 @@ const SMOKE = preload("res://assets/surface/soot.webp")
 const SPARK = preload("res://assets/surface/spark.webp")
 
 const MISSILE_VISUALS := 28
-const RIBBON_SPAN := 2.35
+const RIBBON_SPAN := 3.1
 var missile_visuals := {}
 var missile_pool: Array[MeshInstance3D] = []
 var tracers := MultiMesh.new()
@@ -136,6 +136,8 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	var tint := Color(1.0, 0.66, 0.36, opacity) if fire else (Color(1.0, 0.86, 0.57, opacity) if spark else Color(0.68, 0.74, 0.8, opacity))
 	if kind == 4:
 		tint = Color(0.33, 0.36, 0.39, opacity)
+	elif kind == 5:
+		tint = Color(0.19, 0.17, 0.16, opacity)
 	item.node.position = at
 	item.node.scale = Vector3.ONE * size
 	item.node.visible = true
@@ -179,10 +181,13 @@ func impact(at: Vector3, power: int, water := false) -> void:
 	var radius := [3.0, 12.0, 24.0][clampi(power, 0, 2)] as float
 	for i in count:
 		var flow := Vector3(randf_range(-1, 1), randf_range(0.12, 1), randf_range(-1, 1)) * radius
-		var kind := 3 if water else (2 if power == 0 else (1 if i < ceili(count * 0.48) else 0))
-		puff(at + flow * 0.27, flow * (3.1 if power == 0 else 0.73), radius * randf_range(0.24, 0.68), randf_range(0.24, 0.55) if kind == 2 else randf_range(0.7, 1.9), kind)
+		var kind := 3 if water else (2 if power == 0 else (1 if i < ceili(count * 0.38) else 5))
+		var span := randf_range(0.24, 0.55) if kind == 2 else (randf_range(0.35, 0.65) if kind == 1 else randf_range(1.25, 2.3))
+		puff(at + flow * 0.27, flow * (3.1 if power == 0 else 0.73), radius * randf_range(0.29, 0.73), span, kind)
 	if power == 0:
 		return
+	if not water:
+		puff(at, Vector3.UP * 3.0, radius * 0.72, 0.19, 1)
 	for layer in (3 if power == 2 else 2):
 		var item := impacts[impact_slot]
 		active_impacts[impact_slot] = true
@@ -200,9 +205,9 @@ func impact(at: Vector3, power: int, water := false) -> void:
 
 func _prepare_projectiles() -> void:
 	var beam := CylinderMesh.new()
-	beam.top_radius = 0.035
-	beam.bottom_radius = 0.105
-	beam.height = 16.0
+	beam.top_radius = 0.072
+	beam.bottom_radius = 0.15
+	beam.height = 29.0
 	beam.radial_segments = 5
 	beam.rings = 0
 	beam.material = tracer
@@ -225,11 +230,24 @@ func _prepare_projectiles() -> void:
 	material.metallic = 0.56
 	material.roughness = 0.28
 	body.material = material
+	var flame := CylinderMesh.new()
+	flame.top_radius = 0.19
+	flame.bottom_radius = 0.02
+	flame.height = 4.7
+	flame.radial_segments = 5
+	flame.rings = 0
+	flame.material = emissive(Color("#ffc36b"), 7.0)
 	for i in MISSILE_VISUALS:
 		var shell := MeshInstance3D.new()
 		shell.mesh = body
 		shell.visible = false
 		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var plume := MeshInstance3D.new()
+		plume.mesh = flame
+		plume.position.y = -4.1
+		plume.visible = false
+		plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		shell.add_child(plume)
 		add_child(shell)
 		missile_pool.append(shell)
 
@@ -278,11 +296,12 @@ func projectile(slot: int, at: Vector3, direction: Vector3, missile: bool) -> vo
 	mesh.visible = true
 	move_projectile(slot, at, direction)
 
-func move_projectile(slot: int, at: Vector3, direction: Vector3) -> void:
+func move_projectile(slot: int, at: Vector3, direction: Vector3, lit := false) -> void:
 	var body: MeshInstance3D = missile_visuals.get(slot)
 	if body:
 		body.position = at
 		body.quaternion = Quaternion(Vector3.UP, direction)
+		body.get_child(0).visible = lit
 
 func release_projectile(slot: int, points: Array, sample_count: int) -> void:
 	var body: MeshInstance3D = missile_visuals.get(slot)
@@ -412,9 +431,9 @@ func _draw_ribbon(points: Array, eye: Vector3, samples: int, settled: float, tip
 		var spread := smoothstep(0.02, 1.65, age)
 		var shift := Vector3(sin(phase), 0.2 + billow, cos(phase * 0.68))
 		point += shift * spread * (0.62 + settled * 0.88)
-		var width := 0.24 + (1.65 + billow * 1.82) * spread + settled * (0.58 + billow * 0.39)
+		var width := 0.51 + (3.10 + billow * 2.1) * spread + settled * (0.73 + billow * 0.46)
 		var trim := side * width
-		var alpha := opacity * smoothstep(0.0, minf(8.0, float(rows - 1)), float(i)) * (0.65 - spread * 0.35 + billow * 0.1)
+		var alpha := opacity * smoothstep(0.0, minf(8.0, float(rows - 1)), float(i)) * (0.84 - spread * 0.42 + billow * 0.13)
 		if i > 0:
 			var previous_phase := phase - 0.22
 			_ribbon_point(previous - previous_trim, previous_phase, 0.0, previous_alpha)
