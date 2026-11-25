@@ -94,7 +94,9 @@ def relief_colors(ground, name):
         exposed = (exposed * exposed * (3 - 2 * exposed))[..., None]
         fluting = np.clip(cut / 24, -.8, .8)
         powder = np.array((.98, .99, 1.0)) * (.98 - crease * .15 + fluting * .03 - occlusion * .29)[..., None]
-        schist = np.array((.48, .47, .46)) * (.73 + stratum * .34 + fluting * .12 - occlusion * .36)[..., None]
+        # Terrain3D multiplies this map with the scan's albedo. Keep the rock tint
+        # near neutral so the same albedo is not applied twice in shadow.
+        schist = np.array((.89, .88, .87)) * (.82 + stratum * .17 + fluting * .09 - occlusion * .19)[..., None]
         color = powder + (schist - powder) * exposed
     boundary = np.minimum.reduce((x + 6144, 18432 - x, z + 6144, 18432 - z))
     weight = (np.clip((boundary - 1536) / 1700, 0, 1) * np.clip(height / 16, 0, 1))[..., None]

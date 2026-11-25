@@ -87,7 +87,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var coast := seed_value == 413
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
 	terrain.assets.set_texture_asset(0, _surface("积雪" if snow else "砂砾地表", Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")), 0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45))
-	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#a8b6ca") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.155, ROCK, NORMAL_ROCK))
+	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.155, ROCK, NORMAL_ROCK))
 	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
 	var exposed_rock := coast or snow
 	terrain.material.set_shader_param("auto_base_texture", 1 if exposed_rock else 0)
