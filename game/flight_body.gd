@@ -83,7 +83,7 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	ai_avoidance = Vector3.ZERO
 	target = null
 
-func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool, evading := false, reversing := false) -> void:
+func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool, evading := false) -> void:
 	previous_attitude = attitude
 	var speed := velocity.length()
 	var up := attitude * Vector3.UP
@@ -102,7 +102,7 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	if not evading:
 		var assist := 1.0 - smoothstep(0.015, 0.16, absf(input.x))
 		target_rate.x = target_rate.x * 0.75 - clampf(slope * 1.9 + velocity.y / (type.trim * 8.0), -0.6, 0.6) * assist
-		target_rate.y *= 1.0 if reversing else 0.8
+		target_rate.y *= 0.8
 		var bank_goal := -input.y * MAX_BANK * (0.60 + 0.40 * control)
 		bank_goal += (damage.y - damage.x) * 0.12 * absf(input.y)
 		target_rate.z = clampf((bank_goal - bank) * 2.85, -1.47, 1.47)
