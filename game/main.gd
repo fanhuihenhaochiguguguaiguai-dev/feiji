@@ -519,6 +519,7 @@ func _process(delta: float) -> void:
 			fixture_stage = 2
 			var f := FileAccess.open(capture_dir + "/desktop-run.json", FileAccess.WRITE)
 			f.store_string(JSON.stringify({"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"mode":current_battle.mode,"aircraft_slots":current_battle.fleet.size(),"first_wave_alive":current_battle.alive_enemies(),"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
+			current_battle.paused = true
 			current_battle.audio.stop_all()
 			for i in range(3):
 				await get_tree().process_frame
