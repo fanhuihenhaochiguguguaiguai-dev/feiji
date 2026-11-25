@@ -14,6 +14,9 @@ var cadence := 0.055
 var origin := Vector2.ZERO
 var wake := Vector4(0, 0, 1, 0)
 var wake_strength := 0.0
+var wake_sent := Vector4.ZERO
+var strength_sent := 0.0
+var shallows: ImageTexture
 
 func setup(windy: bool) -> void:
 	mesh = CLIPMAP
@@ -66,6 +69,14 @@ func _start_spectrum() -> void:
 func set_quality(scale_value: float) -> void:
 	cadence = 0.095 if scale_value < 0.74 else 0.055
 
+func set_shallows(tile: Image, corner: Vector2, size_m: float) -> void:
+	if shallows:
+		shallows.update(tile)
+	else:
+		shallows = ImageTexture.create_from_image(tile)
+		material.set_shader_parameter("coast_depth", shallows)
+	material.set_shader_parameter("coast_area", Vector4(corner.x, corner.y, 1.0 / size_m, 1.0))
+
 func track(chase: Vector3, offset: Vector2, velocity: Vector3, wake_active: bool) -> void:
 	var snapped := (Vector2(chase.x, chase.z) / 8.0).floor() * 8.0
 	if position.x != snapped.x or position.z != snapped.y:
@@ -78,8 +89,12 @@ func track(chase: Vector3, offset: Vector2, velocity: Vector3, wake_active: bool
 	wake_strength = (1.0 - smoothstep(5.0, 32.0, chase.y)) * smoothstep(28.0, 110.0, velocity.length()) if wake_active else 0.0
 
 func _process(dt: float) -> void:
-	material.set_shader_parameter("wake", wake)
-	material.set_shader_parameter("wake_strength", wake_strength)
+	if wake_strength > 0.0 and not wake_sent.is_equal_approx(wake):
+		wake_sent = wake
+		material.set_shader_parameter("wake", wake)
+	if not is_equal_approx(strength_sent, wake_strength):
+		strength_sent = wake_strength
+		material.set_shader_parameter("wake_strength", wake_strength)
 	if not is_instance_valid(fft):
 		return
 	elapsed += dt

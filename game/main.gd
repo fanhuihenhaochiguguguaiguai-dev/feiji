@@ -6,13 +6,13 @@ const Battle = preload("res://game/battle.gd")
 const Landscape = preload("res://game/world.gd")
 const Hud = preload("res://game/hud.gd")
 const CutButton = preload("res://game/menu_panel.gd")
+const PausePanel = preload("res://game/pause_panel.gd")
 
 var catalogue := Data.new()
 var profile := Profile.new(catalogue)
 var font: Font
 var layer := CanvasLayer.new()
 var view: Control
-var scene_3d: Node3D
 var showcase: Node3D
 var showcase_aircraft: Node3D
 var current_battle: Battle
@@ -31,32 +31,42 @@ var orbit_scale := 1.0
 var orbit_active := false
 var orbit_touches := {}
 var orbit_span := 0.0
+var orbit_emulated_through := -1
+var orbit_display := Vector3(-2.279, 0.105, 1.0)
+var orbit_distance := 27.7
+var preview_id := ""
+var ui_theme := Theme.new()
+var button_styles := {}
+var panel_styles := {}
 var preview_camera: Camera3D
 var active_hud: Control
 var last_operation := {}
 var light_load_label: Label
 var load_meter: ProgressBar
-var capture_dir := ""
-var capture_free := false
-var capture_time := 0.0
-var screenshot_pending := false
-var fixture_stage := 0
-var fixture_marks := []
-var frame_wall_samples := PackedFloat64Array()
-var last_frame_usec := 0
 var loading := false
 var pause_ui: Control
 var adaptive_clock := 0.0
 var frame_average := 0.0
 var slow_windows := 0
 var fast_windows := 0
+var device_power: Object
+var thermal_limited := false
+var cool_windows := 0
 
 func _ready() -> void:
 	font = load("res://assets/locale/PilotSC.otf")
 	if font == null:
 		font = ThemeDB.fallback_font
-	Engine.max_fps = int(profile.state.settings.fps)
-	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
+	if OS.has_feature("android") and Engine.has_singleton("AndroidRuntime"):
+		var version = JavaClassWrapper.wrap("android.os.Build$VERSION")
+		if version and int(version.SDK_INT) >= 29:
+			device_power = Engine.get_singleton("AndroidRuntime").getApplicationContext().getSystemService("power")
+	_apply_settings()
+	ui_theme.default_font = font
+	ui_theme.default_font_size = 17
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var fill := Color("#142c43e8") if state == "normal" else (Color("#101a27d0") if state == "disabled" else Color("#244e69ee"))
+		button_styles[state] = _box_style(fill, Color("#57839ca8"), 2)
 	add_child(layer)
 	get_viewport().size_changed.connect(func():
 		if route != "battle":
@@ -64,22 +74,17 @@ func _ready() -> void:
 	viewed_plane = str(profile.state.selected)
 	selected_mission = int(profile.state.campaign)
 	list_chapter = (selected_mission - 1) / 10
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--capture-dir="):
-			capture_dir = arg.trim_prefix("--capture-dir=")
-			DirAccess.make_dir_recursive_absolute(capture_dir)
-		elif arg == "--capture-free":
-			capture_free = true
 	_open("lobby")
 
 func _open(page: String) -> void:
+	_cancel_orbit()
 	route = page
 	note = ""
 	if not is_instance_valid(showcase) and route != "battle":
 		get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
 		_build_showcase()
 	elif is_instance_valid(showcase):
-		showcase.get_viewport().get_camera_3d().current = true
+		preview_camera.make_current()
 	if page in ["lobby", "training", "pilot", "settings", "report"]:
 		viewed_plane = str(profile.state.selected)
 		_set_showcase_aircraft(viewed_plane)
@@ -92,26 +97,25 @@ func _clear_ui() -> void:
 	view = Control.new()
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var theme := Theme.new()
-	theme.default_font = font
-	theme.default_font_size = 17
-	view.theme = theme
+	view.theme = ui_theme
 	layer.add_child(view)
 
-func _rect(nx: float, ny: float, width: float, height: float) -> Rect2:
-	return Rect2(get_viewport().get_visible_rect().size * Vector2(nx, ny), Vector2(width, height))
+static func _box_style(fill: Color, edge: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = edge
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	return style
 
 func _panel(area: Rect2, color: Color = Color("#0d2033d9")) -> Panel:
 	var p := Panel.new()
 	p.position = area.position
 	p.size = area.size
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_border_width_all(1)
-	style.border_color = Color("#63869e71")
-	style.set_corner_radius_all(3)
-	p.add_theme_stylebox_override("panel", style)
+	if not panel_styles.has(color):
+		panel_styles[color] = _box_style(color, Color("#63869e71"), 3)
+	p.add_theme_stylebox_override("panel", panel_styles[color])
 	view.add_child(p)
 	return p
 
@@ -148,13 +152,8 @@ func _button(area: Rect2, text: String, click: Callable, active := true) -> Butt
 	b.disabled = not active
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.pressed.connect(click)
-	for role in ["normal", "hover", "pressed", "disabled"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("#142c43e8") if role == "normal" else (Color("#244e69ee") if role != "disabled" else Color("#101a27d0"))
-		style.border_color = Color("#57839ca8")
-		style.set_border_width_all(1)
-		style.set_corner_radius_all(2)
-		b.add_theme_stylebox_override(role, style)
+	for role in button_styles:
+		b.add_theme_stylebox_override(role, button_styles[role])
 	view.add_child(b)
 	return b
 
@@ -252,12 +251,10 @@ func _render_menu() -> void:
 		"settings":
 			_panel(Rect2(sidebar, Vector2(box_w, 388)))
 			_text(sidebar + Vector2(19, 11), "飞行设置", 26)
-			var fps := int(profile.state.settings.fps)
-			_button(Rect2(sidebar + Vector2(20, 68), Vector2(375, 44)), "帧率目标   %d 帧/秒" % fps, _set_setting.bind("fps", 90 if fps == 60 else 60))
-			var scale := float(profile.state.settings.quality)
-			_button(Rect2(sidebar + Vector2(20, 126), Vector2(375, 44)), "三维渲染精度   %d%%" % roundi(scale * 100.0), _set_setting.bind("quality", 1.0 if scale < 0.95 and scale > 0.75 else (0.7 if scale > 0.95 else 0.85)))
-			_button(Rect2(sidebar + Vector2(20, 184), Vector2(375, 44)), "反转垂直操控   %s" % ("开启" if profile.state.settings.invert else "关闭"), _set_setting.bind("invert", not profile.state.settings.invert))
-			_button(Rect2(sidebar + Vector2(20, 242), Vector2(375, 44)), "声音   %s" % ("关闭" if profile.state.settings.mute else "开启"), _set_setting.bind("mute", not profile.state.settings.mute))
+			var i := 0
+			for item in _setting_items(true):
+				_button(Rect2(sidebar + Vector2(20, 68 + i * 58), Vector2(375, 44)), item[0], _set_setting.bind(item[1], item[2]))
+				i += 1
 	if not note.is_empty():
 		_text(Vector2(size.x - 416, size.y - 29), note, 15, Color("#f2d18e"))
 
@@ -269,7 +266,7 @@ func _aircraft_details(sidebar: Vector2, width: float, viewport_size: Vector2) -
 	var owned: bool = viewed_plane in profile.state.unlocked
 	if not panel_mods or not owned:
 		_text(sidebar + Vector2(21, 105), "翼展 %.1f 米   ·   机长 %.1f 米\n最高速度 %d 公里/时\n机体耐久 %d" % [spec.span, spec.length, spec.maxSpeed * 3.6, spec.durability], 18)
-		var selection := "已选择" if viewed_plane == profile.state.selected else ("选择战机" if owned else "未解锁 · 1150 信用点")
+		var selection := "已选择" if viewed_plane == profile.state.selected else ("选择战机" if owned else ("未解锁 · %d 信用点" % Data.AIRCRAFT_PRICE))
 		_button(Rect2(sidebar + Vector2(21, 227), Vector2(190, 40)), selection, _select_plane, viewed_plane != profile.state.selected)
 		if owned and viewed_plane == profile.state.selected:
 			_button(Rect2(sidebar + Vector2(226, 227), Vector2(165, 40)), "进入改装", _toggle_mods)
@@ -279,16 +276,17 @@ func _aircraft_details(sidebar: Vector2, width: float, viewport_size: Vector2) -
 		for part in Data.UPGRADE_LABELS:
 			var rank := profile.level_of(part)
 			var gain: float = Data.UPGRADE_GAINS[part]
-			var level_text := "%d → %d" % [rank, mini(3, rank + 1)]
+			var level_text := "%d → %d" % [rank, mini(Data.UPGRADE_LIMIT, rank + 1)]
 			var delta_text := "+%d 米" % int(gain) if part == "radar" else "+%s%%" % snappedf(gain * 100.0, 0.1)
-			var caption := "%s %s\n%s · %d 信用点" % [Data.UPGRADE_LABELS[part], level_text, delta_text, 560 + rank * 360]
-			_button(Rect2(sidebar + Vector2(17 + (index % 2) * 199, 87 + (index / 2) * 47), Vector2(191, 43)), caption, _upgrade.bind(part), rank < 3)
+			var caption := "%s %s\n%s · %d 信用点" % [Data.UPGRADE_LABELS[part], level_text, delta_text, Data.upgrade_price(rank)]
+			_button(Rect2(sidebar + Vector2(17 + (index % 2) * 199, 87 + (index / 2) * 47), Vector2(191, 43)), caption, _upgrade.bind(part), rank < Data.UPGRADE_LIMIT)
 			index += 1
 		index = 0
+		var mounted := profile.selected_weapon()
 		for id in Data.MISSILES:
 			var item: Dictionary = Data.MISSILES[id]
-			var status := "已挂载" if profile.selected_weapon(catalogue) == id else ("挂载" if profile.state.inventory.has(id) else "%d 信用点" % int(item.price))
-			_button(Rect2(sidebar + Vector2(18, 232 + index * 36), Vector2(388, 32)), "%s · %s · %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(spec, id) and profile.selected_weapon(catalogue) != id)
+			var status := "已挂载" if mounted == id else ("挂载" if profile.state.inventory.has(id) else "%d 信用点" % int(item.price))
+			_button(Rect2(sidebar + Vector2(18, 232 + index * 36), Vector2(388, 32)), "%s · %s · %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(spec, id) and mounted != id)
 			index += 1
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(201, viewport_size.y - 97.0)
@@ -339,12 +337,31 @@ func _show_free_report(at: Vector2, viewport_size: Vector2) -> void:
 			_text(Vector2(left + col_width - 51.0, y), str(int(row.deaths)), 17)
 	_button(Rect2(at.x + width - 224.0, viewport_size.y - 77.0, 197.0, 41), "返回大厅", _open.bind("lobby"))
 
+func _setting_items(lobby: bool) -> Array:
+	var current: Dictionary = profile.state.settings
+	var result := [["帧率目标 · %d 帧/秒" % current.fps, "fps", 90 if current.fps == 60 else 60]]
+	if lobby:
+		var scale: float = current.quality
+		result.append(["三维渲染精度 · %d%%" % roundi(scale * 100.0), "quality", 1.0 if scale < 0.95 and scale > 0.75 else (0.7 if scale > 0.95 else 0.85)])
+	result.append_array([
+		["反转垂直操控 · %s" % ("开启" if current.invert else "关闭"), "invert", not current.invert],
+		["声音 · %s" % ("关闭" if current.mute else "开启"), "mute", not current.mute]])
+	return result
+
+func _apply_settings() -> void:
+	Engine.max_fps = mini(int(profile.state.settings.fps), 60) if thermal_limited else int(profile.state.settings.fps)
+	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
+	if is_instance_valid(current_battle):
+		current_battle.audio.mute = profile.state.settings.mute
+
 func _set_setting(key: String, value: Variant) -> void:
 	if not profile.set_option(key, value):
 		note = "设置保存失败"
-	Engine.max_fps = int(profile.state.settings.fps)
-	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
-	_render_menu()
+	_apply_settings()
+	if is_instance_valid(pause_ui):
+		_pause_panel("settings")
+	else:
+		_render_menu()
 
 func _toggle_takeoff() -> void:
 	takeoff = not takeoff
@@ -421,20 +438,23 @@ func _build_showcase() -> void:
 	lamps.emission_enabled = true
 	lamps.emission = Color("#ffb87e")
 	lamps.emission_energy_multiplier = 4.5
+	var lens := SphereMesh.new()
+	lens.radius = 0.18
+	lens.height = 0.36
+	lens.radial_segments = 8
+	lens.rings = 4
+	lens.material = lamps
 	for i in 14:
 		var inst := MeshInstance3D.new()
-		var lens := SphereMesh.new()
-		lens.radius = 0.18
-		lens.height = 0.36
-		lens.radial_segments = 8
-		lens.rings = 4
-		lens.material = lamps
 		inst.mesh = lens
 		inst.position = at + Vector3(4 + i * 4.1, 0.27, -27.0)
 		showcase.add_child(inst)
 	_set_showcase_aircraft(str(profile.state.selected))
 
 func _set_showcase_aircraft(id: String) -> void:
+	if id == preview_id and showcase_aircraft.get_child_count() > 0:
+		return
+	preview_id = id
 	for child in showcase_aircraft.get_children():
 		showcase_aircraft.remove_child(child)
 		child.queue_free()
@@ -443,7 +463,7 @@ func _set_showcase_aircraft(id: String) -> void:
 	showcase_aircraft.add_child(plane)
 	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
 	showcase_aircraft.position.y = Landscape.APRON_HEIGHT + maxf(0.8, spec.gearClearance)
-	showcase_aircraft.rotation.y = 0.0
+	orbit_distance = 27.7 * clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
 	_tick_orbit(0.0, true)
 
 func _start_campaign(n: int) -> void:
@@ -464,6 +484,7 @@ func _restart_last() -> void:
 func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	if loading:
 		return
+	_cancel_orbit()
 	loading = true
 	last_operation = {"mode":mode, "task":operation, "runway":runway}
 	_show_loading(str(operation.name))
@@ -489,6 +510,11 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	current_battle.paused = true
 	load_meter.value = load_meter.max_value
 	light_load_label.text = "准备完成"
+	if DisplayServer.get_name() != "headless":
+		var camera := current_battle.camera
+		current_battle.effects.prime(camera.position - camera.global_basis.z * 13.0)
+		await RenderingServer.frame_post_draw
+		current_battle.effects.end_prime(camera)
 	await get_tree().process_frame
 	var fade := create_tween()
 	fade.tween_property(view, "modulate:a", 0.0, 0.23)
@@ -543,7 +569,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 	for id in ids:
 		if catalogue.scenes.has(id) or requests.has(id):
 			continue
-		var path := "res://assets/fleet/%s.glb" % id
+		var path := Data.mesh_path(id)
 		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
 			return {}
 		requests[id] = path
@@ -595,43 +621,31 @@ func _pause_panel(page: String) -> void:
 	if is_instance_valid(pause_ui):
 		view.remove_child(pause_ui)
 		pause_ui.queue_free()
-	pause_ui = Control.new()
-	pause_ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	pause_ui.mouse_filter = Control.MOUSE_FILTER_STOP
-	view.add_child(pause_ui)
-	var flight_view := view
-	view = pause_ui
-	var centre := get_viewport().get_visible_rect().size * 0.5
-	var top := centre - Vector2(176, 154)
-	_panel(Rect2(top, Vector2(352, 308)), Color("#0b1729f5"))
-	var title := "战斗暂停" if page == "pause" else ("飞行设置" if page == "settings" else "退出本局")
-	_text(top + Vector2(28, 15), title, 26, Color("#ecd4a6"))
+	var panel := PausePanel.new()
+	pause_ui = panel
+	panel.typeface = font
+	panel.header = "战斗暂停" if page == "pause" else ("飞行设置" if page == "settings" else "退出本局")
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	view.add_child(panel)
 	match page:
 		"pause":
-			_button(Rect2(top + Vector2(28, 60), Vector2(296, 35)), "继续飞行", _resume)
-			_button(Rect2(top + Vector2(28, 106), Vector2(143, 35)), "重新开始", _restart_last)
-			_button(Rect2(top + Vector2(181, 106), Vector2(143, 35)), "飞行设置", _pause_panel.bind("settings"))
-			_button(Rect2(top + Vector2(28, 152), Vector2(296, 35)), "收放起落架", func():
+			panel.action(Rect2(41, 106, 482, 49), "继续飞行", "continue", _resume, true)
+			panel.action(Rect2(41, 169, 231, 45), "重新开始", "restart", _restart_last)
+			panel.action(Rect2(292, 169, 231, 45), "飞行设置", "settings", _pause_panel.bind("settings"))
+			panel.action(Rect2(41, 230, 482, 46), "收放起落架", "gear", func():
 				_resume()
 				current_battle.action.gear = true)
-			_button(Rect2(top + Vector2(28, 218), Vector2(296, 35)), "退出本局", _pause_panel.bind("leave"))
+			panel.action(Rect2(41, 292, 482, 46), "退出本局", "leave", _pause_panel.bind("leave"))
 		"settings":
-			var fps := int(profile.state.settings.fps)
-			_button(Rect2(top + Vector2(28, 62), Vector2(296, 36)), "帧率目标 · %d 帧/秒" % fps, _pause_option.bind("fps", 90 if fps == 60 else 60))
-			_button(Rect2(top + Vector2(28, 108), Vector2(296, 36)), "反转垂直操控 · %s" % ("开启" if profile.state.settings.invert else "关闭"), _pause_option.bind("invert", not profile.state.settings.invert))
-			_button(Rect2(top + Vector2(28, 154), Vector2(296, 36)), "声音 · %s" % ("关闭" if profile.state.settings.mute else "开启"), _pause_option.bind("mute", not profile.state.settings.mute))
-			_button(Rect2(top + Vector2(28, 218), Vector2(296, 35)), "返回暂停", _pause_panel.bind("pause"))
+			var i := 0
+			for item in _setting_items(false):
+				panel.action(Rect2(41, 106 + i * 59, 482, 45), item[0], "", _set_setting.bind(item[1], item[2]))
+				i += 1
+			panel.action(Rect2(41, 289, 482, 45), "返回暂停", "", _pause_panel.bind("pause"))
 		"leave":
-			_text(top + Vector2(28, 76), "退出后返回大厅，本局不结算奖励。", 17, Color("#c4d4e1"))
-			_button(Rect2(top + Vector2(28, 188), Vector2(143, 39)), "取消", _pause_panel.bind("pause"))
-			_button(Rect2(top + Vector2(181, 188), Vector2(143, 39)), "确认退出", _abort_battle)
-	view = flight_view
-
-func _pause_option(key: String, value: Variant) -> void:
-	profile.set_option(key, value)
-	Engine.max_fps = int(profile.state.settings.fps)
-	current_battle.audio.mute = profile.state.settings.mute
-	_pause_panel("settings")
+			panel.notice = "退出后返回大厅，本局不结算奖励。"
+			panel.action(Rect2(41, 228, 231, 46), "取消", "", _pause_panel.bind("pause"))
+			panel.action(Rect2(292, 228, 231, 46), "确认退出", "leave", _abort_battle)
 
 func _resume() -> void:
 	if is_instance_valid(active_hud):
@@ -653,131 +667,130 @@ func _close_battle() -> void:
 
 func _battle_finished(result: Dictionary) -> void:
 	debrief = result
-	if capture_dir.is_empty():
-		profile.debrief(result)
+	profile.debrief(result)
 	_close_battle()
 	_open("report")
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_cancel_orbit()
 	if what == NOTIFICATION_APPLICATION_PAUSED and is_instance_valid(active_hud) and is_instance_valid(current_battle) and not current_battle.paused:
 		active_hud.input_actions.pause.pressed.emit()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.physical_keycode == KEY_ESCAPE and event.pressed and not event.echo and is_instance_valid(pause_ui):
+		_resume()
+		get_viewport().set_input_as_handled()
+		return
 	if route not in ["lobby", "hangar"] or loading or not is_instance_valid(showcase_aircraft):
 		return
-	var area := Rect2(191.0, 74.0, 620.0, 395.0)
 	if event is InputEventScreenTouch:
-		if event.pressed and area.has_point(event.position):
+		if event.pressed and not event.canceled:
+			if orbit_touches.is_empty() and not _orbit_clear(event.position):
+				return
 			orbit_touches[event.index] = event.position
-		else:
-			orbit_touches.erase(event.index)
-		orbit_span = 0.0
+		elif not orbit_touches.erase(event.index):
+			return
+		orbit_span = _pinch_span()
+		orbit_emulated_through = Engine.get_process_frames() + 1
+		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and orbit_touches.has(event.index):
+		var previous: Vector2 = orbit_touches[event.index]
 		orbit_touches[event.index] = event.position
-		if orbit_touches.size() == 2:
-			var fingers := orbit_touches.values()
-			var gap: float = fingers[0].distance_to(fingers[1])
+		if orbit_touches.size() > 1:
+			var gap := _pinch_span()
 			if orbit_span > 6.0 and gap > 6.0:
 				orbit_scale = clampf(orbit_scale * orbit_span / gap, 0.55, 1.7)
 			orbit_span = gap
 		else:
-			_orbit_drag(event.relative)
+			_orbit_drag(event.position - previous)
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.device != InputEvent.DEVICE_ID_EMULATION:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			orbit_active = event.pressed and area.has_point(event.position)
-		elif event.pressed and area.has_point(event.position) and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-			orbit_scale = clampf(orbit_scale * (0.88 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.13), 0.55, 1.7)
-	elif event is InputEventMouseMotion and orbit_active and event.device != InputEvent.DEVICE_ID_EMULATION:
-		_orbit_drag(event.relative)
+	elif event is InputEventMouse:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			if not orbit_touches.is_empty() or Engine.get_process_frames() <= orbit_emulated_through:
+				get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				var was_active := orbit_active
+				orbit_active = event.pressed and _orbit_clear(event.position)
+				if was_active or orbit_active:
+					get_viewport().set_input_as_handled()
+			elif event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _orbit_clear(event.position):
+				orbit_scale = clampf(orbit_scale * (0.88 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.13), 0.55, 1.7)
+				get_viewport().set_input_as_handled()
+		elif event is InputEventMouseMotion and orbit_active:
+			_orbit_drag(event.relative)
+			get_viewport().set_input_as_handled()
+
+func _orbit_clear(at: Vector2) -> bool:
+	for control in view.get_children():
+		if (control is Panel or control is BaseButton or control is ScrollContainer or control is CutButton) and control.visible and control.get_global_rect().has_point(at):
+			return false
+	return true
+
+func _cancel_orbit() -> void:
+	orbit_active = false
+	orbit_touches.clear()
+	orbit_span = 0.0
+
+func _pinch_span() -> float:
+	if orbit_touches.size() < 2:
+		return 0.0
+	var fingers := orbit_touches.values()
+	return fingers[0].distance_to(fingers[1])
 
 func _orbit_drag(relative: Vector2) -> void:
 	orbit_spin = wrapf(orbit_spin - relative.x * 0.005, -PI, PI)
-	orbit_tilt = clampf(orbit_tilt + relative.y * 0.004, 0.025, 0.91)
+	orbit_tilt = clampf(orbit_tilt + relative.y * 0.004, -0.08, 0.91)
 
 func _tick_orbit(delta: float, snap := false) -> void:
 	if not is_instance_valid(preview_camera) or not is_instance_valid(showcase_aircraft):
 		return
-	var spec := catalogue.aircraft(viewed_plane)
-	var frame := clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
-	var distance := 27.7 * frame * orbit_scale
-	var target_point := showcase_aircraft.position + Vector3(0, 1.1, 0)
-	var offset := Vector3(sin(orbit_spin) * cos(orbit_tilt), sin(orbit_tilt), cos(orbit_spin) * cos(orbit_tilt)) * distance
-	var at := target_point + offset
 	var alpha := 1.0 if snap else (1.0 - exp(-delta * 10.0))
-	preview_camera.position = preview_camera.position.lerp(at, alpha)
+	orbit_display.x = lerp_angle(orbit_display.x, orbit_spin, alpha)
+	orbit_display.y = lerpf(orbit_display.y, orbit_tilt, alpha)
+	orbit_display.z = lerpf(orbit_display.z, orbit_scale, alpha)
+	var target_point := showcase_aircraft.position + Vector3(0, 1.1, 0)
+	var tilt := orbit_display.y
+	var spin := orbit_display.x
+	var offset := Vector3(sin(spin) * cos(tilt), sin(tilt), cos(spin) * cos(tilt)) * orbit_distance * orbit_display.z
+	var at := target_point + offset
+	at.y = maxf(at.y, Landscape.APRON_HEIGHT + 0.85)
+	preview_camera.position = at
 	preview_camera.look_at(target_point, Vector3.UP)
 
 func _process(delta: float) -> void:
 	if route in ["lobby", "hangar"] and not loading:
 		_tick_orbit(delta)
-	if capture_dir.is_empty():
-		if OS.has_feature("android") and is_instance_valid(current_battle):
-			_adapt_resolution(delta)
-		return
-	capture_time += delta
-	if fixture_stage == 0 and capture_time > 1.15:
-		fixture_stage = 1
-		await _snapshot("lobby")
-		if capture_free:
-			_start_free()
-		else:
-			_start_campaign(1)
-	elif fixture_stage == 1 and is_instance_valid(current_battle) and current_battle.ready_for_play:
-		var t: float = current_battle.time
-		var wall := Time.get_ticks_usec()
-		if last_frame_usec != 0 and t >= 0.25:
-			frame_wall_samples.append((wall - last_frame_usec) / 1000.0)
-		last_frame_usec = wall
-		current_battle.action.gun = t > 0.8 and t < 4.2
-		current_battle.action.missile = t > 1.1 and t < 3.6
-		if t > 3.1 and t < 3.7:
-			current_battle.action.boost = true
-		if t > 4.0 and t < 5.1:
-			current_battle.stick = Vector2(-0.50, 0.20)
-		if t > 0.37 and not "combat-entry" in fixture_marks:
-			fixture_marks.append("combat-entry")
-			_snapshot("combat-entry")
-		if t > 1.43 and not "battle" in fixture_marks:
-			fixture_marks.append("battle")
-			_snapshot("battle")
-		if t > 4.60 and not "maneuver" in fixture_marks:
-			fixture_marks.append("maneuver")
-			_snapshot("maneuver")
-		if t > (3.4 if capture_free else 7.5):
-			fixture_stage = 2
-			var f := FileAccess.open(capture_dir + "/desktop-run.json", FileAccess.WRITE)
-			frame_wall_samples.sort()
-			var mean := 0.0
-			for sample in frame_wall_samples:
-				mean += sample
-			mean /= maxf(1.0, float(frame_wall_samples.size()))
-			var tail_ms := 0.0
-			var tail_count := maxi(1, ceili(frame_wall_samples.size() * 0.01))
-			for i in range(maxi(0, frame_wall_samples.size() - tail_count), frame_wall_samples.size()):
-				tail_ms += frame_wall_samples[i] / tail_count
-			f.store_string(JSON.stringify({"movie_frame_ms_mean":mean,"movie_fps_one_percent_low":1000.0 / maxf(0.001, tail_ms),"ocean_fft":current_battle.world.ocean.material.get_shader_parameter("spectral_enabled"),"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"mode":current_battle.mode,"aircraft_slots":current_battle.fleet.size(),"first_wave_alive":current_battle.alive_enemies(),"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
-			current_battle.paused = true
-			current_battle.audio.stop_all()
-			for i in range(3):
-				await get_tree().process_frame
-			get_tree().quit()
-
-func _snapshot(name: String) -> void:
-	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(capture_dir + "/" + name + ".png")
+	if OS.has_feature("android") and is_instance_valid(current_battle):
+		_adapt_resolution(delta)
 
 func _adapt_resolution(dt: float) -> void:
-	if current_battle.paused or dt > 0.25:
+	if current_battle.paused:
 		return
+	dt = minf(dt, 0.25)
 	frame_average = lerpf(frame_average, dt, 1.0 - exp(-dt * 2.2))
 	adaptive_clock += dt
 	if adaptive_clock < 1.8:
 		return
 	adaptive_clock = 0.0
-	var budget := 1.0 / float(profile.state.settings.fps)
+	if device_power:
+		var status := int(device_power.getCurrentThermalStatus())
+		cool_windows = cool_windows + 1 if status <= 1 else 0
+		if status >= 3:
+			thermal_limited = true
+		elif cool_windows >= 8:
+			thermal_limited = false
+		var selected := int(profile.state.settings.fps)
+		var target := mini(60, selected) if thermal_limited else selected
+		if Engine.max_fps != target:
+			Engine.max_fps = target
+	var budget := 1.0 / float(Engine.max_fps)
 	var viewport := get_viewport()
 	var configured := float(profile.state.settings.quality)
+	if thermal_limited:
+		configured = minf(0.79, configured)
 	var scale := viewport.scaling_3d_scale
 	slow_windows = slow_windows + 1 if frame_average > budget * 1.19 else 0
 	fast_windows = fast_windows + 1 if frame_average < budget * 0.91 else 0
@@ -787,6 +800,7 @@ func _adapt_resolution(dt: float) -> void:
 	elif fast_windows >= 4:
 		scale = minf(configured, scale + 0.04)
 		fast_windows = 0
+	scale = minf(scale, configured)
 	if not is_equal_approx(scale, viewport.scaling_3d_scale):
 		viewport.scaling_3d_scale = scale
 		current_battle.world.set_quality(scale)

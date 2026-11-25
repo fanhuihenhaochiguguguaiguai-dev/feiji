@@ -18,7 +18,10 @@
 godot --headless --editor --import
 godot --headless --script res://qa/smoke.gd
 godot --headless --script res://qa/v182.gd
+godot --headless --script res://qa/refinement.gd
+godot --headless --script res://qa/campaign.gd
+godot --headless --script res://qa/missile.gd
 godot --headless --script res://qa/endurance.gd -- --matches=3
 ```
 
-桌面录制可用 `--rendering-method mobile --rendering-driver vulkan --write-movie out.avi --fixed-fps 20 -- --capture-dir=/absolute/output --capture-free`。记录中的硬件、帧时间与测试边界见 [替换记录](MIGRATION.md)。
+桌面录制可用 `--rendering-method mobile --rendering-driver vulkan --write-movie out.avi --fixed-fps 30 --script res://qa/desktop.gd -- --output=/absolute/output --pause`。记录中的硬件、帧时间与测试边界见 [替换记录](MIGRATION.md)。

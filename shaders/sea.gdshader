@@ -7,6 +7,8 @@ uniform float wake_strength = 0.0;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
 uniform vec4 scatter_color : source_color = vec4(0.067, 0.204, 0.224, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D coast_depth : repeat_disable, filter_linear;
+uniform vec4 coast_area = vec4(0.0);
 uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
 uniform sampler2DArray spectral_normals : repeat_enable, filter_linear;
 uniform bool spectral_enabled = false;
@@ -64,11 +66,22 @@ void fragment() {
 	float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
 	float wake_line = exp(-max(along, 0.0)*0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
 	foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
+	float shallows = 0.0;
+	if (coast_area.w > 0.5 && distance_m < 2200.0) {
+		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
+		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
+		if (edge > 0.0) {
+			float sea_floor = texture(coast_depth, shore_uv).r * 63.75 - 32.0;
+			shallows = smoothstep(-23.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * smoothstep(0.0, 0.11, edge);
+			float breaker = 0.5 + 0.5 * sin(sea_floor * 0.72 + TIME * 1.55 + fine.x * 12.0);
+			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
+		}
+	}
 	float zenith_blend = pow(grazing, 3.5);
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = normalize((VIEW_MATRIX * vec4(normal_world, 0.0)).xyz);
-	ALBEDO = mix(mix(deep.rgb, scatter_color.rgb, smoothstep(-0.15, 1.45, water_point.y) * 0.36), vec3(0.44, 0.62, 0.64), clamp(foam, 0.0, 0.80));
-	ROUGHNESS = mix(0.22 + zenith_blend * 0.05, 0.55, foam);
-	METALLIC = 0.09;
-	SPECULAR = 0.37 + 0.23 * zenith_blend;
+	ALBEDO = mix(mix(deep.rgb, scatter_color.rgb, smoothstep(-0.15, 1.45, water_point.y) * 0.36 + shallows * 0.37), vec3(0.44, 0.62, 0.64), clamp(foam, 0.0, 0.80));
+	ROUGHNESS = mix(0.28 + zenith_blend * 0.065, 0.55, foam);
+	METALLIC = 0.025;
+	SPECULAR = 0.29 + 0.19 * zenith_blend;
 }

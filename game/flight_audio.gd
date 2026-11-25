@@ -5,7 +5,8 @@ const PRIORITY := {"gun":1.0,"scrape":2.0,"missile":3.0,"water":3.0,"blast":4.0,
 var last_cue := {}
 
 var cues := {}
-var voices: Array[AudioStreamPlayer3D] = []
+var available: Array[AudioStreamPlayer3D] = []
+var speaking := {}
 var motor: AudioStreamPlayer
 var wind: AudioStreamPlayer
 var mute := false
@@ -13,7 +14,7 @@ var mute := false
 func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	for kind in ["gun", "missile", "blast", "scrape", "fracture", "water", "counter", "lock", "warn", "wave", "victory"]:
+	for kind in PRIORITY:
 		cues[kind] = load("res://assets/audio/%s.wav" % kind)
 	for i in 18:
 		var emitter := AudioStreamPlayer3D.new()
@@ -21,7 +22,8 @@ func _ready() -> void:
 		emitter.unit_size = 170.0
 		emitter.max_db = -6
 		add_child(emitter)
-		voices.append(emitter)
+		emitter.finished.connect(_release.bind(emitter))
+		available.append(emitter)
 	motor = _ambience(preload("res://assets/audio/engine.wav"))
 	wind = _ambience(preload("res://assets/audio/wind.wav"))
 
@@ -50,7 +52,7 @@ func engine(dt: float, throttle: float, speed: float, boost: float, propeller: b
 	wind.pitch_scale = clampf((280.0 + speed * 3.1) / 740.0, 0.4, 2.5)
 
 func play_at(cue: String, at: Vector3) -> void:
-	if mute or voices.is_empty() or not cues.has(cue):
+	if mute or not cues.has(cue):
 		return
 	var now := Time.get_ticks_msec()
 	var gap := 420 if cue in ["warn", "lock", "wave"] else (38 if cue == "gun" else 70)
@@ -62,33 +64,37 @@ func play_at(cue: String, at: Vector3) -> void:
 		return
 	var rating: float = float(PRIORITY.get(cue, 1.0)) - distance / 5200.0
 	var channel: AudioStreamPlayer3D
-	var lowest: AudioStreamPlayer3D
-	var low_rating := INF
-	for emitter in voices:
-		if not emitter.playing:
-			channel = emitter
-			break
-		var weight: float = emitter.get_meta("rating", 0.0)
-		if weight < low_rating:
-			low_rating = weight
-			lowest = emitter
-	if not channel and rating > low_rating + 0.45:
-		channel = lowest
-	if not channel:
-		return
-	if channel.playing:
+	if not available.is_empty():
+		channel = available.pop_back()
+	else:
+		var threshold := rating - 0.45
+		for emitter in speaking:
+			if speaking[emitter] < threshold:
+				channel = emitter
+				threshold = speaking[emitter]
+		if not channel:
+			return
 		channel.stop()
-	channel.set_meta("rating", rating)
+	speaking[channel] = rating
 	channel.global_position = at
 	channel.stream = cues[cue]
 	channel.pitch_scale = randf_range(0.92, 1.08) if cue in ["gun", "blast", "scrape"] else 1.0
 	last_cue[cue] = now
 	channel.play()
 
-func stop_all() -> void:
-	for emitter in voices:
-		emitter.stop()
+func _release(emitter: AudioStreamPlayer3D) -> void:
+	if speaking.erase(emitter):
 		emitter.stream = null
+		available.append(emitter)
+
+func rebase(delta: Vector3) -> void:
+	for emitter in speaking:
+		emitter.position -= delta
+
+func stop_all() -> void:
+	for emitter in speaking.keys():
+		emitter.stop()
+		_release(emitter)
 	for player in [motor, wind]:
 		if player:
 			player.stop()

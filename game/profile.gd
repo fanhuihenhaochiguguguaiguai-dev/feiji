@@ -4,6 +4,8 @@ const Data = preload("res://game/catalogue.gd")
 const SLOT = "user://pilot-v18.2.json"
 const SCHEMA := 182
 const MODES := ["campaign", "training", "free"]
+const DAILY_REWARDS = [["daily-sortie", "sorties", 1, 150, ""], ["daily-kills", "kills", 3, 280, ""]]
+const LEVEL_GIFTS = {4:"air-mirage", 6:"flarewing", 8:"air-hornet", 12:"air-su35"}
 const REWARDS = [
 	["first", "sorties", 1, 400, ""],
 	["first-win", "victories", 1, 0, "flarewing"],
@@ -137,8 +139,8 @@ func upgrade(part: String) -> String:
 		return "改装项目不可用"
 	var key: String = state.selected + ":" + part
 	var old: int = int(state.improvements.get(key, 0))
-	var price := 560 + old * 360
-	if old >= 3:
+	var price := Data.upgrade_price(old)
+	if old >= Data.UPGRADE_LIMIT:
 		return "已达最高等级"
 	if state.credits < price:
 		return "信用点不足"
@@ -157,10 +159,10 @@ func select_plane(id: String) -> String:
 	var required: int = Data.UNLOCK_LEVELS.get(id, 1)
 	if Data.level(int(state.xp)) < required:
 		return "飞行员达到等级 %d 后解锁" % required
-	if state.credits < 1150:
-		return "需要 1150 信用点"
-	state.credits -= 1150
-	state.unlocked.append(id)
+	if state.credits < Data.AIRCRAFT_PRICE:
+		return "需要 %d 信用点" % Data.AIRCRAFT_PRICE
+	state.credits -= Data.AIRCRAFT_PRICE
+	_grant("air-" + id)
 	state.selected = id
 	return "战机已解锁" if _commit(before) else "存档写入失败"
 
@@ -182,9 +184,10 @@ func equip(weapon_id: String) -> String:
 func level_of(part: String, id: String = "") -> int:
 	return int(state.improvements.get((state.selected if id.is_empty() else id) + ":" + part, 0))
 
-func selected_weapon(catalogue: RefCounted) -> String:
-	var id: String = state.loadouts.get(state.selected, {}).get("missile", "interceptor")
-	if Data.MISSILES.has(id) and catalogue.missile_compatible(catalogue.aircraft(state.selected), id):
+func selected_weapon() -> String:
+	var saved: Variant = state.loadouts.get(state.selected)
+	var id: String = str(saved.get("missile", "interceptor")) if saved is Dictionary else str(saved)
+	if Data.MISSILES.has(id) and aircraft_data.missile_compatible(aircraft_data.aircraft(state.selected), id):
 		return id
 	return "interceptor"
 
@@ -242,11 +245,7 @@ func debrief(result: Dictionary) -> bool:
 	var level_now := Data.level(int(state.xp))
 	for next in range(int(state.rewardedLevel) + 1, level_now + 1):
 		state.credits += 160 + next * 36
-		var unlocked: String = {4:"mirage", 8:"hornet", 12:"su35"}.get(next, "")
-		if not unlocked.is_empty() and unlocked not in state.unlocked:
-			state.unlocked.append(unlocked)
-		if next == 6:
-			state.inventory.flarewing = 1
+		_grant(LEVEL_GIFTS.get(next, ""))
 	state.rewardedLevel = maxi(int(state.rewardedLevel), level_now)
 	var reward_credits := _award_sortie_rewards(result) if eligible and mode != "training" else 0
 	result["automatic_reward"] = reward_credits
@@ -261,28 +260,29 @@ func debrief(result: Dictionary) -> bool:
 	return committed
 
 func _award_sortie_rewards(result: Dictionary) -> int:
-	var given := 0
 	var date := Time.get_date_dict_from_system()
 	var day := "%d-%d-%d" % [date.year, date.month, date.day]
 	if state.daily.get("day") != day:
 		state.daily = {"day":day, "sorties":0, "kills":0, "claimed":[]}
 	state.daily.sorties += 1
 	state.daily.kills += result.kills
-	for daily in [["daily-sortie","sorties",1,150], ["daily-kills","kills",3,280]]:
-		if daily[0] not in state.daily.claimed and state.daily[daily[1]] >= daily[2]:
-			state.daily.claimed.append(daily[0])
-			given += int(daily[3])
-	for reward in REWARDS:
-		if reward[0] in state.claimed or state[reward[1]] < reward[2]:
-			continue
-		state.claimed.append(reward[0])
-		given += int(reward[3])
-		var item: String = reward[4]
-		if item.begins_with("air-"):
-			item = item.trim_prefix("air-")
-			if item not in state.unlocked:
-				state.unlocked.append(item)
-		elif not item.is_empty():
-			state.inventory[item] = maxi(1, int(state.inventory.get(item, 0)))
+	var given := _claim_rewards(DAILY_REWARDS, state.daily) + _claim_rewards(REWARDS, state)
 	state.credits += given
 	return given
+
+func _claim_rewards(rules: Array, ledger: Dictionary) -> int:
+	var given := 0
+	for rule in rules:
+		if rule[0] not in ledger.claimed and ledger[rule[1]] >= rule[2]:
+			ledger.claimed.append(rule[0])
+			given += int(rule[3])
+			_grant(rule[4])
+	return given
+
+func _grant(item: String) -> void:
+	if item.begins_with("air-"):
+		var aircraft := item.trim_prefix("air-")
+		if aircraft not in state.unlocked:
+			state.unlocked.append(aircraft)
+	elif not item.is_empty():
+		state.inventory[item] = maxi(1, int(state.inventory.get(item, 0)))

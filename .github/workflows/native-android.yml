@@ -57,6 +57,9 @@ jobs:
           godot --headless --editor --import
           godot --headless --script res://qa/smoke.gd
           godot --headless --script res://qa/v182.gd
+          godot --headless --script res://qa/refinement.gd
+          godot --headless --script res://qa/campaign.gd
+          godot --headless --script res://qa/missile.gd
       - name: Gradle export and signature verification
         env:
           SKYBLADE_ANDROID_KEYSTORE_B64: ${{ secrets.SKYBLADE_ANDROID_KEYSTORE_B64 }}

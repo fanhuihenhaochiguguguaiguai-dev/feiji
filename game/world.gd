@@ -28,6 +28,14 @@ var jobs: Dictionary = {}
 var target := Vector2i.ZERO
 var stream_clock := 0.0
 var completed_tiles: Dictionary = {}
+var neutral_control: Image
+var neutral_color: Image
+var prefetch_centre := Vector2i.MAX
+var candidate_tiles: Array[Vector2i] = []
+var coast_job: Thread
+var coast_cell := Vector2i.MAX
+var coast_corner := Vector2.ZERO
+var coast_enabled := false
 var cloud_material: ShaderMaterial
 var flight_environment: Environment
 
@@ -44,6 +52,7 @@ func local_position(absolute_position: Vector3) -> Vector3:
 
 func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase := false, prepared := {}) -> void:
 	climate = theatre
+	coast_enabled = not showcase and DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
 	_add_environment(showcase)
 	rider = Node3D.new()
@@ -163,7 +172,7 @@ func cell(local_point: Vector3) -> Vector2i:
 func height(local_point: Vector3) -> float:
 	if is_runway(local_point):
 		return 26.2
-	if terrain and terrain.data.has_region(cell(local_point) - origin):
+	if terrain:
 		var loaded: float = terrain.data.get_height(local_point)
 		if is_finite(loaded):
 			return loaded
@@ -215,7 +224,13 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 	region.vertex_spacing = STEP
 	region.location = coord - origin
 	region.height_map = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, heights.to_byte_array())
-	region.sanitize_maps()
+	if neutral_control:
+		region.control_map = neutral_control
+		region.color_map = neutral_color
+	else:
+		region.sanitize_maps()
+		neutral_control = region.control_map
+		neutral_color = region.color_map
 	region.calc_height_range()
 	terrain.data.add_region(region, false)
 	current[coord] = region
@@ -251,11 +266,41 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	if stream_clock >= STREAM_INTERVAL:
 		stream_clock = 0.0
 		_publish_and_prefetch(here)
+		if coast_enabled:
+			_update_shallows(rider.position)
 		var low := 640.0 if seed_value == 116 else 1150.0
 		var high := low + (1180.0 if seed_value == 116 else 780.0)
 		var in_cloud := smoothstep(low, low + 170.0, p.y) * (1.0 - smoothstep(high - 215.0, high, p.y))
 		flight_environment.fog_density = 0.000132 + 0.00019 * in_cloud
 	return delta
+
+func _update_shallows(at: Vector3) -> void:
+	const PROBE_SIZE := 64
+	const PROBE_STEP := 24.0
+	const COVERAGE := PROBE_SIZE * PROBE_STEP
+	if coast_job and not coast_job.is_alive():
+		var image: Image = coast_job.wait_to_finish()
+		coast_job = null
+		ocean.set_shallows(image, coast_corner, COVERAGE)
+	if coast_job or at.y > 1400.0 or jobs.size() >= MAX_JOBS:
+		return
+	var world_point := Vector2(at.x, at.z) + Vector2(origin) * TILE
+	var next := Vector2i((world_point / 384.0).floor())
+	if next == coast_cell:
+		return
+	coast_corner = Vector2(next) * 384.0 - Vector2.ONE * (COVERAGE * 0.5)
+	var worker := Thread.new()
+	if worker.start(_bake_shallows.bind(coast_corner, PROBE_SIZE, PROBE_STEP, seed_value)) == OK:
+		coast_cell = next
+		coast_job = worker
+
+static func _bake_shallows(corner: Vector2, side: int, step: float, seed_id: int) -> Image:
+	var heights: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "height_tile", corner.x, corner.y, side, step, seed_id)
+	var depth := PackedByteArray()
+	depth.resize(heights.size())
+	for i in heights.size():
+		depth[i] = clampi(roundi((heights[i] + 32.0) * 4.0), 0, 255)
+	return Image.create_from_data(side, side, false, Image.FORMAT_R8, depth)
 
 func set_quality(scale_value: float) -> void:
 	cloud_material.set_shader_parameter("cloud_samples", 5 if scale_value < 0.74 else 7)
@@ -283,16 +328,18 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			published += 1
 			changed = true
 		completed_tiles.erase(coord)
-	var candidates: Array[Vector2i] = []
-	for z in range(-RADIUS, RADIUS + 1):
-		for x in range(-RADIUS, RADIUS + 1):
-			var key := target + Vector2i(x, z)
-			if not current.has(key) and not jobs.has(key) and not completed_tiles.has(key):
-				candidates.append(key)
-	candidates.sort_custom(func(a: Vector2i, b: Vector2i): return (a - target).length_squared() < (b - target).length_squared())
-	for key in candidates:
+	if target != prefetch_centre:
+		prefetch_centre = target
+		candidate_tiles.clear()
+		for z in range(-RADIUS, RADIUS + 1):
+			for x in range(-RADIUS, RADIUS + 1):
+				candidate_tiles.append(target + Vector2i(x, z))
+		candidate_tiles.sort_custom(func(a: Vector2i, b: Vector2i): return (a - target).length_squared() < (b - target).length_squared())
+	for key in candidate_tiles:
 		if jobs.size() + completed_tiles.size() >= MAX_JOBS:
 			break
+		if (key - here).length_squared() > 21 or current.has(key) or jobs.has(key) or completed_tiles.has(key):
+			continue
 		if cache.has(key):
 			completed_tiles[key] = cache[key]
 		else:
@@ -304,7 +351,7 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			terrain.data.remove_regionl(key - origin, false)
 			current.erase(key)
 			changed = true
-	if cache.size() > 56:
+	if changed and cache.size() > 56:
 		var distant: Array = cache.keys()
 		distant.sort_custom(func(a: Vector2i, b: Vector2i): return (a - here).length_squared() > (b - here).length_squared())
 		for key in distant:
@@ -318,3 +365,5 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 func _exit_tree() -> void:
 	for task in jobs.values():
 		task.wait_to_finish()
+	if coast_job:
+		coast_job.wait_to_finish()

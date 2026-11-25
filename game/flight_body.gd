@@ -4,6 +4,10 @@ extends RefCounted
 const LIFT_CURVE := [-0.40, -0.29, -0.16, 0.09, 0.28, 0.47, 0.66, 0.86, 1.04, 1.19, 1.34, 1.46, 1.52, 1.34, 1.05, 0.77, 0.51]
 const DRAG_CURVE := [9.2, 7.1, 5.2, 3.65, 2.32, 1.30, 0.58, 0.15, 0.0, 0.15, 0.58, 1.3, 2.32, 3.65, 5.2, 7.1, 9.2]
 
+const MAX_BANK := deg_to_rad(45.0)
+const MAX_CLIMB := deg_to_rad(35.0)
+const MAX_DIVE := deg_to_rad(30.0)
+
 var type: Dictionary
 var position := Vector3.ZERO
 var previous := Vector3.ZERO
@@ -14,6 +18,7 @@ var previous_attitude := Quaternion.IDENTITY
 var forward := Vector3.FORWARD
 var hp := 0.0
 var max_hp := 0.0
+var hit_extent := Vector3.ONE
 var throttle := 1.0
 var boost := 0.0
 var gear := 0.0
@@ -40,11 +45,10 @@ var evade_at := 0.0
 var evade_side := 1.0
 var counter_at := 0.0
 var counter_until := 0.0
-var counter_age := 0.0
-var ai_state := "intercept"
-var ai_until := 0.0
 var ai_lock := 0.0
 var ai_safe_altitude := -INF
+var ai_safety_at := 0.0
+var ai_avoidance := Vector3.ZERO
 var target: RefCounted
 
 func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runway := false) -> void:
@@ -73,13 +77,13 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	evade_at = 0.0
 	counter_at = 0.0
 	counter_until = 0.0
-	ai_until = 0.0
 	ai_lock = 0.0
 	ai_safe_altitude = -INF
-	ai_state = "intercept"
+	ai_safety_at = 0.0
+	ai_avoidance = Vector3.ZERO
 	target = null
 
-func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool) -> void:
+func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool, evading := false, reversing := false) -> void:
 	previous_attitude = attitude
 	var speed := velocity.length()
 	var up := attitude * Vector3.UP
@@ -89,26 +93,37 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	var input := command.limit_length(1.4)
 	var control := clampf((speed - type.stall * 0.35) / (type.stall * 0.9), 0.21, 1.0)
 	control *= clampf(1.0 - (speed / type.maxSpeed - 0.63) * 0.66, 0.62, 1.0)
-	var correction := Vector3.ZERO
-	if up.y > 0.18:
-		correction.x = clampf(-slope * 0.98 - velocity.y / (type.trim * 10.0), -0.52, 0.52) * (1.0 - clampf(absf(input.x) * 7.0, 0.0, 1.0))
-		correction.z = clampf((input.y * 1.02 - bank) * 3.26, -2.46, 2.46) * (1.0 - clampf(absf(input.z) * 6.0, 0.0, 1.0))
-		correction.y = right.y * 0.40
 	var nose_rate: float = input.x * type.pitch * (0.72 + 0.63 * sqrt(absf(input.x)))
-	if input.x > 0.0 and up.y > 0.0:
-		nose_rate = minf(nose_rate, (1.29 - slope) * 3.7)
 	# Use airspeed and angle of attack to keep full deflection inside the envelope.
 	var load_margin := 1.0 - smoothstep(3.9, 6.1, absf(load_g)) * 0.43
 	nose_rate *= (1.0 - 0.52 * stall) * load_margin
 	var target_rate := Vector3(nose_rate, -input.y * type.yaw * (1.0 + absf(input.y) * 0.65), input.z * type.roll)
 	target_rate *= control * type.grip * handling * lerpf(0.78, 1.0, hp / max_hp)
-	target_rate += correction + Vector3(0.0, 0.0, (damage.y - damage.x) * 0.46)
-	angular = angular.lerp(target_rate, 1.0 - exp(-dt * 8.65 / clampf(0.82 + type.span * type.length / 1150.0, 0.86, 1.64)))
+	if not evading:
+		var assist := 1.0 - smoothstep(0.015, 0.16, absf(input.x))
+		target_rate.x = target_rate.x * 0.75 - clampf(slope * 1.9 + velocity.y / (type.trim * 8.0), -0.6, 0.6) * assist
+		target_rate.y *= 1.0 if reversing else 0.8
+		var bank_goal := -input.y * MAX_BANK * (0.60 + 0.40 * control)
+		bank_goal += (damage.y - damage.x) * 0.12 * absf(input.y)
+		target_rate.z = clampf((bank_goal - bank) * 2.85, -1.47, 1.47)
+		target_rate.x = clampf(target_rate.x, minf(0.0, -MAX_DIVE - slope) * 2.8, maxf(0.0, MAX_CLIMB - slope) * 2.8)
+	var response := 8.65 if evading else 8.65 * 0.8
+	var blend := 1.0 - exp(-dt * response / clampf(0.82 + type.span * type.length / 1150.0, 0.86, 1.64))
+	var limits := Vector3(4.0, 5.5, 8.0) * dt * (1.0 if evading else 0.8)
+	var change := (target_rate - angular) * blend
+	angular += change.clamp(-limits, limits)
 	if grounded:
 		angular *= Vector3(1.0, 0.82, 0.35)
 		angular.x = clampf(angular.x, -0.015, 0.7)
-	if angular.length_squared() > 0.000001:
+	if evading and angular.length_squared() > 0.000001:
 		attitude = (attitude * Quaternion(angular.normalized(), angular.length() * dt)).normalized()
+	elif not evading:
+		var heading := atan2(-forward.x, -forward.z) + angular.y * dt
+		var new_pitch := _envelope_step(slope, angular.x * dt, -MAX_DIVE, MAX_CLIMB, dt)
+		var new_bank := _envelope_step(bank, angular.z * dt, -MAX_BANK, MAX_BANK, dt)
+		angular.x = (new_pitch - slope) / dt
+		angular.z = (new_bank - bank) / dt
+		attitude = Quaternion(Vector3.UP, heading) * Quaternion(Vector3.RIGHT, new_pitch) * Quaternion(Vector3.BACK, new_bank)
 	forward = attitude * Vector3.FORWARD
 	up = attitude * Vector3.UP
 	right = attitude * Vector3.RIGHT
@@ -144,3 +159,9 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 		else:
 			grounded = false
 			velocity.y = maxf(velocity.y, 9.0)
+
+func _envelope_step(angle: float, change: float, minimum: float, maximum: float, dt: float) -> float:
+	if angle < minimum or angle > maximum:
+		# An active dodge can leave the envelope. Walk back without clamping the pose in one tick.
+		return move_toward(angle, clampf(angle, minimum, maximum), maxf(0.65 * dt, absf(change)))
+	return clampf(angle + change, minimum, maximum)

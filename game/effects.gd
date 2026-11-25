@@ -20,8 +20,13 @@ var burst_slot := 0
 var puffs: Array[Dictionary] = []
 var impacts: Array[Dictionary] = []
 var fragments: Array[Dictionary] = []
+var active_puffs := {}
+var active_impacts := {}
+var active_fragments := {}
+var puff_materials: Array[ShaderMaterial] = []
 var debris_cursor := 0
 var pressure_material := ShaderMaterial.new()
+var heat_wake := MeshInstance3D.new()
 var cursor := 0
 var impact_slot := 0
 var tracer: StandardMaterial3D
@@ -52,20 +57,30 @@ func pool() -> void:
 	puff_quad.size = Vector2(2, 2)
 	_prepare_projectiles()
 	_prepare_impacts()
+	for atlas in [SMOKE, FIRE, SPARK]:
+		var material := ShaderMaterial.new()
+		material.shader = PARTICLE
+		material.set_shader_parameter("flipbook", atlas)
+		puff_materials.append(material)
 	for i in 104:
 		var puff := MeshInstance3D.new()
 		puff.mesh = puff_quad
-		var effect_mat := ShaderMaterial.new()
-		effect_mat.shader = PARTICLE
-		puff.material_override = effect_mat
+		puff.material_override = puff_materials[0]
 		puff.visible = false
 		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(puff)
-		puffs.append({"node":puff,"mat":effect_mat,"left":0.0})
+		puffs.append({"node":puff,"kind":0,"left":0.0})
 	var sphere := SphereMesh.new()
 	sphere.radial_segments = 24
 	sphere.rings = 12
 	pressure_material.shader = PRESSURE
+	heat_wake.mesh = sphere
+	var heat := ShaderMaterial.new()
+	heat.shader = preload("res://shaders/heat.gdshader")
+	heat_wake.material_override = heat
+	heat_wake.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	heat_wake.visible = false
+	add_child(heat_wake)
 	for i in 6:
 		var bulb := OmniLight3D.new()
 		bulb.visible = false
@@ -74,6 +89,7 @@ func pool() -> void:
 		add_child(bulb)
 		var wave := MeshInstance3D.new()
 		wave.mesh = sphere
+		wave.material_override = pressure_material
 		wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		wave.visible = false
 		add_child(wave)
@@ -96,6 +112,7 @@ func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D
 	for i in mini(7, surfaces.size()):
 		var surface: MeshInstance3D = surfaces[i]
 		var piece := fragments[debris_cursor]
+		active_fragments[debris_cursor] = true
 		debris_cursor = (debris_cursor + 1) % fragments.size()
 		var spread := Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1))
 		piece.node.mesh = surface.mesh
@@ -111,19 +128,25 @@ func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D
 
 func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacity := 1.0) -> void:
 	var item := puffs[cursor]
+	active_puffs[cursor] = true
 	cursor = (cursor + 1) % puffs.size()
 	var fire := kind == 1
 	var spark := kind == 2
 	var water := kind == 3
 	var tint := Color(1.0, 0.66, 0.36, opacity) if fire else (Color(1.0, 0.86, 0.57, opacity) if spark else Color(0.68, 0.74, 0.8, opacity))
+	if kind == 4:
+		tint = Color(0.33, 0.36, 0.39, opacity)
 	item.node.position = at
 	item.node.scale = Vector3.ONE * size
 	item.node.visible = true
-	item.mat.set_shader_parameter("flipbook", FIRE if fire else (SPARK if spark else SMOKE))
-	item.mat.set_shader_parameter("atlas", fire or spark or kind == 0)
-	item.mat.set_shader_parameter("hidden", float(water))
-	item.mat.set_shader_parameter("tint", tint)
-	item.mat.set_shader_parameter("emission_gain", 5.5 if fire else (6.0 if spark else 0.0))
+	var material := 1 if fire else (2 if spark else 0)
+	if item.kind != material:
+		item.kind = material
+		item.node.material_override = puff_materials[material]
+	item.node.set_instance_shader_parameter("atlas", not water)
+	item.node.set_instance_shader_parameter("hidden", float(water))
+	item.node.set_instance_shader_parameter("tint", tint)
+	item.node.set_instance_shader_parameter("emission_gain", 5.5 if fire else (6.0 if spark else 0.0))
 	item.left = span
 	item.total = span
 	item.uv_shift = randf() * 0.1
@@ -132,6 +155,23 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	item.tint = tint
 	item.fire = fire
 	item.spark = spark
+
+func update_heat(at: Vector3, attitude: Quaternion, visible_now: bool) -> void:
+	heat_wake.visible = visible_now
+	if visible_now:
+		heat_wake.transform = Transform3D(Basis(attitude).scaled_local(Vector3(2.3, 2.0, 8.6)), at)
+
+func prime(at: Vector3) -> void:
+	tracers.set_instance_transform(0, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 0.003), at))
+	tracers.visible_instance_count = 1
+	puff(at, Vector3.ZERO, 0.12, 0.05, 1)
+	update_heat(at, Quaternion.IDENTITY, true)
+	heat_wake.scale = Vector3.ONE * 0.055
+
+func end_prime(camera: Camera3D) -> void:
+	tracers.visible_instance_count = 0
+	heat_wake.visible = false
+	tick(0.10, [], camera)
 
 func impact(at: Vector3, power: int, water := false) -> void:
 	_emit_burst(at, power, water)
@@ -145,12 +185,12 @@ func impact(at: Vector3, power: int, water := false) -> void:
 		return
 	for layer in (3 if power == 2 else 2):
 		var item := impacts[impact_slot]
+		active_impacts[impact_slot] = true
 		impact_slot = (impact_slot + 1) % impacts.size()
 		item.light.position = at
 		item.light.visible = layer == 0
 		item.light.light_energy = 8.0
 		item.wave.position = at
-		item.wave.material_override = pressure_material
 		item.wave.scale = Vector3.ONE
 		item.wave.visible = true
 		item.total = 0.81 + layer * 0.11
@@ -244,7 +284,7 @@ func move_projectile(slot: int, at: Vector3, direction: Vector3) -> void:
 		body.position = at
 		body.quaternion = Quaternion(Vector3.UP, direction)
 
-func release_projectile(slot: int, points: Array) -> void:
+func release_projectile(slot: int, points: Array, sample_count: int) -> void:
 	var body: MeshInstance3D = missile_visuals.get(slot)
 	if body:
 		body.visible = false
@@ -253,12 +293,12 @@ func release_projectile(slot: int, points: Array) -> void:
 	if points.size() >= 2:
 		if spent_ribbons.size() >= 16:
 			spent_ribbons.pop_front()
-		spent_ribbons.append({"points": points, "left":RIBBON_SPAN})
+		spent_ribbons.append({"points": points, "left":RIBBON_SPAN, "samples":sample_count})
 
 func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> void:
 	var visible := 0
 	for shot in shots:
-		if not shot.active or shot.missile:
+		if shot.missile:
 			continue
 		var at: Vector3 = shot.previous.lerp(shot.position, alpha)
 		if at.distance_squared_to(camera.position) > 4350.0 * 4350.0:
@@ -269,37 +309,38 @@ func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> v
 	tracers.visible_instance_count = visible
 
 func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
-	for item in puffs:
-		if item.left <= 0.0:
-			continue
+	var drag := exp(-dt * 1.51)
+	for slot in active_puffs.keys():
+		var item := puffs[slot]
 		item.left -= dt
 		if item.left <= 0.0:
 			item.node.visible = false
+			active_puffs.erase(slot)
 			continue
 		var t: float = 1.0 - item.left / item.total
 		item.node.position += item.vel * dt
-		item.vel *= exp(-dt * 1.51)
+		item.vel *= drag
 		item.node.scale = Vector3.ONE * item.size * (1.0 + t * (0.4 if item.spark else 1.65))
 		var fading: Color = item.tint
 		fading.a *= pow(1.0 - t, 0.9)
-		item.mat.set_shader_parameter("life", t + item.uv_shift)
-		item.mat.set_shader_parameter("tint", fading)
-	for item in impacts:
-		if item.left <= 0.0:
-			continue
+		item.node.set_instance_shader_parameter("life", t + item.uv_shift)
+		item.node.set_instance_shader_parameter("tint", fading)
+	for slot in active_impacts.keys():
+		var item := impacts[slot]
 		item.left -= dt
 		var t := clampf(1.0 - item.left / item.total, 0, 1)
 		item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(t, 0.59))
 		item.wave.set_instance_shader_parameter("amplitude", 0.95 * pow(1.0 - t, 1.28))
-		item.light.light_energy = 7.0 * exp(-t * 13.0)
-		if t > 0.24:
-			item.light.visible = false
+		if item.light.visible:
+			if t > 0.24:
+				item.light.visible = false
+			else:
+				item.light.light_energy = 7.0 * exp(-t * 13.0)
 		if t >= 1.0:
 			item.wave.visible = false
-			item.wave.material_override = null
-	for piece in fragments:
-		if piece.left <= 0.0:
-			continue
+			active_impacts.erase(slot)
+	for slot in active_fragments.keys():
+		var piece := fragments[slot]
 		piece.left -= dt
 		if piece.left <= 0.0 or piece.node.position.y < 0.1:
 			if piece.core and piece.node.position.y < 0.1:
@@ -312,6 +353,7 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 			piece.left = 0.0
 			piece.node.visible = false
 			piece.node.mesh = null
+			active_fragments.erase(slot)
 			continue
 		piece.vel.y -= 9.81 * dt
 		piece.node.position += piece.vel * dt
@@ -331,41 +373,58 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 	ribbon_mesh.clear_surfaces()
 	var active := false
 	for shot in shots:
-		if not shot.active or not shot.missile or shot.trail.size() < 2:
+		if not shot.missile or shot.trail.size() < 2:
 			continue
 		if not active:
 			ribbon_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 			active = true
-		_draw_ribbon(shot.trail, camera.position, 1.0)
+		_draw_ribbon(shot.trail, camera.position, int(shot.sample_count), 0.0, shot.position)
 	for trail in spent_ribbons:
 		if not active:
 			ribbon_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 			active = true
-		_draw_ribbon(trail.points, camera.position, trail.left / RIBBON_SPAN)
+		_draw_ribbon(trail.points, camera.position, int(trail.samples), RIBBON_SPAN - float(trail.left))
 	if active:
 		ribbon_mesh.surface_end()
 
-func _draw_ribbon(points: Array, eye: Vector3, opacity: float) -> void:
-	var length_m := 0.0
-	for i in range(points.size() - 1):
-		var a: Vector3 = points[i]
-		var b: Vector3 = points[i + 1]
-		var axis := (b - a).cross(eye - a).normalized()
-		var begin := i / float(points.size() - 1)
-		var end := (i + 1) / float(points.size() - 1)
-		var spread := 1.0 + (1.0 - opacity) * 1.8
-		var trim_a := axis * lerpf(1.45, 0.24, begin) * spread
-		var trim_b := axis * lerpf(1.45, 0.24, end) * spread
-		var next_length := length_m + a.distance_to(b) / 35.0
-		var alpha_a := lerpf(0.0, 0.63, smoothstep(0.0, 0.35, begin)) * opacity
-		var alpha_b := lerpf(0.0, 0.63, smoothstep(0.0, 0.35, end)) * opacity
-		_ribbon_point(a - trim_a, length_m, 0.0, alpha_a)
-		_ribbon_point(a + trim_a, length_m, 1.0, alpha_a)
-		_ribbon_point(b + trim_b, next_length, 1.0, alpha_b)
-		_ribbon_point(a - trim_a, length_m, 0.0, alpha_a)
-		_ribbon_point(b + trim_b, next_length, 1.0, alpha_b)
-		_ribbon_point(b - trim_b, next_length, 0.0, alpha_b)
-		length_m = next_length
+func _draw_ribbon(points: Array, eye: Vector3, samples: int, settled: float, tip := Vector3.INF) -> void:
+	var has_tip := tip.is_finite()
+	var rows := points.size() + int(has_tip)
+	var previous := Vector3.ZERO
+	var previous_trim := Vector3.ZERO
+	var previous_alpha := 0.0
+	var first := samples - points.size()
+	var opacity := pow(1.0 - settled / RIBBON_SPAN, 1.35)
+	for i in rows:
+		var point: Vector3 = points[i] if i < points.size() else tip
+		var before: Vector3 = points[maxi(0, i - 1)]
+		var after: Vector3 = tip if has_tip and i + 1 >= points.size() else points[mini(i + 1, points.size() - 1)]
+		var tangent := (after - before).normalized()
+		var side := tangent.cross(eye - point).normalized()
+		if side.length_squared() < 0.01:
+			side = previous_trim.normalized() if i > 0 else tangent.cross(Vector3.UP).normalized()
+		elif i > 0 and side.dot(previous_trim) < 0.0:
+			side = -side
+		var phase := float(first + i) * 0.22
+		var age := float(rows - 1 - i) * 0.03 + settled
+		var billow := 0.5 + 0.5 * sin(phase * 1.63 + age * 2.7)
+		var spread := smoothstep(0.02, 1.65, age)
+		var shift := Vector3(sin(phase), 0.2 + billow, cos(phase * 0.68))
+		point += shift * spread * (0.62 + settled * 0.88)
+		var width := 0.24 + (1.65 + billow * 1.82) * spread + settled * (0.58 + billow * 0.39)
+		var trim := side * width
+		var alpha := opacity * smoothstep(0.0, minf(8.0, float(rows - 1)), float(i)) * (0.65 - spread * 0.35 + billow * 0.1)
+		if i > 0:
+			var previous_phase := phase - 0.22
+			_ribbon_point(previous - previous_trim, previous_phase, 0.0, previous_alpha)
+			_ribbon_point(previous + previous_trim, previous_phase, 1.0, previous_alpha)
+			_ribbon_point(point + trim, phase, 1.0, alpha)
+			_ribbon_point(previous - previous_trim, previous_phase, 0.0, previous_alpha)
+			_ribbon_point(point + trim, phase, 1.0, alpha)
+			_ribbon_point(point - trim, phase, 0.0, alpha)
+		previous = point
+		previous_trim = trim
+		previous_alpha = alpha
 
 func _ribbon_point(point: Vector3, along: float, across: float, opacity: float) -> void:
 	ribbon_mesh.surface_set_uv(Vector2(along, across))
@@ -378,13 +437,10 @@ func rebase(delta: Vector3) -> void:
 			trail.points[i] -= delta
 	for body in missile_visuals.values():
 		body.position -= delta
-	for puff_item in puffs:
-		if puff_item.left > 0.0:
-			puff_item.node.position -= delta
-	for piece in fragments:
-		if piece.left > 0.0:
-			piece.node.position -= delta
-	for impact_item in impacts:
-		if impact_item.left > 0.0:
-			impact_item.wave.position -= delta
-			impact_item.light.position -= delta
+	for slot in active_puffs:
+		puffs[slot].node.position -= delta
+	for slot in active_fragments:
+		fragments[slot].node.position -= delta
+	for slot in active_impacts:
+		impacts[slot].wave.position -= delta
+		impacts[slot].light.position -= delta

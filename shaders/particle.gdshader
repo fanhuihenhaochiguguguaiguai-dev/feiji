@@ -2,11 +2,11 @@ shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 uniform sampler2D flipbook : source_color, filter_linear_mipmap;
 uniform sampler2D depth_tex : hint_depth_texture, repeat_disable, filter_nearest;
-uniform float life = 0.0;
-uniform vec4 tint : source_color = vec4(1.0);
-uniform float emission_gain = 0.0;
-uniform float hidden = 0.0;
-uniform bool atlas = false;
+instance uniform float life = 0.0;
+instance uniform vec4 tint : source_color = vec4(1.0);
+instance uniform float emission_gain = 0.0;
+instance uniform float hidden = 0.0;
+instance uniform bool atlas = false;
 varying vec3 camera_position;
 
 void vertex() {
