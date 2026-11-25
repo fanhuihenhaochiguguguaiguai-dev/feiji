@@ -64,5 +64,34 @@ func run() -> void:
 	check(drones == 2 and battle.alive_enemies() == 3, "Chapter 3 squad and drones are incorrect")
 	battle.queue_free()
 	await process_frame
+	var shell: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(shell)
+	await process_frame
+	var start_button: Control
+	var free_button: Control
+	for control in shell.view.get_children():
+		if control.get_script() != preload("res://game/menu_panel.gd"):
+			continue
+		if control.title == "开始战斗":
+			start_button = control
+		elif control.title == "无限空战":
+			free_button = control
+	check(start_button != null and free_button != null, "Lobby is missing a sortie entry")
+	if start_button and free_button:
+		check(free_button.position.y >= start_button.position.y + start_button.size.y,
+			"Unlimited air combat is not underneath the main sortie")
+		var pointer := InputEventMouseButton.new()
+		pointer.button_index = MOUSE_BUTTON_LEFT
+		pointer.position = free_button.size * 0.5
+		pointer.pressed = true
+		free_button._gui_input(pointer)
+		pointer.pressed = false
+		free_button._gui_input(pointer)
+		for i in range(4):
+			await process_frame
+		check(is_instance_valid(shell.current_battle) and shell.current_battle.mode == "free",
+			"The lobby's second sortie button does not launch free combat")
+	shell.queue_free()
+	await process_frame
 	print("Native regression suite. Aircraft: ", catalogue_ids, ", campaign: ", catalogue.source.campaign.size(), ", failures: ", problems.size())
 	quit(0 if problems.is_empty() else 1)

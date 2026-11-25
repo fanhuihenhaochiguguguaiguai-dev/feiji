@@ -318,8 +318,8 @@ func _build_showcase() -> void:
 	var wet := StandardMaterial3D.new()
 	wet.albedo_texture = preload("res://assets/studio/tarmac.webp")
 	wet.albedo_color = Color("#929ba4")
-	wet.metallic = 0.62
-	wet.roughness = 0.32
+	wet.metallic = 0.44
+	wet.roughness = 0.36
 	wet.normal_enabled = true
 	wet.normal_scale = 0.26
 	wet.normal_texture = preload("res://assets/studio/tarmac-normal.png")

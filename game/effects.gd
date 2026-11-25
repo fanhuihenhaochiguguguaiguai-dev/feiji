@@ -10,6 +10,9 @@ var ammo_meshes := {}
 var shell_list: Array[MeshInstance3D] = []
 var puffs: Array[Dictionary] = []
 var impacts: Array[Dictionary] = []
+var fragments: Array[Dictionary] = []
+var debris_cursor := 0
+var pressure_material := ShaderMaterial.new()
 var cursor := 0
 var impact_slot := 0
 var tracer: StandardMaterial3D
@@ -59,8 +62,7 @@ func pool() -> void:
 	var sphere := SphereMesh.new()
 	sphere.radial_segments = 24
 	sphere.rings = 12
-	var pressure := ShaderMaterial.new()
-	pressure.shader = PRESSURE
+	pressure_material.shader = PRESSURE
 	for i in 6:
 		var bulb := OmniLight3D.new()
 		bulb.visible = false
@@ -69,11 +71,40 @@ func pool() -> void:
 		add_child(bulb)
 		var wave := MeshInstance3D.new()
 		wave.mesh = sphere
-		wave.material_override = pressure
 		wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		wave.visible = false
 		add_child(wave)
 		impacts.append({"light":bulb, "wave":wave, "left":0.0, "radius":1.0})
+	var shard := PrismMesh.new()
+	shard.size = Vector3(1.25, 0.18, 0.63)
+	var charred := StandardMaterial3D.new()
+	charred.albedo_color = Color("#3a3d47")
+	charred.metallic = 0.71
+	charred.roughness = 0.57
+	shard.material = charred
+	for i in 48:
+		var fragment := MeshInstance3D.new()
+		fragment.mesh = shard
+		fragment.visible = false
+		fragment.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(fragment)
+		fragments.append({"node":fragment, "left":0.0})
+
+func breakup(at: Vector3, carried_velocity: Vector3, wet: bool) -> void:
+	impact(at, 2, wet)
+	for i in (10 if wet else 16):
+		var piece := fragments[debris_cursor]
+		debris_cursor = (debris_cursor + 1) % fragments.size()
+		var spread := Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1))
+		piece.node.position = at + spread * 2.8
+		piece.node.scale = Vector3.ONE * randf_range(0.35, 2.3)
+		piece.node.rotation = Vector3(randf() * TAU, randf() * TAU, randf() * TAU)
+		piece.node.visible = true
+		piece.left = randf_range(1.7, 4.5)
+		piece.vel = carried_velocity * 0.39 + spread * randf_range(21.0, 72.0)
+		piece.spin = spread * randf_range(3.0, 10.0)
+		piece.smoke = i < 3
+		piece.emit_at = 0.08 * i
 
 func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacity := 1.0) -> void:
 	var item := puffs[cursor]
@@ -115,6 +146,7 @@ func impact(at: Vector3, power: int, water := false) -> void:
 		item.light.visible = layer == 0
 		item.light.light_energy = 8.0
 		item.wave.position = at
+		item.wave.material_override = pressure_material
 		item.wave.scale = Vector3.ONE
 		item.wave.visible = true
 		item.total = 0.81 + layer * 0.11
@@ -180,6 +212,22 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 			item.light.visible = false
 		if t >= 1.0:
 			item.wave.visible = false
+			item.wave.material_override = null
+	for piece in fragments:
+		if piece.left <= 0.0:
+			continue
+		piece.left -= dt
+		if piece.left <= 0.0 or piece.node.position.y < 0.1:
+			piece.left = 0.0
+			piece.node.visible = false
+			continue
+		piece.vel.y -= 9.81 * dt
+		piece.node.position += piece.vel * dt
+		piece.node.rotation += piece.spin * dt
+		piece.emit_at -= dt
+		if piece.smoke and piece.emit_at < 0.0:
+			piece.emit_at = 0.18
+			puff(piece.node.position, piece.vel * 0.22 + Vector3.UP * 4.0, 0.7, 0.87, 0, 0.42)
 	ribbon_mesh.clear_surfaces()
 	var active := false
 	for shot in shots:
@@ -207,6 +255,9 @@ func rebase(delta: Vector3) -> void:
 	for puff_item in puffs:
 		if puff_item.left > 0.0:
 			puff_item.node.position -= delta
+	for piece in fragments:
+		if piece.left > 0.0:
+			piece.node.position -= delta
 	for impact_item in impacts:
 		if impact_item.left > 0.0:
 			impact_item.wave.position -= delta

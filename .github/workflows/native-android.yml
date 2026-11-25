@@ -15,11 +15,13 @@ jobs:
     env:
       GODOT_VERSION: 4.7.2
       GODOT_RELEASE: 4.7.2-stable
-      NDK_VERSION: 27.2.12479018
-      XDG_CONFIG_HOME: ${{ runner.temp }}/sky-config
-      XDG_DATA_HOME: ${{ runner.temp }}/sky-data
-      XDG_CACHE_HOME: ${{ runner.temp }}/sky-cache
+      NDK_VERSION: 29.0.14206865
     steps:
+      - name: Set workspace-local Godot paths
+        run: |
+          echo "XDG_CONFIG_HOME=$RUNNER_TEMP/sky-config" >> "$GITHUB_ENV"
+          echo "XDG_DATA_HOME=$RUNNER_TEMP/sky-data" >> "$GITHUB_ENV"
+          echo "XDG_CACHE_HOME=$RUNNER_TEMP/sky-cache" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:

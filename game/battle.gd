@@ -537,7 +537,7 @@ func _destroy(jet: Airframe, who: Airframe) -> void:
 	jet.hp = 0.0
 	jet.until_respawn = time + (2.8 if jet == player else 3.6)
 	jet.model.visible = false
-	effects.impact(jet.position, 2, jet.position.y < 8.0)
+	effects.breakup(jet.position, jet.velocity, jet.position.y < 8.0)
 	audio.play_at("water" if jet.position.y < 8.0 else "fracture", jet.position)
 	if who == player:
 		player_kills += 1
@@ -585,7 +585,7 @@ func _render_pose(dt: float) -> void:
 	var right := player.attitude * Vector3.RIGHT
 	var speed := player.velocity.length()
 	var span: float = player.type.span
-	var focus := player.position + forward * (span * 3.9) + Vector3.UP * (span * 0.05)
+	var focus := player.position + forward * (span * 3.1) - Vector3.UP * (span * 0.23)
 	var chase := player.position - forward * (span * 1.46 + player.boost * 1.35) + Vector3.UP * (span * 0.37) + up * (span * 0.08)
 	if target:
 		var side_offset: float = clampf((target.position - player.position).normalized().dot(right), -0.45, 0.45)

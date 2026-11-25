@@ -17,4 +17,4 @@ godot --headless --editor --import
 godot --headless --script res://qa/smoke.gd
 ```
 
-回归脚本检查战机资源、战役表、第三章无人机、无限空战复活及地形坐标重定位。带图形的实际录制使用 `--write-movie out.avi --fixed-fps 18 -- --capture-dir=/absolute/output`。素材来源及验收范围见 [迁移记录](MIGRATION.md)。
+回归脚本检查战机资源、战役表、第三章无人机、无限空战复活及地形坐标重定位。带图形的实际录制使用 `--write-movie out.avi --fixed-fps 20 -- --capture-dir=/absolute/output`。素材来源及验收范围见 [迁移记录](MIGRATION.md)。
