@@ -131,12 +131,10 @@ func _change_plane(jet: Airframe, id: String) -> void:
 		jet.model.add_child(root)
 		exhausts.append(root)
 		_jet_exhaust(root, jet.type.span)
-	jet.rig = {"meshes":model, "exhausts":exhausts, "lod":"Exterior", "gear":[], "fins":[]}
+	jet.rig = {"meshes":model, "exhausts":exhausts, "lod":"Exterior", "gear":catalogue.gear_tracks(model), "fins":[]}
 	var exterior := model.get_node_or_null("Exterior")
 	if exterior:
 		for node in exterior.find_children("*", "Node3D", true, false):
-			if str(node.name).begins_with("Gear_") and node is not MeshInstance3D:
-				jet.rig.gear.append({"node":node, "rot":node.rotation})
 			if str(node.name).begins_with("Aileron") or str(node.name).begins_with("Canard") or str(node.name).begins_with("Rudder"):
 				jet.rig.fins.append({"node":node, "rot":node.rotation})
 
@@ -643,9 +641,8 @@ func _render_pose(dt: float) -> void:
 				jet.rig.meshes.get_node(jet.rig.lod).visible = false
 				jet.rig.meshes.get_node(lod).visible = true
 				jet.rig.lod = lod
-		for gear_part in jet.rig.gear:
-			gear_part.node.visible = jet.gear > 0.14
-			gear_part.node.rotation.x = gear_part.rot.x + (1.0 - jet.gear) * 1.33
+		if jet.rig.lod == "Exterior":
+			catalogue.set_gear(jet.rig.gear, jet.gear)
 		for part in jet.rig.fins:
 			part.node.rotation.x = part.rot.x + clampf(jet.angular.x * 0.12, -0.29, 0.29)
 		for plume in jet.rig.exhausts:

@@ -32,6 +32,14 @@ func run() -> void:
 		if model:
 			model.free()
 	check(catalogue_ids == catalogue.planes.size(), "A V18 airframe did not import")
+	var gear_model := catalogue.mesh("j20")
+	root.add_child(gear_model)
+	var tracks := catalogue.gear_tracks(gear_model)
+	catalogue.set_gear(tracks, 1.0)
+	check(tracks.size() == 3 and tracks[0].hinge.quaternion.angle_to(tracks[0].deployed) < 0.001,
+		"J-20 did not use its authored deployed landing-gear poses")
+	gear_model.queue_free()
+
 	var battle := Battle.new()
 	root.add_child(battle)
 	battle.setup(catalogue, profile, "free", {"name":"自由空战", "region":0}, false)

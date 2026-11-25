@@ -37,6 +37,30 @@ func mesh(id: String) -> Node3D:
 			child.visible = child.name == "Exterior"
 	return tree
 
+func gear_tracks(model: Node3D) -> Array[Dictionary]:
+	var tracks: Array[Dictionary] = []
+	for player in model.find_children("*", "AnimationPlayer", true, false):
+		for name in player.get_animation_list():
+			if not String(name).begins_with("Gear_"):
+				continue
+			var clip: Animation = player.get_animation(name)
+			var track_root: Node = player.get_node(player.root_node)
+			for index in clip.get_track_count():
+				if clip.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+					continue
+				var path := clip.track_get_path(index)
+				var hinge := track_root.get_node_or_null(NodePath(path.get_concatenated_names())) as Node3D
+				var count := clip.track_get_key_count(index)
+				if hinge and hinge.name == name and count > 1:
+					tracks.append({"hinge":hinge, "stowed":clip.track_get_key_value(index, 0),
+						"deployed":clip.track_get_key_value(index, count - 1)})
+					break
+	return tracks
+
+func set_gear(tracks: Array, extension: float) -> void:
+	for track in tracks:
+		track.hinge.quaternion = track.stowed.slerp(track.deployed, extension).normalized()
+
 func missile_compatible(plane: Dictionary, weapon_id: String) -> bool:
 	return not plane.support and not plane.rails.is_empty() and (weapon_id != "skylance" or plane.era in ["modern", "stealth"])
 

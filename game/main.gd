@@ -355,6 +355,7 @@ func _set_showcase_aircraft(id: String) -> void:
 	var spec := catalogue.aircraft(id)
 	var plane: Node3D = catalogue.mesh(id)
 	showcase_aircraft.add_child(plane)
+	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
 	showcase_aircraft.position.y = Landscape.APRON_HEIGHT + maxf(0.8, spec.gearClearance)
 	showcase_aircraft.rotation.y = 0.0
 	var camera := showcase.get_viewport().get_camera_3d()
