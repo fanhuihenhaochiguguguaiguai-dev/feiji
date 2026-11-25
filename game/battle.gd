@@ -34,9 +34,6 @@ var target: Airframe
 var locked_time := 0.0
 var seek_due := 0.0
 var target_lost_until := 0.0
-var turn_side := 0.0
-var turn_goal := Vector3.ZERO
-var turn_ready := 0.0
 var launched_from_runway := false
 var participated := false
 var incoming_heading := Vector3.ZERO
@@ -429,8 +426,6 @@ func _reset_player_spawn() -> void:
 	locked_time = 0.0
 	target_lost_until = 0.0
 	countered_until = 0.0
-	turn_side = 0.0
-	turn_ready = time
 	boost_until = 0.0
 	boost_at = time
 	action.clear()
@@ -460,21 +455,7 @@ func _update_player(dt: float) -> void:
 			player.evade_side = signf(steering.x) if absf(steering.x) > 0.12 else (-1.0 if player.evade_side > 0.0 else 1.0)
 			player.evade_until = time + 0.78
 			player.evade_at = time + EVADE_CYCLE
-	if action.get("turn", false):
-		action.erase("turn")
-		if not player.grounded and time >= turn_ready:
-			turn_side = -1.0 if steering.x < -0.08 else 1.0
-			turn_goal = -Vector3(player.forward.x, 0.0, player.forward.z).normalized()
-			turn_ready = time + 3.4
-	if turn_side != 0.0:
-		var heading := Vector3(player.forward.x, 0.0, player.forward.z).normalized()
-		var error := heading.angle_to(turn_goal)
-		if error < 0.17 or time >= turn_ready or absf(steering.x) > 0.32:
-			turn_side = 0.0
-		else:
-			control = Vector3(0.15, turn_side * clampf(error * 1.7, 0.28, 1.0), 0.0)
 	if time < player.evade_until:
-		turn_side = 0.0
 		control = Vector3(0.23 + control.x * 0.24, player.evade_side * 0.77, -player.evade_side * 0.83)
 	if action.get("boost", false):
 		action.erase("boost")
@@ -508,7 +489,7 @@ func _update_player(dt: float) -> void:
 			control.x = maxf(control.x, clampf((155.0 - clearance) * 0.0031, 0.13, 0.59))
 		elif mode != "training" or task.get("lesson") != "flight":
 			launched_from_runway = false
-	player.move(dt, control, 1.0, time < boost_until, floor_m, world.is_runway(player.position), time < player.evade_until, turn_side != 0.0)
+	player.move(dt, control, 1.0, time < boost_until, floor_m, world.is_runway(player.position), time < player.evade_until)
 	miles += player.position.distance_to(player.previous)
 	var floor_after := world.height(player.position)
 	if not player.grounded and player.position.y < maxf(0.0, floor_after) + 1.2:

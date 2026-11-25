@@ -100,12 +100,52 @@ func run() -> void:
 	high.y = 3000.0
 	fight.player.reset(high, Vector3.FORWARD, 250.0, 4200.0)
 	fight._reset_player_spawn()
-	fight.action.turn = true
+	var hud = shell.active_hud
+	hud.clear_input()
+	var flight_point: Vector2 = hud.input_pad.get_center()
+	# Retired gestures and shortcut must not issue a maneuver.
+	for tap in 2:
+		for pressed in [true, false]:
+			var event := InputEventScreenTouch.new()
+			event.index = 0
+			event.position = flight_point
+			event.pressed = pressed
+			hud._unhandled_input(event)
+	check(fight.action.is_empty() and fight.stick == Vector2.ZERO and not hud.steer_touch, "Double tap still triggers an action or leaves steering active")
+	for click in 2:
+		for pressed in [true, false]:
+			var event := InputEventMouseButton.new()
+			event.button_index = MOUSE_BUTTON_LEFT
+			event.position = flight_point
+			event.pressed = pressed
+			event.double_click = click == 1 and pressed
+			hud._unhandled_input(event)
+	check(fight.action.is_empty() and fight.stick == Vector2.ZERO and not hud.steer_touch, "Double click still triggers an action or leaves steering active")
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_R
+	key.pressed = true
+	hud._unhandled_input(key)
+	check(fight.action.is_empty(), "Retired R shortcut still triggers an action")
 	var nose := Vector3(fight.player.forward.x, 0.0, fight.player.forward.z).normalized()
 	for i in 306:
-		fight._physics_process(1.0 / 90.0)
-	var turn := rad_to_deg(nose.angle_to(Vector3(fight.player.forward.x, 0.0, fight.player.forward.z).normalized()))
-	check(turn > 148.0, "Preserved reversal did not complete")
+		fight._update_player(1.0 / 90.0)
+	var neutral_heading_change := rad_to_deg(nose.angle_to(Vector3(fight.player.forward.x, 0.0, fight.player.forward.z).normalized()))
+	check(neutral_heading_change < 1.0, "Retired inputs still change neutral flight heading")
+	var press := InputEventScreenTouch.new()
+	press.index = 0
+	press.position = flight_point
+	press.pressed = true
+	hud._unhandled_input(press)
+	var motion := InputEventScreenDrag.new()
+	motion.index = 0
+	motion.position = flight_point + Vector2(70.0, 0.0)
+	hud._unhandled_input(motion)
+	check(fight.stick.x > 0.0 and hud.steer_touch, "Normal drag steering stopped working")
+	press.pressed = false
+	press.position = motion.position
+	hud._unhandled_input(press)
+	check(not hud.steer_touch, "Normal drag release did not clear touch ownership")
+	hud.clear_input()
 	shell.active_hud.input_actions.pause.pressed.emit()
 	var actions: Control = shell.pause_ui.body
 	check(fight.paused and actions.get_child_count() == 5, "Pause actions are missing")
@@ -116,5 +156,5 @@ func run() -> void:
 	check(not fight.paused, "Resume did not unpause the battle")
 	shell.queue_free()
 	await process_frame
-	print(JSON.stringify({"failures":failures,"bank_peak":rad_to_deg(largest_bank),"climb_peak":rad_to_deg(highest_pitch),"dive_peak":rad_to_deg(lowest_pitch),"reverse_degrees":turn,"pursuit_cap":cap,"concurrent_targets":active}))
+	print(JSON.stringify({"failures":failures,"bank_peak":rad_to_deg(largest_bank),"climb_peak":rad_to_deg(highest_pitch),"dive_peak":rad_to_deg(lowest_pitch),"neutral_heading_change_degrees":neutral_heading_change,"pursuit_cap":cap,"concurrent_targets":active}))
 	quit(0 if failures == 0 else 1)

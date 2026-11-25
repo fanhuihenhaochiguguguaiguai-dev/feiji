@@ -12,9 +12,6 @@ var touch_index := -3
 var steer_touch := false
 var paused := false
 var weapon_fingers := {}
-var last_tap := -1.0
-var tap_start := 0.0
-var touch_position := Vector2.ZERO
 var input_actions := {}
 var input_pad := Rect2()
 var backdrop := Node2D.new()
@@ -116,7 +113,6 @@ func _trigger(action: String, pressed: bool) -> void:
 func clear_input() -> void:
 	steer_touch = false
 	touch_index = -3
-	last_tap = -1.0
 	weapon_fingers.clear()
 	if is_instance_valid(fight):
 		fight.action.clear()
@@ -172,7 +168,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Q: fight.action.counter = true
 			KEY_SHIFT: fight.action.boost = true
 			KEY_G: fight.action.gear = true
-			KEY_R: fight.action.turn = true
 			KEY_ESCAPE: input_actions.pause.pressed.emit()
 		return
 	if button:
@@ -180,22 +175,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			steer_touch = true
 			touch_index = i
 			touch_origin = pos
-			touch_position = pos
-			tap_start = fight.time
 			get_viewport().set_input_as_handled()
 		elif not pressed and touch_index == i:
 			steer_touch = false
 			touch_index = -3
-			var quick: bool = fight.time - tap_start < 0.22 and touch_position.distance_squared_to(touch_origin) < 14.0 * 14.0
-			if quick and (not event is InputEventScreenTouch or not event.canceled):
-				if fight.time - last_tap < 0.32:
-					fight.action.turn = true
-					last_tap = -1.0
-				else:
-					last_tap = fight.time
 			get_viewport().set_input_as_handled()
 	elif steer_touch and i == touch_index:
-		touch_position = pos
 		var drive := (pos - touch_origin) / maxf(78.0, size.y * 0.17)
 		drive.y *= 1.0 if fight.profile.state.settings.invert else -1.0
 		fight.stick = (drive * (0.8 * fight.profile.state.settings.sensitivity)).limit_length()
@@ -308,7 +293,7 @@ func _draw() -> void:
 	for item in artifacts:
 		_draw_action(item)
 	if now < 13.0:
-		_center_text(Vector2(w * 0.5, h - 28), "滑动控制方向 · 双击空白处掉头", 15, Color(cyan, 0.75))
+		_center_text(Vector2(w * 0.5, h - 28), "滑动控制方向", 15, Color(cyan, 0.75))
 	if jet.hp <= 0.0 and fight.mode == "free":
 		_center_text(Vector2(w * 0.5, h - 77), "%d 秒后复活" % ceili(maxf(0.0, jet.until_respawn - now)), 22, cream)
 
