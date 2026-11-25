@@ -36,7 +36,7 @@ vec4 volume_clouds(vec3 ray, vec3 eye, float angle) {
 	float far_t = min(18500.0, max(a, b));
 	if (near_t >= far_t) { return vec4(0.0); }
 	float step_length = (far_t - near_t) / float(cloud_samples);
-	float jitter = fract(sin(dot(uv_for(ray) * vec2(1024.0, 512.0), vec2(127.1, 311.7))) * 43758.5453) * 0.5 + 0.25;
+	float jitter = 0.5 + sin(ray.x * 43.0 + ray.z * 41.0) * sin(ray.y * 57.0) * 0.18;
 	float transmission = 1.0;
 	vec3 accumulation = vec3(0.0);
 	for (int i = 0; i < 9; ++i) {

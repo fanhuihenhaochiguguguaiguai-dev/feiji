@@ -151,7 +151,7 @@ func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2
 	asset.set_uv_scale(texture_scale)
 	asset.set_detiling_rotation(0.68)
 	asset.set_detiling_shift(0.55)
-	asset.set_normal_depth(1.25)
+	asset.set_normal_depth(0.82)
 	return asset
 
 static func bake_tile(coord: Vector2i, seed_id: int) -> PackedFloat32Array:

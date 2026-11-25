@@ -3,6 +3,7 @@ extends Node3D
 const PROJECTILE_CAPACITY := 192
 const PARTICLE = preload("res://shaders/particle.gdshader")
 const PRESSURE = preload("res://shaders/pressure.gdshader")
+const TRAIL = preload("res://shaders/trail.gdshader")
 const FIRE = preload("res://assets/surface/combustion.webp")
 const SMOKE = preload("res://assets/surface/soot.webp")
 const SPARK = preload("res://assets/surface/spark.webp")
@@ -26,7 +27,6 @@ var impact_slot := 0
 var tracer: StandardMaterial3D
 var glow: StandardMaterial3D
 var ribbon_mesh := ImmediateMesh.new()
-var ribbon_material: StandardMaterial3D
 var puff_quad := QuadMesh.new()
 
 func emissive(color: Color, strength: float) -> StandardMaterial3D:
@@ -41,11 +41,9 @@ func emissive(color: Color, strength: float) -> StandardMaterial3D:
 func pool() -> void:
 	tracer = emissive(Color(1.0, 0.74, 0.34), 6.0)
 	glow = emissive(Color(0.38, 0.59, 1.0), 5.8)
-	ribbon_material = StandardMaterial3D.new()
-	ribbon_material.vertex_color_use_as_albedo = true
-	ribbon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	ribbon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ribbon_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var ribbon_material := ShaderMaterial.new()
+	ribbon_material.shader = TRAIL
+	ribbon_material.set_shader_parameter("grain", preload("res://assets/surface/cloud-density.png"))
 	var stream := MeshInstance3D.new()
 	stream.mesh = ribbon_mesh
 	stream.material_override = ribbon_material
@@ -348,21 +346,31 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 		ribbon_mesh.surface_end()
 
 func _draw_ribbon(points: Array, eye: Vector3, opacity: float) -> void:
+	var length_m := 0.0
 	for i in range(points.size() - 1):
 		var a: Vector3 = points[i]
 		var b: Vector3 = points[i + 1]
 		var axis := (b - a).cross(eye - a).normalized()
-		var t := i / float(points.size())
-		var width := lerpf(1.6, 0.24, t) * (1.0 + (1.0 - opacity) * 2.3)
-		var trim := axis * width
-		var tone := Color(0.63, 0.70, 0.79, lerpf(0.04, 0.38, sin(t * PI)) * opacity)
-		ribbon_mesh.surface_set_color(tone)
-		ribbon_mesh.surface_add_vertex(a - trim)
-		ribbon_mesh.surface_add_vertex(a + trim)
-		ribbon_mesh.surface_add_vertex(b + trim)
-		ribbon_mesh.surface_add_vertex(a - trim)
-		ribbon_mesh.surface_add_vertex(b + trim)
-		ribbon_mesh.surface_add_vertex(b - trim)
+		var begin := i / float(points.size() - 1)
+		var end := (i + 1) / float(points.size() - 1)
+		var spread := 1.0 + (1.0 - opacity) * 1.8
+		var trim_a := axis * lerpf(1.45, 0.24, begin) * spread
+		var trim_b := axis * lerpf(1.45, 0.24, end) * spread
+		var next_length := length_m + a.distance_to(b) / 35.0
+		var alpha_a := lerpf(0.0, 0.63, smoothstep(0.0, 0.35, begin)) * opacity
+		var alpha_b := lerpf(0.0, 0.63, smoothstep(0.0, 0.35, end)) * opacity
+		_ribbon_point(a - trim_a, length_m, 0.0, alpha_a)
+		_ribbon_point(a + trim_a, length_m, 1.0, alpha_a)
+		_ribbon_point(b + trim_b, next_length, 1.0, alpha_b)
+		_ribbon_point(a - trim_a, length_m, 0.0, alpha_a)
+		_ribbon_point(b + trim_b, next_length, 1.0, alpha_b)
+		_ribbon_point(b - trim_b, next_length, 0.0, alpha_b)
+		length_m = next_length
+
+func _ribbon_point(point: Vector3, along: float, across: float, opacity: float) -> void:
+	ribbon_mesh.surface_set_uv(Vector2(along, across))
+	ribbon_mesh.surface_set_color(Color(0.64, 0.67, 0.72, opacity))
+	ribbon_mesh.surface_add_vertex(point)
 
 func rebase(delta: Vector3) -> void:
 	for trail in spent_ribbons:
