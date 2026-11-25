@@ -1,0 +1,3546 @@
+{
+  "revision": "fcf3138081edfc5509571cdd9a18c1b67484bc82",
+  "fleet": [
+    {
+      "id": "a10",
+      "name": "A-10A Thunderbolt II",
+      "origin": "美国",
+      "era": "modern",
+      "role": "近距支援攻击机",
+      "length": 16.26,
+      "span": 17.53,
+      "cockpit": "attack",
+      "trim": 133,
+      "maxSpeed": 215,
+      "stall": 48,
+      "roll": 1.67,
+      "pitch": 1.52,
+      "yaw": 0.73,
+      "boost": 0,
+      "support": false,
+      "service": "美国",
+      "feature": "直机翼、高置双发与双垂尾。航炮备弹充足，可执行对地训练。",
+      "guns": [
+        [
+          0,
+          -0.17,
+          -8.16
+        ]
+      ],
+      "rails": [
+        [
+          -5.38,
+          -0.56,
+          1.04
+        ],
+        [
+          5.38,
+          -0.56,
+          1.04
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          -1.25,
+          0.58,
+          5.62,
+          0.65
+        ],
+        [
+          1.25,
+          0.58,
+          5.62,
+          0.65
+        ]
+      ],
+      "gearClearance": 1.405,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 9.816800000000002,
+      "eye": [
+        0,
+        1.187,
+        -3.71
+      ],
+      "durability": 4100,
+      "acceleration": 0.87,
+      "grip": 0.93,
+      "gunPower": 1.68,
+      "safety": 2,
+      "specialty": "重装甲与重航炮，极速较低",
+      "cannon": [
+        0.05,
+        1590,
+        0.0031,
+        23
+      ]
+    },
+    {
+      "id": "alphajet",
+      "name": "Alpha Jet A",
+      "origin": "法国／德国",
+      "era": "cold",
+      "role": "教练／轻型攻击机",
+      "length": 13.23,
+      "span": 9.11,
+      "cockpit": "hybrid",
+      "trim": 154,
+      "maxSpeed": 254,
+      "stall": 54,
+      "roll": 1.94,
+      "pitch": 1.52,
+      "yaw": 0.71,
+      "boost": 0,
+      "support": false,
+      "service": "德国等",
+      "feature": "法德联合研制。双发高肩翼、串列座舱，德军 A 型可执行轻型攻击。",
+      "guns": [
+        [
+          0,
+          -0.59,
+          -1.8
+        ]
+      ],
+      "rails": [],
+      "props": [],
+      "engine": [
+        [
+          -0.57,
+          -0.19,
+          5.61,
+          0.41
+        ],
+        [
+          0.57,
+          -0.19,
+          5.61,
+          0.41
+        ]
+      ],
+      "gearClearance": 1.296,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 7.408800000000001,
+      "eye": [
+        0,
+        1.117,
+        -2.03
+      ],
+      "durability": 2740,
+      "acceleration": 0.97,
+      "grip": 1.13,
+      "gunPower": 0.95,
+      "safety": 1,
+      "specialty": "稳定易操控，速度上限较低",
+      "cannon": [
+        0.099,
+        1470,
+        0.0038,
+        22
+      ]
+    },
+    {
+      "id": "b2",
+      "name": "B-2A Spirit",
+      "origin": "美国",
+      "era": "support",
+      "role": "隐身轰炸机",
+      "length": 21,
+      "span": 52.4,
+      "cockpit": "crew",
+      "trim": 189,
+      "maxSpeed": 270,
+      "stall": 75,
+      "roll": 0.65,
+      "pitch": 1,
+      "yaw": 0.37,
+      "boost": 0,
+      "support": true,
+      "service": "美国",
+      "feature": "无尾飞翼衔接锯齿尾缘。在设施防卫演习中尝试从空中攻击训练靶区。",
+      "guns": [],
+      "rails": [],
+      "props": [],
+      "engine": [
+        [
+          -4.92,
+          0.21,
+          6.25,
+          0.53
+        ],
+        [
+          -3.31,
+          0.28,
+          7.27,
+          0.53
+        ],
+        [
+          3.31,
+          0.28,
+          7.27,
+          0.53
+        ],
+        [
+          4.92,
+          0.21,
+          6.25,
+          0.53
+        ]
+      ],
+      "gearClearance": 1.576,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 29.344,
+      "eye": [
+        0,
+        2.096,
+        -3.95
+      ],
+      "durability": 4720,
+      "acceleration": 0.93,
+      "grip": 0.76,
+      "gunPower": 1,
+      "safety": 2,
+      "specialty": "大型隐身任务支援",
+      "cannon": [
+        0.095,
+        1500,
+        0.0037,
+        17
+      ]
+    },
+    {
+      "id": "bf109",
+      "name": "Bf 109 G-6",
+      "origin": "德国",
+      "era": "ww2",
+      "role": "截击战斗机",
+      "length": 8.95,
+      "span": 9.92,
+      "cockpit": "metric-original",
+      "trim": 124,
+      "maxSpeed": 184,
+      "stall": 38,
+      "roll": 2.13,
+      "pitch": 1.72,
+      "yaw": 0.68,
+      "boost": 0,
+      "support": false,
+      "service": "德国",
+      "feature": "短直收尖翼、窄轮距和三叶桨。全速爬升较快，低速更需要配平。",
+      "guns": [
+        [
+          0,
+          0.015,
+          -4.64
+        ],
+        [
+          -0.24,
+          0.53,
+          -2.7
+        ],
+        [
+          0.24,
+          0.53,
+          -2.7
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0.03,
+          -4.63,
+          1.57,
+          3
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.142,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 5.5552,
+      "eye": [
+        0,
+        0.983,
+        -0.87
+      ],
+      "durability": 2380,
+      "acceleration": 0.98,
+      "grip": 1.04,
+      "gunPower": 1.06,
+      "safety": 0,
+      "specialty": "爬升与短时火力突出",
+      "cannon": [
+        0.103,
+        1390,
+        0.0036,
+        31
+      ]
+    },
+    {
+      "id": "c130",
+      "name": "C-130H Hercules",
+      "origin": "美国",
+      "era": "support",
+      "role": "战术运输机",
+      "length": 29.8,
+      "span": 40.4,
+      "cockpit": "crew",
+      "trim": 131,
+      "maxSpeed": 177,
+      "stall": 53,
+      "roll": 0.67,
+      "pitch": 0.79,
+      "yaw": 0.4,
+      "boost": 0,
+      "support": true,
+      "service": "美国",
+      "feature": "高翼四发运输机。按航线飞行，玩家可护送。",
+      "guns": [],
+      "rails": [],
+      "props": [
+        [
+          -5.4,
+          1.33,
+          -5.74,
+          2.05,
+          4
+        ],
+        [
+          -10.8,
+          1.33,
+          -4.47,
+          2.05,
+          4
+        ],
+        [
+          5.4,
+          1.33,
+          -5.74,
+          2.05,
+          4
+        ],
+        [
+          10.8,
+          1.33,
+          -4.47,
+          2.05,
+          4
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.85,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 22.624000000000002,
+      "eye": [
+        0,
+        2.526,
+        -9.1
+      ],
+      "durability": 4380,
+      "acceleration": 0.8,
+      "grip": 0.71,
+      "gunPower": 1,
+      "safety": 1,
+      "specialty": "低速运输与编队护航",
+      "cannon": [
+        0.095,
+        1500,
+        0.0037,
+        17
+      ]
+    },
+    {
+      "id": "camel",
+      "name": "Sopwith Camel",
+      "origin": "英国",
+      "era": "ww1",
+      "role": "战斗机",
+      "length": 5.71,
+      "span": 8.53,
+      "cockpit": "open",
+      "trim": 45,
+      "maxSpeed": 60,
+      "stall": 24,
+      "roll": 2.03,
+      "pitch": 1.54,
+      "yaw": 0.79,
+      "boost": 0,
+      "support": false,
+      "service": "英国",
+      "feature": "上翼前移、下翼带上反角。轻巧但低速更敏感。",
+      "guns": [
+        [
+          -0.14,
+          0.48,
+          -1.42
+        ],
+        [
+          0.14,
+          0.48,
+          -1.42
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0,
+          -2.94,
+          1.32,
+          2
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 0.95,
+      "gearFixed": true,
+      "tailMissing": false,
+      "visualRadius": 4.7768,
+      "eye": [
+        0,
+        0.579,
+        -0.38
+      ],
+      "durability": 2000,
+      "acceleration": 0.75,
+      "grip": 1.13,
+      "gunPower": 0.76,
+      "safety": 0,
+      "specialty": "小半径转向，密集火力适合近距作战",
+      "cannon": [
+        0.073,
+        1275,
+        0.0041,
+        31
+      ]
+    },
+    {
+      "id": "dr1",
+      "name": "Fokker Dr.I",
+      "origin": "德国",
+      "era": "ww1",
+      "role": "战斗机",
+      "length": 5.77,
+      "span": 7.19,
+      "cockpit": "open",
+      "trim": 42,
+      "maxSpeed": 57,
+      "stall": 22,
+      "roll": 1.84,
+      "pitch": 1.5,
+      "yaw": 0.91,
+      "boost": 0,
+      "support": false,
+      "service": "德国",
+      "feature": "三翼、固定双轮起落架、开放式座舱与同步机枪。",
+      "guns": [
+        [
+          -0.16,
+          0.55,
+          -1.46
+        ],
+        [
+          0.16,
+          0.55,
+          -1.46
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0,
+          -2.85,
+          1.29,
+          2
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 0.95,
+      "gearFixed": true,
+      "tailMissing": false,
+      "visualRadius": 4.026400000000001,
+      "eye": [
+        0,
+        0.607,
+        -0.57
+      ],
+      "durability": 2000,
+      "acceleration": 0.72,
+      "grip": 1.15,
+      "gunPower": 0.73,
+      "safety": 0,
+      "specialty": "低速盘旋灵活，单发威力高，极速有限",
+      "cannon": [
+        0.085,
+        1250,
+        0.0046,
+        34
+      ]
+    },
+    {
+      "id": "e2",
+      "name": "E-2C Hawkeye",
+      "origin": "美国",
+      "era": "support",
+      "role": "舰载预警机",
+      "length": 17.54,
+      "span": 24.56,
+      "cockpit": "crew",
+      "trim": 117,
+      "maxSpeed": 165,
+      "stall": 47,
+      "roll": 0.89,
+      "pitch": 0.91,
+      "yaw": 0.47,
+      "boost": 0,
+      "support": true,
+      "service": "美国",
+      "feature": "双涡桨与旋转圆盘雷达。存活时扩展友方战术显示的探测范围。",
+      "guns": [],
+      "rails": [],
+      "props": [
+        [
+          -4.02,
+          0.66,
+          -3.24,
+          1.85,
+          4
+        ],
+        [
+          4.02,
+          0.66,
+          -3.24,
+          1.85,
+          4
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.451,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 13.7536,
+      "eye": [
+        0,
+        1.726,
+        -5.46
+      ],
+      "durability": 3890,
+      "acceleration": 0.85,
+      "grip": 0.79,
+      "gunPower": 1,
+      "safety": 2,
+      "specialty": "预警雷达支援",
+      "cannon": [
+        0.095,
+        1500,
+        0.0037,
+        17
+      ]
+    },
+    {
+      "id": "ea6b",
+      "name": "EA-6B Prowler",
+      "origin": "美国",
+      "era": "support",
+      "role": "舰载电子战机",
+      "length": 18.24,
+      "span": 16.15,
+      "cockpit": "crew",
+      "trim": 151,
+      "maxSpeed": 236,
+      "stall": 58,
+      "roll": 1.09,
+      "pitch": 1.14,
+      "yaw": 0.46,
+      "boost": 0,
+      "support": true,
+      "service": "美国",
+      "feature": "四座舰载支援机。接近交战区时干扰游戏中的敌方锁定。",
+      "guns": [],
+      "rails": [],
+      "props": [],
+      "engine": [
+        [
+          -0.98,
+          -0.6,
+          4.75,
+          0.42
+        ],
+        [
+          0.98,
+          -0.6,
+          4.75,
+          0.42
+        ]
+      ],
+      "gearClearance": 1.477,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 10.2144,
+      "eye": [
+        0,
+        1.354,
+        -4.38
+      ],
+      "durability": 3670,
+      "acceleration": 0.92,
+      "grip": 0.89,
+      "gunPower": 1,
+      "safety": 3,
+      "specialty": "机载电子战与雷达干扰",
+      "cannon": [
+        0.095,
+        1500,
+        0.0037,
+        17
+      ]
+    },
+    {
+      "id": "f16",
+      "name": "F-16C Fighting Falcon",
+      "origin": "美国",
+      "era": "modern",
+      "role": "多用途战斗机",
+      "length": 15.06,
+      "span": 9.96,
+      "cockpit": "glass",
+      "trim": 210,
+      "maxSpeed": 376,
+      "stall": 62,
+      "roll": 2.81,
+      "pitch": 2.05,
+      "yaw": 0.72,
+      "boost": 33,
+      "support": false,
+      "service": "美国",
+      "feature": "单座气泡座舱、融合式翼身、腹部进气道与单喷口。展示模型带有舵面、腹鳍和喷口结构。",
+      "guns": [
+        [
+          -0.57,
+          0.096,
+          -4.35
+        ]
+      ],
+      "rails": [
+        [
+          -3.44,
+          -0.25,
+          2.79
+        ],
+        [
+          3.44,
+          -0.25,
+          2.79
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.095,
+          7.29,
+          0.685
+        ]
+      ],
+      "gearClearance": 1.362,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 8.4336,
+      "eye": [
+        0,
+        0.967,
+        -3.02
+      ],
+      "durability": 3200,
+      "acceleration": 1.14,
+      "grip": 1.24,
+      "gunPower": 1.13,
+      "safety": 2,
+      "specialty": "优先机动，适合近距瞄准",
+      "cannon": [
+        0.065,
+        1660,
+        0.0028,
+        15.5
+      ]
+    },
+    {
+      "id": "g91",
+      "name": "Fiat G.91R/1",
+      "origin": "意大利",
+      "era": "cold",
+      "role": "轻型攻击／侦察机",
+      "length": 10.3,
+      "span": 8.56,
+      "cockpit": "metric-original",
+      "trim": 171,
+      "maxSpeed": 285,
+      "stall": 53,
+      "roll": 2.07,
+      "pitch": 1.67,
+      "yaw": 0.7,
+      "boost": 0,
+      "support": false,
+      "service": "意大利",
+      "feature": "紧凑后掠翼攻击机，圆鼻进气，可搭载游戏中的常规炸弹。",
+      "guns": [
+        [
+          -0.47,
+          0.12,
+          -4.22
+        ],
+        [
+          0.47,
+          0.12,
+          -4.22
+        ]
+      ],
+      "rails": [],
+      "props": [],
+      "engine": [
+        [
+          0,
+          0,
+          5.12,
+          0.48
+        ]
+      ],
+      "gearClearance": 1.191,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 5.768000000000001,
+      "eye": [
+        0,
+        1.109,
+        -1.66
+      ],
+      "durability": 2620,
+      "acceleration": 1,
+      "grip": 1.07,
+      "gunPower": 0.97,
+      "safety": 1,
+      "specialty": "轻型对地，低空易控制",
+      "cannon": [
+        0.071,
+        1460,
+        0.0035,
+        18
+      ]
+    },
+    {
+      "id": "gripen",
+      "name": "JAS 39C Gripen",
+      "origin": "瑞典",
+      "era": "modern",
+      "role": "多用途战斗机",
+      "length": 14.1,
+      "span": 8.4,
+      "cockpit": "glass",
+      "trim": 194,
+      "maxSpeed": 337,
+      "stall": 54,
+      "roll": 2.66,
+      "pitch": 1.99,
+      "yaw": 0.8,
+      "boost": 29,
+      "support": false,
+      "service": "瑞典",
+      "feature": "近距鸭翼、小型三角主翼与玻璃座舱，拥有灵活滚转。",
+      "guns": [
+        [
+          -0.39,
+          -0.5,
+          -3.16
+        ]
+      ],
+      "rails": [
+        [
+          -3.31,
+          -0.3,
+          3.37
+        ],
+        [
+          3.31,
+          -0.3,
+          3.37
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.03,
+          7.01,
+          0.6
+        ]
+      ],
+      "gearClearance": 1.328,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 7.896000000000001,
+      "eye": [
+        0,
+        1.005,
+        -2.99
+      ],
+      "durability": 3040,
+      "acceleration": 1.1,
+      "grip": 1.25,
+      "gunPower": 1.1,
+      "safety": 2,
+      "specialty": "轻盈敏捷，装甲低于重型战机",
+      "cannon": [
+        0.076,
+        1610,
+        0.003,
+        16.8
+      ]
+    },
+    {
+      "id": "hornet",
+      "name": "F/A-18C Hornet",
+      "origin": "美国",
+      "era": "modern",
+      "role": "舰载多用途战斗机",
+      "length": 17.07,
+      "span": 12.31,
+      "cockpit": "naval",
+      "trim": 193,
+      "maxSpeed": 331,
+      "stall": 53,
+      "roll": 2.44,
+      "pitch": 2.06,
+      "yaw": 0.8,
+      "boost": 29,
+      "support": false,
+      "service": "美国",
+      "feature": "外倾双垂尾、双发和前缘延伸面，低速操控稳定。",
+      "guns": [
+        [
+          0,
+          0.12,
+          -7.05
+        ]
+      ],
+      "rails": [
+        [
+          -4.3,
+          -0.58,
+          3.27
+        ],
+        [
+          4.3,
+          -0.58,
+          3.27
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          -0.78,
+          -0.29,
+          8.3,
+          0.57
+        ],
+        [
+          0.78,
+          -0.29,
+          8.3,
+          0.57
+        ]
+      ],
+      "gearClearance": 1.435,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 9.5592,
+      "eye": [
+        0,
+        1.242,
+        -3.3
+      ],
+      "durability": 3620,
+      "acceleration": 1.04,
+      "grip": 1.14,
+      "gunPower": 1.14,
+      "safety": 3,
+      "specialty": "低速稳定，反制容量出色",
+      "cannon": [
+        0.061,
+        1625,
+        0.0029,
+        15
+      ]
+    },
+    {
+      "id": "j10",
+      "name": "歼-10C",
+      "origin": "中国",
+      "era": "modern",
+      "role": "多用途战斗机",
+      "length": 16.43,
+      "span": 9.75,
+      "cockpit": "glass",
+      "trim": 202,
+      "maxSpeed": 359,
+      "stall": 57,
+      "roll": 2.62,
+      "pitch": 2.08,
+      "yaw": 0.78,
+      "boost": 33,
+      "support": false,
+      "service": "中国",
+      "feature": "单发鸭翼三角翼，宽幅腹部进气。近距机动和航向稳定性均衡。",
+      "guns": [
+        [
+          -0.45,
+          -0.54,
+          -3.86
+        ]
+      ],
+      "rails": [
+        [
+          -2.85,
+          -0.37,
+          3.52
+        ],
+        [
+          2.85,
+          -0.37,
+          3.52
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.05,
+          8.17,
+          0.71
+        ]
+      ],
+      "gearClearance": 1.411,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 9.200800000000001,
+      "eye": [
+        0,
+        1.154,
+        -3.42
+      ],
+      "durability": 3280,
+      "acceleration": 1.15,
+      "grip": 1.22,
+      "gunPower": 1.16,
+      "safety": 2,
+      "specialty": "多用途，盘旋和爬升兼备",
+      "cannon": [
+        0.078,
+        1620,
+        0.0031,
+        17
+      ]
+    },
+    {
+      "id": "j20",
+      "name": "歼-20",
+      "origin": "中国",
+      "era": "stealth",
+      "role": "隐身战斗机",
+      "length": 20.4,
+      "span": 13.4,
+      "cockpit": "glass-wide",
+      "trim": 232,
+      "maxSpeed": 398,
+      "stall": 67,
+      "roll": 2.31,
+      "pitch": 2,
+      "yaw": 0.75,
+      "boost": 36,
+      "support": false,
+      "service": "中国",
+      "feature": "长机身、全动鸭翼、双发及外倾双垂尾。游戏配置内置导弹和固定航炮。",
+      "guns": [
+        [
+          0.85,
+          0.32,
+          -5.24
+        ]
+      ],
+      "rails": [
+        [
+          -0.57,
+          -0.74,
+          0.93
+        ],
+        [
+          0.57,
+          -0.74,
+          0.93
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          -0.92,
+          -0.16,
+          9.22,
+          0.71
+        ],
+        [
+          0.92,
+          -0.16,
+          9.22,
+          0.71
+        ]
+      ],
+      "gearClearance": 1.554,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 11.424,
+      "eye": [
+        0,
+        1.253,
+        -4.52
+      ],
+      "durability": 4200,
+      "acceleration": 1.29,
+      "grip": 1.02,
+      "gunPower": 1.2,
+      "safety": 3,
+      "specialty": "最高耐久档，高速导弹截击",
+      "cannon": [
+        0.082,
+        1680,
+        0.0027,
+        16.5
+      ]
+    },
+    {
+      "id": "me262",
+      "name": "Me 262 A-1a",
+      "origin": "德国",
+      "era": "early",
+      "role": "早期喷气战斗机",
+      "length": 10.6,
+      "span": 12.65,
+      "cockpit": "metric-original",
+      "trim": 157,
+      "maxSpeed": 235,
+      "stall": 53,
+      "roll": 1.66,
+      "pitch": 1.4,
+      "yaw": 0.65,
+      "boost": 0,
+      "support": false,
+      "service": "德国",
+      "feature": "两具翼下喷气发动机，火力集中在机头，无导弹和加力。",
+      "guns": [
+        [
+          -0.29,
+          0.1,
+          -4.9
+        ],
+        [
+          0.29,
+          0.1,
+          -4.9
+        ]
+      ],
+      "rails": [],
+      "props": [],
+      "engine": [
+        [
+          -2.34,
+          -0.42,
+          1.35,
+          0.47
+        ],
+        [
+          2.34,
+          -0.42,
+          1.35,
+          0.47
+        ]
+      ],
+      "gearClearance": 1.202,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 7.0840000000000005,
+      "eye": [
+        0,
+        1.032,
+        -1.25
+      ],
+      "durability": 2550,
+      "acceleration": 1.02,
+      "grip": 0.89,
+      "gunPower": 1.35,
+      "safety": 0,
+      "specialty": "早期喷气，高炮威力，转向迟缓",
+      "cannon": [
+        0.103,
+        1420,
+        0.0046,
+        31
+      ]
+    },
+    {
+      "id": "mig21",
+      "name": "MiG-21bis",
+      "origin": "苏联",
+      "era": "cold",
+      "role": "截击机",
+      "length": 14.7,
+      "span": 7.15,
+      "cockpit": "soviet",
+      "trim": 212,
+      "maxSpeed": 371,
+      "stall": 69,
+      "roll": 2.41,
+      "pitch": 1.62,
+      "yaw": 0.67,
+      "boost": 28,
+      "support": false,
+      "service": "苏联",
+      "feature": "环形进气与中央锥、窄距三角翼，极速高而低速操纵余量较小。",
+      "guns": [
+        [
+          -0.25,
+          -0.78,
+          -2.25
+        ],
+        [
+          0.25,
+          -0.78,
+          -2.25
+        ]
+      ],
+      "rails": [
+        [
+          -2.18,
+          -0.49,
+          2.1
+        ],
+        [
+          2.18,
+          -0.49,
+          2.1
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.06,
+          7.31,
+          0.66
+        ]
+      ],
+      "gearClearance": 1.349,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 8.232000000000001,
+      "eye": [
+        0,
+        1.142,
+        -3.07
+      ],
+      "durability": 2810,
+      "acceleration": 1.12,
+      "grip": 0.95,
+      "gunPower": 1.13,
+      "safety": 1,
+      "specialty": "高速截击，低速容错较小",
+      "cannon": [
+        0.08,
+        1510,
+        0.0039,
+        20
+      ]
+    },
+    {
+      "id": "mirage",
+      "name": "Mirage 2000C",
+      "origin": "法国",
+      "era": "modern",
+      "role": "截击机",
+      "length": 14.36,
+      "span": 9.13,
+      "cockpit": "hybrid",
+      "trim": 208,
+      "maxSpeed": 363,
+      "stall": 60,
+      "roll": 2.48,
+      "pitch": 1.96,
+      "yaw": 0.71,
+      "boost": 29,
+      "support": false,
+      "service": "法国",
+      "feature": "无水平尾翼的纯三角翼，使用升降副翼，快速响应俯仰。",
+      "guns": [
+        [
+          -0.39,
+          -0.66,
+          -2.67
+        ],
+        [
+          0.39,
+          -0.66,
+          -2.67
+        ]
+      ],
+      "rails": [
+        [
+          -2.62,
+          -0.35,
+          2.95
+        ],
+        [
+          2.62,
+          -0.35,
+          2.95
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.05,
+          7.15,
+          0.69
+        ]
+      ],
+      "gearClearance": 1.337,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 8.0416,
+      "eye": [
+        0,
+        1.12,
+        -2.78
+      ],
+      "durability": 3100,
+      "acceleration": 1.14,
+      "grip": 1.1,
+      "gunPower": 1.18,
+      "safety": 2,
+      "specialty": "快速变向，适合一次通过式攻击",
+      "cannon": [
+        0.083,
+        1570,
+        0.0032,
+        17.5
+      ]
+    },
+    {
+      "id": "p51",
+      "name": "P-51D Mustang",
+      "origin": "美国",
+      "era": "ww2",
+      "role": "远程战斗机",
+      "length": 9.83,
+      "span": 11.28,
+      "cockpit": "imperial",
+      "trim": 127,
+      "maxSpeed": 191,
+      "stall": 39,
+      "roll": 2.09,
+      "pitch": 1.68,
+      "yaw": 0.66,
+      "boost": 0,
+      "support": false,
+      "service": "美国",
+      "feature": "水滴座舱、腹部进气道与低阻机翼，适合快速通场。",
+      "guns": [
+        [
+          -2.04,
+          0.03,
+          -1.39
+        ],
+        [
+          2.04,
+          0.03,
+          -1.39
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0,
+          -4.99,
+          1.72,
+          4
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.174,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 6.316800000000001,
+      "eye": [
+        0,
+        1.043,
+        -0.77
+      ],
+      "durability": 2630,
+      "acceleration": 1.01,
+      "grip": 1.03,
+      "gunPower": 1.04,
+      "safety": 0,
+      "specialty": "高速俯冲，适合能量战",
+      "cannon": [
+        0.066,
+        1430,
+        0.0031,
+        21
+      ]
+    },
+    {
+      "id": "shade-drone",
+      "name": "影隼无人机",
+      "origin": "虚构",
+      "era": "support",
+      "role": "无人僚机",
+      "length": 6.8,
+      "span": 9.3,
+      "cockpit": "uncrewed",
+      "trim": 179,
+      "maxSpeed": 315,
+      "stall": 57,
+      "roll": 2.74,
+      "pitch": 2.16,
+      "yaw": 0.93,
+      "boost": 14,
+      "support": true,
+      "service": "虚构",
+      "feature": "飞翼构型无人僚机，从侧翼组队接敌。",
+      "guns": [
+        [
+          0,
+          -0.16,
+          -2.98
+        ]
+      ],
+      "rails": [
+        [
+          -0.54,
+          -0.22,
+          0.24
+        ],
+        [
+          0.54,
+          -0.22,
+          0.24
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          0,
+          -0.06,
+          3.19,
+          0.34
+        ]
+      ],
+      "gearClearance": 1.065,
+      "gearFixed": false,
+      "tailMissing": true,
+      "visualRadius": 5.208000000000001,
+      "eye": [
+        0,
+        0.879,
+        -2
+      ],
+      "durability": 2980,
+      "acceleration": 1.17,
+      "grip": 1.28,
+      "gunPower": 0.83,
+      "safety": 1,
+      "specialty": "低轮廓无人僚机，在中近距分队切入",
+      "cannon": [
+        0.095,
+        1500,
+        0.0037,
+        17
+      ]
+    },
+    {
+      "id": "spitfire",
+      "name": "Spitfire Mk IX",
+      "origin": "英国",
+      "era": "ww2",
+      "role": "空优战斗机",
+      "length": 9.46,
+      "span": 11.23,
+      "cockpit": "metric-original",
+      "trim": 119,
+      "maxSpeed": 178,
+      "stall": 34,
+      "roll": 2.22,
+      "pitch": 1.95,
+      "yaw": 0.74,
+      "boost": 0,
+      "support": false,
+      "service": "英国",
+      "feature": "椭圆翼、四叶桨与机械式仪表，擅长连续转弯。",
+      "guns": [
+        [
+          -1.65,
+          0.04,
+          -1.65
+        ],
+        [
+          1.65,
+          0.04,
+          -1.65
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0,
+          -4.79,
+          1.64,
+          4
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.161,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 6.288800000000001,
+      "eye": [
+        0,
+        1.043,
+        -0.84
+      ],
+      "durability": 2320,
+      "acceleration": 0.94,
+      "grip": 1.17,
+      "gunPower": 0.92,
+      "safety": 0,
+      "specialty": "转向和低速恢复出色",
+      "cannon": [
+        0.074,
+        1410,
+        0.0034,
+        25
+      ]
+    },
+    {
+      "id": "su35",
+      "name": "Su-35S",
+      "origin": "俄罗斯",
+      "era": "modern",
+      "role": "空优战斗机",
+      "length": 21.9,
+      "span": 15.3,
+      "cockpit": "soviet-glass",
+      "trim": 224,
+      "maxSpeed": 395,
+      "stall": 65,
+      "roll": 2.25,
+      "pitch": 2.17,
+      "yaw": 0.84,
+      "boost": 36,
+      "support": false,
+      "service": "俄罗斯",
+      "feature": "翼身融合、外展双发与成对尾翼，厚重惯性换取高过载转弯。",
+      "guns": [
+        [
+          0.65,
+          0.02,
+          -2.42
+        ]
+      ],
+      "rails": [
+        [
+          -4.6,
+          -0.57,
+          3.1
+        ],
+        [
+          4.6,
+          -0.57,
+          3.1
+        ]
+      ],
+      "props": [],
+      "engine": [
+        [
+          -1.37,
+          -0.42,
+          9.97,
+          0.82
+        ],
+        [
+          1.37,
+          -0.42,
+          9.97,
+          0.82
+        ]
+      ],
+      "gearClearance": 1.608,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 12.264000000000001,
+      "eye": [
+        0,
+        1.185,
+        -4.82
+      ],
+      "durability": 3920,
+      "acceleration": 1.25,
+      "grip": 1.17,
+      "gunPower": 1.28,
+      "safety": 3,
+      "specialty": "推力与耐久突出，重型格斗",
+      "cannon": [
+        0.087,
+        1630,
+        0.0033,
+        20
+      ]
+    },
+    {
+      "id": "zero",
+      "name": "A6M2 零式",
+      "origin": "日本",
+      "era": "ww2",
+      "role": "舰载战斗机",
+      "length": 9.06,
+      "span": 12,
+      "cockpit": "metric-original",
+      "trim": 110,
+      "maxSpeed": 153,
+      "stall": 30,
+      "roll": 1.67,
+      "pitch": 2.1,
+      "yaw": 0.89,
+      "boost": 0,
+      "support": false,
+      "service": "日本",
+      "feature": "大展弦比机翼、轻质结构和三叶螺旋桨，低速转弯灵活。",
+      "guns": [
+        [
+          -2.43,
+          0.08,
+          -1.36
+        ],
+        [
+          2.43,
+          0.08,
+          -1.36
+        ]
+      ],
+      "rails": [],
+      "props": [
+        [
+          0,
+          0,
+          -4.6,
+          1.5,
+          3
+        ]
+      ],
+      "engine": [],
+      "gearClearance": 1.146,
+      "gearFixed": false,
+      "tailMissing": false,
+      "visualRadius": 6.720000000000001,
+      "eye": [
+        0,
+        0.936,
+        -0.75
+      ],
+      "durability": 2140,
+      "acceleration": 0.87,
+      "grip": 1.16,
+      "gunPower": 0.86,
+      "safety": 0,
+      "specialty": "低速机动优先，耐久偏低",
+      "cannon": [
+        0.08,
+        1340,
+        0.0042,
+        27
+      ]
+    }
+  ],
+  "theatres": [
+    {
+      "id": "sundown",
+      "name": "南海前哨",
+      "weather": "日落",
+      "seed": 413,
+      "sky": [
+        0.24,
+        0.4,
+        0.62
+      ],
+      "horizon": [
+        0.91,
+        0.65,
+        0.46
+      ],
+      "light": [
+        1,
+        0.79,
+        0.54
+      ],
+      "sea": [
+        0.055,
+        0.159,
+        0.291
+      ],
+      "sun": [
+        0.69,
+        0.135,
+        -0.73
+      ],
+      "snow": false
+    },
+    {
+      "id": "frost",
+      "name": "雪线走廊",
+      "weather": "高空晴间云",
+      "seed": 704,
+      "sky": [
+        0.21,
+        0.35,
+        0.57
+      ],
+      "horizon": [
+        0.61,
+        0.71,
+        0.85
+      ],
+      "light": [
+        1,
+        0.88,
+        0.69
+      ],
+      "sea": [
+        0.055,
+        0.15,
+        0.23
+      ],
+      "sun": [
+        -0.5,
+        0.31,
+        -0.75
+      ],
+      "snow": true
+    },
+    {
+      "id": "storm",
+      "name": "远雷海峡",
+      "weather": "多云",
+      "seed": 116,
+      "sky": [
+        0.115,
+        0.182,
+        0.29
+      ],
+      "horizon": [
+        0.41,
+        0.47,
+        0.55
+      ],
+      "light": [
+        0.8,
+        0.87,
+        1
+      ],
+      "sea": [
+        0.041,
+        0.096,
+        0.14
+      ],
+      "sun": [
+        0.51,
+        0.17,
+        -0.84
+      ],
+      "snow": false
+    }
+  ],
+  "startingFleet": [
+    "j20",
+    "f16",
+    "dr1",
+    "a10",
+    "j10",
+    "spitfire"
+  ],
+  "campaign": [
+    {
+      "id": "s01",
+      "name": "破晓巡弋",
+      "region": 0,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 1,
+      "level": 1,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "line",
+        "waves": [
+          2,
+          1,
+          1
+        ],
+        "altitude": 420,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 185,
+        "distance": 1260
+      }
+    },
+    {
+      "id": "s02",
+      "name": "雪线接敌",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 2,
+      "level": 1,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 760,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 198,
+        "distance": 925
+      }
+    },
+    {
+      "id": "s03",
+      "name": "黄昏反击",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 3,
+      "level": 1,
+      "engagement": {
+        "objective": "low",
+        "formation": "line",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 176,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 211,
+        "distance": 1080
+      }
+    },
+    {
+      "id": "s04",
+      "name": "穿雷夺空",
+      "region": 2,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 4,
+      "level": 1,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "stack",
+        "waves": [
+          2,
+          2,
+          3
+        ],
+        "altitude": 1120,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 224,
+        "distance": 770
+      }
+    },
+    {
+      "id": "s05",
+      "name": "离岸封锁",
+      "region": 0,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 5,
+      "level": 1,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "pincer",
+        "waves": [
+          2,
+          2,
+          3
+        ],
+        "altitude": 515,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 237,
+        "distance": 925
+      }
+    },
+    {
+      "id": "s06",
+      "name": "峡湾回声",
+      "region": 1,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 6,
+      "level": 1,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "line",
+        "waves": [
+          2,
+          3
+        ],
+        "altitude": 1180,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0.075,
+        "spacing": 250,
+        "distance": 1080
+      }
+    },
+    {
+      "id": "s07",
+      "name": "逆风航路",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 7,
+      "level": 1,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          2,
+          3,
+          2
+        ],
+        "altitude": 870,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": -0.075,
+        "spacing": 263,
+        "distance": 770
+      }
+    },
+    {
+      "id": "s08",
+      "name": "双岛追击",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 8,
+      "level": 1,
+      "engagement": {
+        "objective": "low",
+        "formation": "pincer",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 213,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0,
+        "spacing": 276,
+        "distance": 925
+      }
+    },
+    {
+      "id": "s09",
+      "name": "雷隙追迹",
+      "region": 2,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 9,
+      "level": 1,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          3,
+          2,
+          2
+        ],
+        "altitude": 1500,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": 0.075,
+        "spacing": 289,
+        "distance": 1080
+      }
+    },
+    {
+      "id": "s10",
+      "name": "守望者",
+      "region": 0,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 末波由王牌 1 号带队。",
+      "threat": 0,
+      "campaign": 10,
+      "level": 1,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          2,
+          3,
+          2
+        ],
+        "altitude": 630,
+        "ace": "mirage",
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "j10",
+          "f16",
+          "mig21"
+        ],
+        "heading": -0.075,
+        "spacing": 302,
+        "distance": 770
+      }
+    },
+    {
+      "id": "s11",
+      "name": "北望信标",
+      "region": 1,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 11,
+      "level": 3,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "stack",
+        "waves": [
+          2,
+          3,
+          2
+        ],
+        "altitude": 1220,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": -0.075,
+        "spacing": 197,
+        "distance": 885
+      }
+    },
+    {
+      "id": "s12",
+      "name": "侧风夹击",
+      "region": 0,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 12,
+      "level": 3,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "pincer",
+        "waves": [
+          3,
+          3
+        ],
+        "altitude": 720,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0,
+        "spacing": 210,
+        "distance": 1040
+      }
+    },
+    {
+      "id": "s13",
+      "name": "远洋接力",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 13,
+      "level": 3,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          2,
+          3,
+          3
+        ],
+        "altitude": 1130,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0.075,
+        "spacing": 223,
+        "distance": 1195
+      }
+    },
+    {
+      "id": "s14",
+      "name": "临崖截击",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 14,
+      "level": 3,
+      "engagement": {
+        "objective": "low",
+        "formation": "line",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 195,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": -0.075,
+        "spacing": 236,
+        "distance": 885
+      }
+    },
+    {
+      "id": "s15",
+      "name": "风暴眼",
+      "region": 2,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 0,
+      "campaign": 15,
+      "level": 3,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          2,
+          3,
+          3
+        ],
+        "altitude": 1680,
+        "tier": 0,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0,
+        "spacing": 249,
+        "distance": 1040
+      }
+    },
+    {
+      "id": "s16",
+      "name": "雪岭分队",
+      "region": 1,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 16,
+      "level": 3,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "line",
+        "waves": [
+          3,
+          2,
+          3
+        ],
+        "altitude": 2120,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0.075,
+        "spacing": 262,
+        "distance": 1195
+      }
+    },
+    {
+      "id": "s17",
+      "name": "归航纵队",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 17,
+      "level": 3,
+      "engagement": {
+        "objective": "screen",
+        "formation": "pincer",
+        "waves": [
+          3,
+          2
+        ],
+        "altitude": 1440,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": -0.075,
+        "spacing": 275,
+        "distance": 885
+      }
+    },
+    {
+      "id": "s18",
+      "name": "外海断线",
+      "region": 0,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 18,
+      "level": 3,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "screen",
+        "waves": [
+          3,
+          3,
+          2
+        ],
+        "altitude": 825,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0,
+        "spacing": 288,
+        "distance": 1040
+      }
+    },
+    {
+      "id": "s19",
+      "name": "远岬低空",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 19,
+      "level": 3,
+      "engagement": {
+        "objective": "low",
+        "formation": "stack",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 250,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": 0.075,
+        "spacing": 301,
+        "distance": 1195
+      }
+    },
+    {
+      "id": "s20",
+      "name": "云端来客",
+      "region": 2,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 末波由王牌 2 号带队。",
+      "threat": 1,
+      "campaign": 20,
+      "level": 3,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          3,
+          3,
+          3
+        ],
+        "altitude": 1670,
+        "ace": "hornet",
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "mig21",
+          "mirage",
+          "j10",
+          "f16"
+        ],
+        "heading": -0.075,
+        "spacing": 314,
+        "distance": 885
+      }
+    },
+    {
+      "id": "s21",
+      "name": "冰墙折返",
+      "region": 1,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 21,
+      "level": 6,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "pincer",
+        "waves": [
+          3,
+          3
+        ],
+        "altitude": 1820,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": -0.075,
+        "spacing": 209,
+        "distance": 1000
+      }
+    },
+    {
+      "id": "s22",
+      "name": "两翼火网",
+      "region": 1,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 22,
+      "level": 6,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "pincer",
+        "waves": [
+          3,
+          3,
+          3
+        ],
+        "altitude": 1760,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0,
+        "spacing": 222,
+        "distance": 1155
+      }
+    },
+    {
+      "id": "s23",
+      "name": "雾谷无人机群",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。 本空域有影隼无人机群。",
+      "threat": 1,
+      "campaign": 23,
+      "level": 6,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 950,
+        "tier": 1,
+        "groups": 0,
+        "drones": 2,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0.075,
+        "spacing": 235,
+        "distance": 1310
+      }
+    },
+    {
+      "id": "s24",
+      "name": "浅湾空战",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。 本空域有影隼无人机群。",
+      "threat": 1,
+      "campaign": 24,
+      "level": 6,
+      "engagement": {
+        "objective": "low",
+        "formation": "screen",
+        "waves": [
+          3,
+          3
+        ],
+        "altitude": 205,
+        "tier": 1,
+        "groups": 0,
+        "drones": 2,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": -0.075,
+        "spacing": 248,
+        "distance": 1000
+      }
+    },
+    {
+      "id": "s25",
+      "name": "冷锋上缘",
+      "region": 1,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 25,
+      "level": 6,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "stack",
+        "waves": [
+          3,
+          4,
+          2
+        ],
+        "altitude": 2260,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0,
+        "spacing": 261,
+        "distance": 1155
+      }
+    },
+    {
+      "id": "s26",
+      "name": "峡谷折光",
+      "region": 1,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 26,
+      "level": 6,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          3,
+          3,
+          2
+        ],
+        "altitude": 1380,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0.075,
+        "spacing": 274,
+        "distance": 1310
+      }
+    },
+    {
+      "id": "s27",
+      "name": "风涌支线",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。 本空域有影隼无人机群。",
+      "threat": 1,
+      "campaign": 27,
+      "level": 6,
+      "engagement": {
+        "objective": "screen",
+        "formation": "pincer",
+        "waves": [
+          3,
+          3,
+          3
+        ],
+        "altitude": 1070,
+        "tier": 1,
+        "groups": 0,
+        "drones": 2,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": -0.075,
+        "spacing": 287,
+        "distance": 1000
+      }
+    },
+    {
+      "id": "s28",
+      "name": "零下无人机群",
+      "region": 1,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 本空域有影隼无人机群。",
+      "threat": 1,
+      "campaign": 28,
+      "level": 6,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "stack",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 2570,
+        "tier": 1,
+        "groups": 0,
+        "drones": 2,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0,
+        "spacing": 300,
+        "distance": 1155
+      }
+    },
+    {
+      "id": "s29",
+      "name": "雪线安全窗",
+      "region": 1,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 1,
+      "campaign": 29,
+      "level": 6,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "screen",
+        "waves": [
+          4,
+          3
+        ],
+        "altitude": 1970,
+        "tier": 1,
+        "groups": 0,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": 0.075,
+        "spacing": 313,
+        "distance": 1310
+      }
+    },
+    {
+      "id": "s30",
+      "name": "白峰王牌",
+      "region": 1,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 本空域有影隼无人机群。 末波由王牌 3 号带队。",
+      "threat": 1,
+      "campaign": 30,
+      "level": 6,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 2420,
+        "ace": "gripen",
+        "tier": 1,
+        "groups": 0,
+        "drones": 2,
+        "roster": [
+          "f16",
+          "mirage",
+          "gripen",
+          "hornet"
+        ],
+        "heading": -0.075,
+        "spacing": 326,
+        "distance": 1000
+      }
+    },
+    {
+      "id": "s31",
+      "name": "低云回廊",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 31,
+      "level": 9,
+      "engagement": {
+        "objective": "screen",
+        "formation": "stack",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 845,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": -0.075,
+        "spacing": 221,
+        "distance": 1115
+      }
+    },
+    {
+      "id": "s32",
+      "name": "雷幕进场",
+      "region": 2,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 32,
+      "level": 9,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "line",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 1560,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0,
+        "spacing": 234,
+        "distance": 1270
+      }
+    },
+    {
+      "id": "s33",
+      "name": "邻岸切入",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 33,
+      "level": 9,
+      "engagement": {
+        "objective": "low",
+        "formation": "pincer",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 229,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0.075,
+        "spacing": 247,
+        "distance": 1425
+      }
+    },
+    {
+      "id": "s34",
+      "name": "海峡禁飞区",
+      "region": 2,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 34,
+      "level": 9,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "pincer",
+        "waves": [
+          3,
+          4,
+          3
+        ],
+        "altitude": 1150,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": -0.075,
+        "spacing": 260,
+        "distance": 1115
+      }
+    },
+    {
+      "id": "s35",
+      "name": "重叠航迹",
+      "region": 2,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 35,
+      "level": 9,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "pincer",
+        "waves": [
+          4,
+          3,
+          4
+        ],
+        "altitude": 1800,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0,
+        "spacing": 273,
+        "distance": 1270
+      }
+    },
+    {
+      "id": "s36",
+      "name": "窗口交锋",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 36,
+      "level": 9,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          4,
+          4,
+          3
+        ],
+        "altitude": 1240,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0.075,
+        "spacing": 286,
+        "distance": 1425
+      }
+    },
+    {
+      "id": "s37",
+      "name": "远海预警",
+      "region": 2,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 37,
+      "level": 9,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          3,
+          4,
+          4
+        ],
+        "altitude": 2110,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": -0.075,
+        "spacing": 299,
+        "distance": 1115
+      }
+    },
+    {
+      "id": "s38",
+      "name": "短波盲区",
+      "region": 0,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 38,
+      "level": 9,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "line",
+        "waves": [
+          4,
+          3,
+          4
+        ],
+        "altitude": 1100,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0,
+        "spacing": 312,
+        "distance": 1270
+      }
+    },
+    {
+      "id": "s39",
+      "name": "前线急袭",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 39,
+      "level": 9,
+      "engagement": {
+        "objective": "low",
+        "formation": "stack",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 246,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": 0.075,
+        "spacing": 325,
+        "distance": 1425
+      }
+    },
+    {
+      "id": "s40",
+      "name": "雷眼猎手",
+      "region": 2,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 末波由王牌 4 号带队。",
+      "threat": 2,
+      "campaign": 40,
+      "level": 9,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          3,
+          4,
+          4
+        ],
+        "altitude": 2000,
+        "ace": "su35",
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "j10",
+          "hornet",
+          "gripen",
+          "su35"
+        ],
+        "heading": -0.075,
+        "spacing": 338,
+        "distance": 1115
+      }
+    },
+    {
+      "id": "s41",
+      "name": "暮线回扫",
+      "region": 0,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 41,
+      "level": 12,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "stack",
+        "waves": [
+          4,
+          4,
+          3
+        ],
+        "altitude": 965,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 233,
+        "distance": 1230
+      }
+    },
+    {
+      "id": "s42",
+      "name": "峡口突破",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 42,
+      "level": 12,
+      "engagement": {
+        "objective": "low",
+        "formation": "screen",
+        "waves": [
+          3,
+          3
+        ],
+        "altitude": 245,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 246,
+        "distance": 1385
+      }
+    },
+    {
+      "id": "s43",
+      "name": "归途拦截",
+      "region": 0,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 43,
+      "level": 12,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "pincer",
+        "waves": [
+          4,
+          3,
+          4
+        ],
+        "altitude": 1400,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 259,
+        "distance": 1540
+      }
+    },
+    {
+      "id": "s44",
+      "name": "雪脊中继",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 44,
+      "level": 12,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          4,
+          4,
+          3
+        ],
+        "altitude": 1740,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 272,
+        "distance": 1230
+      }
+    },
+    {
+      "id": "s45",
+      "name": "暗潮守备",
+      "region": 2,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 2,
+      "campaign": 45,
+      "level": 12,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "stack",
+        "waves": [
+          3,
+          4,
+          4
+        ],
+        "altitude": 1810,
+        "tier": 2,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 285,
+        "distance": 1385
+      }
+    },
+    {
+      "id": "s46",
+      "name": "交错锋线",
+      "region": 0,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 46,
+      "level": 12,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "pincer",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1620,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 298,
+        "distance": 1540
+      }
+    },
+    {
+      "id": "s47",
+      "name": "天空走廊",
+      "region": 1,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 47,
+      "level": 12,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 2070,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 311,
+        "distance": 1230
+      }
+    },
+    {
+      "id": "s48",
+      "name": "南岛火线",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 48,
+      "level": 12,
+      "engagement": {
+        "objective": "low",
+        "formation": "line",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 268,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 324,
+        "distance": 1385
+      }
+    },
+    {
+      "id": "s49",
+      "name": "灯塔围猎",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 49,
+      "level": 12,
+      "engagement": {
+        "objective": "screen",
+        "formation": "pincer",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1070,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 337,
+        "distance": 1540
+      }
+    },
+    {
+      "id": "s50",
+      "name": "余晖之翼",
+      "region": 0,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 末波由王牌 5 号带队。",
+      "threat": 3,
+      "campaign": 50,
+      "level": 12,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          4,
+          4,
+          3
+        ],
+        "altitude": 1520,
+        "ace": "j20",
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "mirage",
+          "hornet",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 350,
+        "distance": 1230
+      }
+    },
+    {
+      "id": "s51",
+      "name": "顶层云界",
+      "region": 1,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 51,
+      "level": 16,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "stack",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 2740,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 245,
+        "distance": 1345
+      }
+    },
+    {
+      "id": "s52",
+      "name": "风切编队",
+      "region": 2,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 52,
+      "level": 16,
+      "engagement": {
+        "objective": "screen",
+        "formation": "pincer",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1810,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 258,
+        "distance": 1500
+      }
+    },
+    {
+      "id": "s53",
+      "name": "外岛静默",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 53,
+      "level": 16,
+      "engagement": {
+        "objective": "low",
+        "formation": "stack",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 258,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 271,
+        "distance": 1655
+      }
+    },
+    {
+      "id": "s54",
+      "name": "多轴警戒",
+      "region": 0,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 54,
+      "level": 16,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "pincer",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1270,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 284,
+        "distance": 1345
+      }
+    },
+    {
+      "id": "s55",
+      "name": "峡口争夺",
+      "region": 1,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 55,
+      "level": 16,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "line",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1930,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 297,
+        "distance": 1500
+      }
+    },
+    {
+      "id": "s56",
+      "name": "暮雷终段",
+      "region": 2,
+      "kind": "air",
+      "detail": "正面截击多个敌机分队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 56,
+      "level": 16,
+      "engagement": {
+        "objective": "intercept",
+        "formation": "pincer",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 2010,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 310,
+        "distance": 1655
+      }
+    },
+    {
+      "id": "s57",
+      "name": "疾风斗阵",
+      "region": 1,
+      "kind": "air",
+      "detail": "分离掩护与主攻编队，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 57,
+      "level": 16,
+      "engagement": {
+        "objective": "screen",
+        "formation": "screen",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 1670,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 323,
+        "distance": 1345
+      }
+    },
+    {
+      "id": "s58",
+      "name": "重返前哨",
+      "region": 0,
+      "kind": "air",
+      "detail": "在沿岸和山间低空接战，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 58,
+      "level": 16,
+      "engagement": {
+        "objective": "low",
+        "formation": "pincer",
+        "waves": [
+          2,
+          2
+        ],
+        "altitude": 270,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0,
+        "spacing": 336,
+        "distance": 1500
+      }
+    },
+    {
+      "id": "s59",
+      "name": "会合点守备",
+      "region": 2,
+      "kind": "air",
+      "detail": "敌机分两翼切入，击落全部敌机后过关。",
+      "threat": 3,
+      "campaign": 59,
+      "level": 16,
+      "engagement": {
+        "objective": "pincer",
+        "formation": "stack",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 2190,
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": 0.075,
+        "spacing": 349,
+        "distance": 1655
+      }
+    },
+    {
+      "id": "s60",
+      "name": "苍穹试炼",
+      "region": 2,
+      "kind": "air",
+      "detail": "各分队从不同高度和方位接敌，击落全部敌机后过关。 末波由王牌 6 号带队。",
+      "threat": 3,
+      "campaign": 60,
+      "level": 16,
+      "engagement": {
+        "objective": "sweep",
+        "formation": "ace",
+        "waves": [
+          4,
+          4,
+          4
+        ],
+        "altitude": 2590,
+        "ace": "j20",
+        "tier": 3,
+        "groups": 0,
+        "roster": [
+          "hornet",
+          "gripen",
+          "su35",
+          "j20"
+        ],
+        "heading": -0.075,
+        "spacing": 362,
+        "distance": 1345
+      }
+    }
+  ],
+  "chapters": [
+    "前哨警报",
+    "破云航线",
+    "冰脊对峙",
+    "远雷攻防",
+    "暮色反攻",
+    "苍穹决战"
+  ]
+}

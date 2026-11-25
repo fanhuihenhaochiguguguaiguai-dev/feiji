@@ -1,0 +1,30 @@
+config_version=5
+
+[application]
+config/name="苍穹锋刃 V18.1"
+config/icon="res://assets/ui/icon.svg"
+config/version="18.1.0"
+config/features=PackedStringArray("4.7", "Mobile")
+run/main_scene="res://scenes/main.tscn"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=576
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=0
+
+[editor]
+movie_writer/fps=24
+
+[physics]
+common/physics_ticks_per_second=90
+
+[rendering]
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+renderer/rendering_method.mobile="mobile"
+rendering_device/driver.android="vulkan"
+anti_aliasing/quality/msaa_3d=1
+scaling_3d/scale=0.85
+lights_and_shadows/directional_shadow/size=2048

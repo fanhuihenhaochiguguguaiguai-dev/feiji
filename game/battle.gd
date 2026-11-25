@@ -1,0 +1,683 @@
+extends Node3D
+
+signal finished(result: Dictionary)
+
+const Data = preload("res://game/catalogue.gd")
+const Airframe = preload("res://game/flight_body.gd")
+const Landscape = preload("res://game/world.gd")
+const FlightAudio = preload("res://game/flight_audio.gd")
+const Effects = preload("res://game/effects.gd")
+const MISSILE_CYCLE := 0.96
+const COUNTER_CYCLE := 4.4
+const EVADE_CYCLE := 3.6
+const BOOST_CYCLE := 5.8
+const LOCK_ANGLE := 0.195
+const CONTACT_DISTANCE := [100.0,200.0,300.0,500.0,750.0,1000.0,1500.0,2000.0,3000.0,4000.0,5000.0,6000.0]
+const CONTACT_PIXELS := [80.0,60.0,52.0,44.0,38.0,32.0,28.0,24.0,20.0,16.0,14.0,12.0]
+const FREE_ROSTER := ["f16", "j10", "mirage", "gripen", "hornet", "mig21"]
+
+var catalogue: RefCounted
+var profile: RefCounted
+var task := {}
+var mode := ""
+var player: Airframe
+var fleet: Array[Airframe] = []
+var target: Airframe
+var locked_time := 0.0
+var lead := Vector3.ZERO
+var missile: Dictionary
+var missile_id := ""
+var radar_range := 6000.0
+var time := 0.0
+var wave := 0
+var next_wave := 0.0
+var respawns := 0
+var player_kills := 0
+var shots_hit := 0
+var total_fired := 0
+var miles := 0.0
+var paused := false
+var ended := false
+var camera := Camera3D.new()
+var world := Landscape.new()
+var effects := Effects.new()
+var audio := FlightAudio.new()
+var shots: Array[Dictionary] = []
+var action := {}
+var stick := Vector2.ZERO
+var throttle := 0.74
+var boost_at := -10.0
+var boost_until := 0.0
+var manual_cockpit := false
+var look_toward := Vector3.FORWARD
+var camera_speed := Vector3.ZERO
+var camera_fresh := true
+var exhaust_phase := 0.0
+var effects_phase := 0.0
+var warning := false
+var capture := false
+var started_with_runway := false
+var ready_for_play := false
+
+func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: Dictionary, use_runway: bool) -> void:
+	catalogue = db
+	profile = save
+	mode = selected_mode
+	task = operation
+	started_with_runway = use_runway
+	missile_id = profile.selected_weapon(catalogue)
+	missile = Data.MISSILES[missile_id]
+	radar_range += profile.level_of("radar") * 350.0
+	for slot in 112:
+		shots.append({"active":false, "slot":slot})
+	add_child(world)
+	add_child(effects)
+	effects.pool()
+	add_child(audio)
+	audio.mute = profile.state.settings.mute
+	add_child(camera)
+	camera.far = 20000.0
+	camera.near = 0.55
+	camera.fov = 53.0
+	camera.current = true
+	var p := Vector3(11450.0, 435.0, 5150.0)
+	if selected_mode == "campaign":
+		p.y = maxf(190.0, task.engagement.altitude)
+	if use_runway:
+		p = Vector3(-340.0, 29.7, 590.0)
+	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, p)
+	player = _make_plane(str(profile.state.selected), 0)
+	p.y = world.height(p) + player.type.gearClearance + 0.12 if use_runway else maxf(p.y, world.height(p) + 175.0)
+	player.reset(p, Vector3.FORWARD, 0.0 if use_runway else player.type.trim, player.type.durability, use_runway)
+	player.engine = 1.0 + profile.level_of("engine") * 0.06
+	player.handling = 1.0 + profile.level_of("maneuver") * 0.06
+	throttle = 0.15 if use_runway else 0.74
+	for i in (6 if mode == "free" else 4):
+		var bot := _make_plane(FREE_ROSTER[i], 1 + i % 3 if mode == "free" else 1)
+		bot.model.visible = false
+	if mode == "free":
+		for i in range(1, fleet.size()):
+			_spawn_free(fleet[i], true)
+	elif mode == "campaign" or task.get("lesson", "") != "flight":
+		_spawn_wave()
+	ready_for_play = true
+	_render_pose(0.016)
+
+func _make_plane(id: String, side: int) -> Airframe:
+	var jet := Airframe.new()
+	jet.type = catalogue.aircraft(id)
+	jet.side = side
+	jet.index = fleet.size()
+	jet.model = Node3D.new()
+	add_child(jet.model)
+	_change_plane(jet, id)
+	fleet.append(jet)
+	return jet
+
+func _change_plane(jet: Airframe, id: String) -> void:
+	jet.type = catalogue.aircraft(id)
+	for old in jet.model.get_children():
+		jet.model.remove_child(old)
+		old.queue_free()
+	jet.rig.clear()
+	var model: Node3D = catalogue.mesh(id)
+	jet.model.add_child(model)
+	var exhausts: Array[Node3D] = []
+	for mount in jet.type.engine:
+		if not jet.type.props.is_empty():
+			break
+		var root := Node3D.new()
+		root.position = Vector3(mount[0], mount[1], mount[2])
+		jet.model.add_child(root)
+		exhausts.append(root)
+		_jet_exhaust(root, jet.type.span)
+	jet.rig = {"meshes":model, "exhausts":exhausts, "lod":"Exterior", "gear":[], "fins":[]}
+	var exterior := model.get_node_or_null("Exterior")
+	if exterior:
+		for node in exterior.find_children("*", "Node3D", true, false):
+			if str(node.name).begins_with("Gear_") and node is not MeshInstance3D:
+				jet.rig.gear.append({"node":node, "rot":node.rotation})
+			if str(node.name).begins_with("Aileron") or str(node.name).begins_with("Canard") or str(node.name).begins_with("Rudder"):
+				jet.rig.fins.append({"node":node, "rot":node.rotation})
+
+func _jet_exhaust(root: Node3D, span: float) -> void:
+	for k in 2:
+		var mesh := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.04 if k == 0 else 0.0
+		cone.bottom_radius = span * (0.042 if k == 0 else 0.018)
+		cone.height = span * (0.34 if k == 0 else 0.47)
+		cone.radial_segments = 12
+		cone.rings = 0
+		cone.material = effects.emissive(Color("#6e7df9") if k == 0 else Color("#ffb86d"), 4.6 if k == 0 else 8.0)
+		mesh.mesh = cone
+		mesh.rotation.x = PI * 0.5
+		mesh.position.z = cone.height * 0.5
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mesh)
+	for k in 3:
+		var ring := MeshInstance3D.new()
+		var disc := TorusMesh.new()
+		disc.inner_radius = span * (0.030 - k * 0.004)
+		disc.outer_radius = span * (0.036 - k * 0.004)
+		disc.rings = 12
+		disc.ring_segments = 6
+		disc.material = effects.emissive(Color("#adc7ff"), 4.6)
+		ring.mesh = disc
+		ring.rotation.x = PI * 0.5
+		ring.position.z = span * (0.09 + k * 0.095)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(ring)
+
+func _spawn_free(jet: Airframe, opening: bool) -> void:
+	var angle := (jet.index - 1) * TAU / 6.0 + (0.0 if opening else fmod(time, TAU))
+	var offset := Vector3(sin(angle), 0.0, -cos(angle))
+	var at := player.position + offset * (1120.0 if opening else 1700.0)
+	at.y = maxf(world.height(at) + 260.0, player.position.y + 25.0 + jet.index * 34.0)
+	jet.reset(at, -offset, jet.type.trim * 0.83, 290.0)
+	jet.model.visible = true
+	jet.until_respawn = 0.0
+	jet.missile_at = time + 4.5 + jet.index * 1.26
+
+func _spawn_wave() -> void:
+	var plan: Dictionary = task.get("engagement", {})
+	var numbers: Array = plan.get("waves", [1])
+	var amount: int = int(numbers[wave])
+	wave += 1
+	var roster: Array = plan.get("roster", ["j10"])
+	var course := Vector3(player.forward.x, 0.0, player.forward.z).normalized()
+	var right := course.cross(Vector3.UP)
+	for i in range(1, fleet.size()):
+		var jet := fleet[i]
+		if i > amount:
+			jet.hp = 0.0
+			jet.model.visible = false
+			continue
+		var ace := i == amount and wave == numbers.size() and plan.has("ace")
+		var drones: int = int(plan.get("drones", 0))
+		var id: String = plan.ace if ace else ("shade-drone" if drones > 0 and i < amount and i >= amount - drones else roster[(i + wave - 1) % roster.size()])
+		_change_plane(jet, id)
+		var tier := int(plan.get("tier", 0))
+		var distance: float = float(plan.get("distance", 720.0)) + (wave - 1) * 210.0 + (i - 1) * 155.0
+		var section: float = 1.65 if plan.get("formation") == "pincer" else 1.0
+		var lateral: float = (i - 1) * (1.0 if i % 2 == 0 else -1.0) * float(plan.get("spacing", 155.0)) * section
+		var at := player.position + course * distance + right * lateral
+		at.y = maxf(world.height(at) + 130.0, player.position.y + (i - 1) * (126.0 if plan.get("formation") == "stack" else 48.0))
+		var heading := -course if mode == "campaign" and i == 1 else course.rotated(Vector3.UP, 0.11 if i % 2 == 0 else -0.09)
+		var life := 359.0 + clampf(float(task.get("campaign", 1)) - 1.0, 0.0, 59.0) * 2.3 + (92.0 + float(task.get("campaign", 1)) * 1.25 if ace else 0.0)
+		if mode == "training":
+			life = 110.0
+		jet.reset(at, heading, jet.type.trim * (0.67 if mode == "training" else 0.84), life)
+		jet.handling = 0.66 + tier * 0.075 + (0.16 if ace else 0.0)
+		jet.model.visible = true
+		jet.missile_at = time + 3.7 + i * 0.95
+	next_wave = 0.0
+
+func _physics_process(dt: float) -> void:
+	if paused or ended or not ready_for_play:
+		return
+	time += dt
+	var drift := world.follow(player.position, player.velocity)
+	if drift != Vector3.ZERO:
+		for jet in fleet:
+			jet.position -= drift
+			jet.previous -= drift
+		for shot in shots:
+			if shot.active:
+				shot.position -= drift
+				for n in shot.trail.size():
+					shot.trail[n] -= drift
+		camera.position -= drift
+		effects.rebase(drift)
+	if player.hp > 0:
+		_targeting(dt)
+		_update_player(dt)
+	elif mode == "free" and time >= player.until_respawn:
+		var at := player.position + Vector3(485.0, 210.0, 350.0)
+		at.y = maxf(world.height(at) + 300.0, at.y)
+		player.reset(at, Vector3.FORWARD, player.type.trim, player.type.durability)
+		player.model.visible = true
+		camera_fresh = true
+	for i in range(1, fleet.size()):
+		var jet := fleet[i]
+		if jet.hp > 0.0:
+			_update_bot(jet, dt)
+		elif mode == "free" and time >= jet.until_respawn:
+			_spawn_free(jet, false)
+	_update_shots(dt)
+	if mode == "campaign":
+		var count := alive_enemies()
+		if count == 0 and next_wave == 0.0:
+			next_wave = time + 1.7
+		if next_wave > 0.0 and time >= next_wave and not ended:
+			if wave >= task.engagement.waves.size():
+				finish(true)
+			else:
+				_spawn_wave()
+
+func _targeting(dt: float) -> void:
+	var was_locked := is_locked()
+	var best: Airframe
+	var score := -INF
+	for jet in fleet:
+		if jet == player or jet.hp <= 0.0:
+			continue
+		var offset: Vector3 = jet.position - player.position
+		var distance := offset.length()
+		if distance < 1.0 or distance > missile.range + profile.level_of("radar") * 150.0:
+			continue
+		var align := player.forward.dot(offset / distance)
+		if align < cos(LOCK_ANGLE * (1.13 if jet == target else 1.0)) or world.obstruction(player.position, jet.position):
+			continue
+		var rank := align * 2.3 - distance / 7700.0 + (0.16 if jet == target else 0.0)
+		if rank > score:
+			score = rank
+			best = jet
+	if best != target:
+		locked_time = 0.0
+	target = best
+	if target:
+		locked_time = minf(missile.acquire, locked_time + dt)
+		if not was_locked and is_locked():
+			audio.play_at("lock", player.position)
+		var offset: Vector3 = target.position - player.position
+		var speed := float(player.type.cannon[1])
+		var rel: Vector3 = target.velocity - player.velocity * 0.60
+		var a := rel.length_squared() - speed * speed
+		var b := 2.0 * offset.dot(rel)
+		var disc := maxf(0.0, b * b - 4.0 * a * offset.length_squared())
+		var travel := clampf((-b - sqrt(disc)) / minf(-1.0, 2.0 * a), 0.0, 3.5)
+		lead = target.position + rel * travel + Vector3.UP * (4.905 * travel * travel)
+	else:
+		lead = player.position + player.forward * 650.0
+
+func is_locked() -> bool:
+	return target != null and target.hp > 0.0 and locked_time >= missile.acquire
+
+func _update_player(dt: float) -> void:
+	var keyboard := Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT)) - float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),
+		float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)) - float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN)))
+	var steering := (stick + keyboard).limit_length()
+	var control := Vector3(steering.y, steering.x, 0.0)
+	if is_locked() and steering.length_squared() < 0.004 and not player.grounded and time >= player.evade_until:
+		var vector: Vector3 = player.attitude.inverse() * (target.position + target.velocity * 0.23 - player.position).normalized()
+		control += Vector3(clampf(vector.y * 0.48, -0.17, 0.17), clampf(vector.x * 0.47, -0.17, 0.17), 0.0)
+	if action.get("evade", false):
+		action.erase("evade")
+		if time >= player.evade_at:
+			player.evade_side = signf(steering.x) if absf(steering.x) > 0.12 else (-1.0 if player.evade_side > 0.0 else 1.0)
+			player.evade_until = time + 0.78
+			player.evade_at = time + EVADE_CYCLE
+	if time < player.evade_until:
+		control = Vector3(0.23 + control.x * 0.24, player.evade_side * 0.77, -player.evade_side * 0.83)
+	if action.get("boost", false):
+		action.erase("boost")
+		if time >= boost_at:
+			boost_at = time + BOOST_CYCLE
+			boost_until = time + 2.1
+	if action.get("counter", false):
+		action.erase("counter")
+		if time >= player.counter_at:
+			player.counter_at = time + COUNTER_CYCLE
+			player.counter_until = time + 0.83
+			audio.play_at("counter", player.position)
+	if action.get("gear", false):
+		action.erase("gear")
+		if not player.type.gearFixed and not player.grounded and (player.gear_target > 0.0 or player.velocity.length() < player.type.trim * 1.22):
+			player.gear_target = 1.0 - player.gear_target
+	var floor_m := world.height(player.position)
+	player.move(dt, control, throttle, time < boost_until, floor_m, world.is_runway(player.position))
+	miles += player.position.distance_to(player.previous)
+	var floor_after := world.height(player.position)
+	if not player.grounded and player.position.y < maxf(0.0, floor_after) + 1.2:
+		var flat: bool = world.is_runway(player.position) and player.gear > 0.85 and player.velocity.y > -15.0 and player.velocity.length() < player.type.stall * 1.9
+		if flat:
+			player.grounded = true
+			player.position.y = floor_after + player.type.gearClearance
+		else:
+			_destroy(player, null)
+			return
+	if (action.get("gun", false) or Input.is_physical_key_pressed(KEY_SPACE)) and time >= player.shot_at:
+		_fire(player, false, target)
+	if (action.get("missile", false) or Input.is_physical_key_pressed(KEY_F)) and is_locked() and time >= player.missile_at:
+		_fire(player, true, target)
+	if mode == "training" and task.lesson == "flight" and time >= 15.0 and absf(throttle - 0.74) > 0.08 and not player.grounded:
+		finish(true)
+
+func _update_bot(jet: Airframe, dt: float) -> void:
+	if jet.target == null or jet.target.hp <= 0.0 or time >= jet.ai_until:
+		var nearest := INF
+		for candidate in fleet:
+			if candidate.side == jet.side or candidate.hp <= 0.0:
+				continue
+			var d := candidate.position.distance_squared_to(jet.position)
+			if d < nearest:
+				nearest = d
+				jet.target = candidate
+		jet.ai_until = time + 0.47 + jet.index * 0.03
+	var enemy: Airframe = jet.target
+	var travel := jet.forward
+	var speed := 0.67
+	if enemy and enemy.hp > 0.0:
+		var offset := enemy.position - jet.position
+		var range_m := offset.length()
+		if mode == "training" and task.lesson in ["gun", "missile"]:
+			travel = Vector3.FORWARD.rotated(Vector3.UP, sin(time * 0.19) * 0.16)
+			speed = 0.59
+		else:
+			travel = (offset + enemy.velocity * clampf(range_m / 600.0, 0.4, 2.2)).normalized()
+			jet.ai_state = "attack" if range_m < 1800.0 else "intercept"
+			if range_m < 185.0 and mode != "training":
+				travel = jet.forward.rotated(Vector3.UP, 0.53 if jet.index % 2 == 0 else -0.53)
+				jet.ai_state = "extend"
+			if jet.forward.dot(offset.normalized()) > 0.989 and range_m < 1270.0 and time >= jet.shot_at and mode != "training":
+				_fire(jet, false, enemy)
+				jet.shot_at = time + 0.17
+			if time >= jet.missile_at and range_m < 2200.0 and (jet.forward.dot(offset.normalized()) > 0.93 or mode == "training") and not world.obstruction(jet.position, enemy.position):
+				_fire(jet, true, enemy)
+				jet.missile_at = time + 10.0 + jet.index * 1.15
+			if mode == "training" and task.lesson in ["counter","evade"] and time >= jet.missile_at + 2.0 and range_m < 7300.0:
+				_fire(jet, true, enemy)
+				jet.missile_at = time + 9.0
+	var ahead := jet.position + jet.forward * maxf(240.0, jet.velocity.length() * 2.2)
+	if ahead.y < maxf(world.height(ahead), world.height(jet.position)) + 105.0:
+		travel.y = maxf(0.43, travel.y)
+		jet.ai_state = "terrain"
+		speed = 0.82
+	var relative := jet.attitude.inverse() * travel.normalized()
+	var yaw := atan2(relative.x, -relative.z)
+	var control := Vector3(clampf(relative.y * 1.09, -0.55, 0.58), clampf(yaw * 0.93, -0.72, 0.72), 0.0)
+	if time < jet.evade_until:
+		jet.ai_state = "evade"
+		control += Vector3(0.24, jet.evade_side * 0.59, -jet.evade_side * 0.58)
+	jet.move(dt, control, speed, false, world.height(jet.position), false)
+	if jet.position.y < maxf(world.height(jet.position), 0.0) + 2.0:
+		_destroy(jet, null)
+
+func _fire(originator: Airframe, guided: bool, intended: Airframe) -> void:
+	var slot := -1
+	for shot in shots:
+		if not shot.active:
+			slot = shot.slot
+			break
+	if slot < 0:
+		return
+	var setup: Dictionary = missile if originator == player else Data.MISSILES.interceptor
+	var guns: Array = originator.type.rails if guided else originator.type.guns
+	if guns.is_empty():
+		if originator == player:
+			return
+		guns = [[0, -0.45, -3]]
+	var mount: Array = guns[total_fired % guns.size()]
+	var n: Vector3 = originator.forward
+	var start := originator.position + originator.attitude * Vector3(mount[0], mount[1], mount[2])
+	var power := 0.0
+	var velocity := Vector3.ZERO
+	if not guided:
+		var gun: Array = originator.type.cannon
+		if originator == player and intended and start.distance_to(intended.position) < 1650.0:
+			var aim := (lead - start).normalized()
+			if aim.dot(n) > 0.9984:
+				n = n.lerp(aim, 0.63).normalized()
+		if originator != player and intended:
+			n = n.lerp((intended.position + intended.velocity * 0.28 - start).normalized(), 0.74).normalized()
+		n = (n + Vector3(randf_range(-gun[2], gun[2]), randf_range(-gun[2], gun[2]), randf_range(-gun[2], gun[2]))).normalized()
+		velocity = n * float(gun[1]) + originator.velocity * 0.60
+		power = gun[3] * originator.type.gunPower * (1.0 + profile.level_of("weapons") * 0.07 if originator == player else 0.6)
+		originator.shot_at = time + float(gun[0])
+		effects.puff(start + n * 3.0, n * 130.0, 0.65, 0.11, 2)
+	else:
+		velocity = originator.velocity + n * 78.0 - Vector3.UP * 5.0
+		var factor := 1.11 if originator.type.era == "cold" else (0.96 if originator.type.era == "stealth" else (1.06 if originator.type.id == "a10" else 1.0))
+		power = float(setup.damage) * factor * (1.0 + profile.level_of("warhead") * 0.12 if originator == player else 0.61)
+		originator.missile_at = time + MISSILE_CYCLE
+	if originator == player:
+		total_fired += 1
+	shots[slot] = {"active":true, "slot":slot, "owner":originator, "target":intended, "position":start, "velocity":velocity, "nose":n,
+		"missile":guided, "profile":setup, "damage":power, "fuel":setup.life if guided else 2.1, "age":0.0, "trail":[], "soon":0.0, "decoy":false}
+	effects.projectile(slot, start, n, guided)
+	audio.play_at("missile" if guided else "gun", start)
+
+func _update_shots(dt: float) -> void:
+	warning = false
+	for cast in shots:
+		if not cast.active:
+			continue
+		cast.age += dt
+		cast.fuel -= dt
+		if cast.fuel <= 0.0:
+			_expire(cast)
+			continue
+		var at: Vector3 = cast.position
+		var velocity: Vector3 = cast.velocity
+		var direction := velocity.normalized()
+		var guided: bool = cast.missile
+		if guided and cast.age > 0.085:
+			var mark: Airframe = cast.target
+			if mark and mark.hp > 0.0 and not cast.decoy:
+				var offset: Vector3 = mark.position - at
+				var distance := offset.length()
+				if mark == player and distance < 1600.0:
+					warning = true
+				if distance < 400.0 and mark != player and mode != "training" and time >= mark.evade_at and (mark.index + wave) % 3 == 0:
+					mark.evade_until = time + 0.71
+					mark.evade_at = time + 7.2
+					mark.evade_side = -1.0 if mark.index % 2 == 0 else 1.0
+				if mark == player and distance < 820.0 and time < mark.counter_until:
+					cast.decoy = true
+					effects.impact(at, 0)
+					_expire(cast)
+					if mode == "training" and task.lesson == "counter":
+						finish(true)
+					continue
+				if mark == player and time < mark.evade_until and direction.dot(offset.normalized()) < 0.35 and distance < 110.0:
+					cast.decoy = true
+					if mode == "training" and task.lesson == "evade":
+						finish(true)
+				if not cast.decoy and direction.dot(offset.normalized()) > -0.22:
+					var point: Vector3 = (offset + mark.velocity * clampf(distance / maxf(velocity.length(), 1.0), 0.0, 1.45)).normalized()
+					var steer := minf(1.0, cast.profile.turn * dt / maxf(0.0001, direction.angle_to(point)))
+					direction = direction.slerp(point, steer).normalized()
+			velocity = direction * minf(cast.profile.speed, velocity.length() + cast.profile.accel * dt)
+			if cast.age >= cast.soon:
+				cast.soon += 0.037
+				cast.trail.append(at)
+				if cast.trail.size() > 50:
+					cast.trail.pop_front()
+				if cast.age < 0.35:
+					effects.puff(at, -direction * 12.0, 0.73, 0.56, 1)
+		else:
+			velocity.y -= 9.81 * dt
+		var toward := at + velocity * dt
+		for jet in fleet:
+			if jet.hp <= 0.0 or jet.side == cast.owner.side:
+				continue
+			var closest := Geometry3D.get_closest_point_to_segment(jet.position, at, toward)
+			var local := jet.attitude.inverse() * (closest - jet.position)
+			var radius := Vector3(jet.type.span * 0.39, jet.type.span * 0.21, jet.type.length * 0.45)
+			if guided:
+				radius += Vector3.ONE * 2.3
+			if (local / radius).length_squared() > 1.0:
+				continue
+			if cast.owner == player:
+				shots_hit += 1
+			var hit_power := float(cast.damage)
+			if jet == player:
+				hit_power *= 1.0 - profile.level_of("armor") * 0.065
+			jet.hp = maxf(0.0, jet.hp - hit_power)
+			var zone := Vector3(maxf(0.0, -local.x), maxf(0.0, local.x), 3.3 if local.z > 0.0 else 1.0).normalized()
+			jet.damage = (jet.damage + zone * hit_power / jet.max_hp * 1.4).clamp(Vector3.ZERO, Vector3.ONE)
+			effects.impact(closest, int(guided))
+			audio.play_at("blast" if guided else "scrape", closest)
+			_expire(cast)
+			if jet.hp <= 0.0:
+				_destroy(jet, cast.owner)
+			if mode == "training" and cast.owner == player and task.lesson == ("missile" if guided else "gun"):
+				finish(true)
+			break
+		if not cast.active:
+			continue
+		if toward.y < maxf(0.0, world.height(toward)):
+			if guided:
+				effects.impact(toward, 1, toward.y <= 1.0)
+			_expire(cast)
+			continue
+		cast.position = toward
+		cast.velocity = velocity
+		cast.nose = direction
+		var projectile := effects.shell_list[int(cast.slot)]
+		projectile.position = toward
+		projectile.quaternion = Quaternion(Vector3.UP, direction)
+
+func _expire(cast: Dictionary) -> void:
+	cast.active = false
+	effects.shell_list[int(cast.slot)].visible = false
+
+func _destroy(jet: Airframe, who: Airframe) -> void:
+	jet.hp = 0.0
+	jet.until_respawn = time + (2.8 if jet == player else 3.6)
+	jet.model.visible = false
+	effects.impact(jet.position, 2, jet.position.y < 8.0)
+	audio.play_at("water" if jet.position.y < 8.0 else "fracture", jet.position)
+	if who == player:
+		player_kills += 1
+	if jet == player:
+		respawns += 1
+		if mode != "free":
+			finish(false)
+
+func alive_enemies() -> int:
+	var count := 0
+	for jet in fleet:
+		if jet != player and jet.hp > 0:
+			count += 1
+	return count
+
+func finish(win: bool) -> void:
+	if ended:
+		return
+	ended = true
+	var total: int = int(task.get("engagement", {}).get("waves", [1]).reduce(func(a, b): return a + b, 0))
+	var progress := clampf(player_kills / float(maxi(1, total)), 0.0, 1.0) if mode == "campaign" else clampf(time / 180.0, 0.0, 1.0)
+	var precision := minf(1.0, shots_hit / float(maxi(1, total_fired)))
+	var score := roundi((3600 if win else 450) + progress * 3100.0 + player_kills * 180.0 + player.hp / player.max_hp * 1650.0 + precision * 1850.0)
+	var result := {"id":task.get("id", ""), "campaign":task.get("campaign", 0), "name":task.name, "aircraft":player.type.id,
+		"score":score, "kills":player_kills, "seconds":time, "distance":miles, "win":win, "deaths":respawns,
+		"grade":"王牌" if score >= 10800 else ("优秀" if score >= 8300 else ("合格" if score >= 5100 else "待精进")),
+		"credits":roundi(score * 0.105 + (450 if win else 60)), "xp":roundi(48 + player_kills * 20 + progress * 112 + (88 if win else 0) + score / 57.0 + float(task.get("threat", 0)) * 13.0)}
+	finished.emit(result)
+
+func _process(dt: float) -> void:
+	if not ready_for_play:
+		return
+	audio.engine(dt, player.throttle, player.velocity.length(), player.boost, not player.type.props.is_empty(), not paused and player.hp > 0.0)
+	if paused:
+		return
+	_render_pose(minf(dt, 0.05))
+	effects_phase += dt
+	if effects_phase >= 0.023:
+		effects.tick(minf(effects_phase, 0.07), shots, camera)
+		effects_phase = 0.0
+
+func _render_pose(dt: float) -> void:
+	var forward := player.forward
+	var up := player.attitude * Vector3.UP
+	var right := player.attitude * Vector3.RIGHT
+	var speed := player.velocity.length()
+	var span: float = player.type.span
+	var focus := player.position + forward * (span * 3.9) + Vector3.UP * (span * 0.05)
+	var chase := player.position - forward * (span * 1.46 + player.boost * 1.35) + Vector3.UP * (span * 0.37) + up * (span * 0.08)
+	if target:
+		var side_offset: float = clampf((target.position - player.position).normalized().dot(right), -0.45, 0.45)
+		chase -= right * span * side_offset * 0.31
+		focus += right * span * side_offset * 0.39
+	if manual_cockpit:
+		var eye: Array = player.type.eye
+		chase = player.position + player.attitude * Vector3(eye[0], eye[1], eye[2])
+		focus = chase + forward * 35.0
+	else:
+		chase.y = maxf(chase.y, maxf(0.0, world.height(chase)) + 2.3)
+	if camera_fresh or manual_cockpit:
+		camera.position = chase
+		camera_speed = Vector3.ZERO
+		look_toward = (focus - camera.position).normalized()
+		camera_fresh = false
+	else:
+		# Match the aircraft's translation, then spring-damp only the relative rig motion.
+		camera.position += player.velocity * dt
+		var error := chase - camera.position
+		camera_speed += (error * 90.0 - camera_speed * 18.4) * dt
+		camera.position += camera_speed * dt
+		look_toward = look_toward.slerp((focus - camera.position).normalized(), 1.0 - exp(-dt * 13.0))
+	camera.look_at(camera.position + look_toward, up if manual_cockpit else Vector3.UP.slerp(up, 0.24).normalized())
+	camera.fov = lerpf(camera.fov, 52.0 + clampf((speed - player.type.trim) / 90.0, -1.0, 4.0), 1.0 - exp(-dt * 3.5))
+	for jet in fleet:
+		if jet.hp <= 0.0:
+			continue
+		jet.model.position = jet.position
+		jet.model.quaternion = jet.attitude
+		var distance := camera.position.distance_to(jet.position)
+		jet.model.visible = true
+		var px := maxf(float(jet.type.length), float(jet.type.span)) / maxf(1.0, distance * 2.0 * tan(deg_to_rad(camera.fov * 0.5))) * 576.0
+		if jet == player:
+			var cockpit := jet.rig.meshes.get_node_or_null("Cockpit") as Node3D
+			jet.rig.meshes.get_node("Exterior").visible = not manual_cockpit
+			if cockpit:
+				var eye: Array = jet.type.eye
+				cockpit.visible = manual_cockpit
+				cockpit.position = Vector3(eye[0], eye[1], eye[2])
+		else:
+			# This scale applies only to imported meshes. The aircraft state, hitbox and terrain remain in metres.
+			var projected_floor := _contact_size(distance) * 1.6
+			var visual_scale := maxf(1.0, projected_floor / maxf(0.05, px))
+			jet.rig.meshes.scale = Vector3.ONE * visual_scale
+		var lod: String = jet.rig.lod
+		if jet != player:
+			if px < 12.0 and lod != "LOD":
+				lod = "LOD"
+			elif px > 16.0 and px < 48.0:
+				lod = "Combat"
+			elif px > 62.0:
+				lod = "Exterior"
+			if lod != jet.rig.lod and jet.rig.meshes.has_node(lod):
+				jet.rig.meshes.get_node(jet.rig.lod).visible = false
+				jet.rig.meshes.get_node(lod).visible = true
+				jet.rig.lod = lod
+		for gear_part in jet.rig.gear:
+			gear_part.node.visible = jet.gear > 0.14
+			gear_part.node.rotation.x = gear_part.rot.x + (1.0 - jet.gear) * 1.33
+		for part in jet.rig.fins:
+			part.node.rotation.x = part.rot.x + clampf(jet.angular.x * 0.12, -0.29, 0.29)
+		for plume in jet.rig.exhausts:
+			plume.visible = distance < 1850.0 and jet.throttle > 0.67
+			plume.scale = Vector3(0.68 + jet.boost * 0.36, 0.68 + jet.boost * 0.36,
+				0.62 + jet.boost * 1.23 + sin(time * 71.0 + jet.index) * 0.046 - jet.damage.z * 0.19)
+	exhaust_phase += dt
+	if exhaust_phase > 0.082:
+		exhaust_phase = 0.0
+		for jet in fleet:
+			if jet.hp <= 0.0 or camera.position.distance_squared_to(jet.position) > 1450.0 * 1450.0:
+				continue
+			var at: Vector3 = jet.position - jet.forward * float(jet.type.length) * 0.49
+			if jet.damage.z > 0.31:
+				effects.puff(at, -jet.forward * 18.0 + Vector3.UP * 9.0, 2.4, 1.65, 0)
+				if jet.damage.z > 0.6:
+					effects.puff(at, -jet.forward * 15.0, 1.1, 0.55, 1)
+			if jet.load_g > 2.1 or jet.position.y > 1950.0 and speed > 210.0:
+				for sign_side in [-1, 1]:
+					var tip: Vector3 = at + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46 * sign_side
+					effects.puff(tip, -jet.forward * 7.0, 0.67, 0.64, 3, 0.32)
+
+func _exit_tree() -> void:
+	for jet in fleet:
+		jet.target = null
+	shots.clear()
+	target = null
+
+func _contact_size(distance: float) -> float:
+	if distance <= CONTACT_DISTANCE[0]:
+		return lerpf(0.0, CONTACT_PIXELS[0], smoothstep(0.0, CONTACT_DISTANCE[0], distance))
+	for i in range(1, CONTACT_DISTANCE.size()):
+		if distance <= CONTACT_DISTANCE[i]:
+			return lerpf(CONTACT_PIXELS[i - 1], CONTACT_PIXELS[i], smoothstep(CONTACT_DISTANCE[i - 1], CONTACT_DISTANCE[i], distance))
+	return lerpf(CONTACT_PIXELS.back(), 0.0, smoothstep(CONTACT_DISTANCE.back(), radar_range + 2400.0, distance))
