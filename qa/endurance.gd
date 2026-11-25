@@ -21,7 +21,9 @@ func run() -> void:
 	var cached_tiles := 0
 	var samples := []
 	var prior := Time.get_ticks_msec()
-	for step in range(10080):
+	var completed := []
+	fight.finished.connect(func(value): completed.append(value))
+	for step in range(roundi(fight.FREE_LENGTH / STEP)):
 		var started := Time.get_ticks_usec()
 		if step % 680 == 0:
 			fight.action.boost = true
@@ -40,6 +42,9 @@ func run() -> void:
 		"wall_time_ms":Time.get_ticks_msec() - prior,
 		"player_distance_m":fight.miles,
 		"end_roster":fight.fleet.size(),
+		"countdown_settlements":completed.size(),
+		"total_kills":fight.fleet.reduce(func(count, jet): return count + jet.kills, 0),
+		"total_deaths":fight.fleet.reduce(func(count, jet): return count + jet.deaths, 0),
 		"max_resident_regions":active_tiles,
 		"max_cached_regions":cached_tiles,
 		"peak_tick_including_yields_ms":worst,
@@ -47,7 +52,7 @@ func run() -> void:
 		"last_origin":[fight.world.origin.x,fight.world.origin.y]
 	}
 	print(JSON.stringify(outcome, "\t"))
-	var ok := fight.fleet.size() == 7 and active_tiles < 55 and cached_tiles < 65
+	var ok: bool = fight.fleet.size() == 12 and completed.size() == 1 and outcome.total_kills > 0 and active_tiles < 55 and cached_tiles < 65
 	fight.queue_free()
 	await process_frame
 	quit(0 if ok else 1)

@@ -1693,9 +1693,9 @@
         "objective": "intercept",
         "formation": "line",
         "waves": [
-          2,
-          1,
-          1
+          5,
+          6,
+          5
         ],
         "altitude": 420,
         "tier": 0,
@@ -1724,8 +1724,8 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 760,
         "tier": 0,
@@ -1754,8 +1754,8 @@
         "objective": "low",
         "formation": "line",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 176,
         "tier": 0,
@@ -1784,9 +1784,9 @@
         "objective": "sweep",
         "formation": "stack",
         "waves": [
-          2,
-          2,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1120,
         "tier": 0,
@@ -1815,9 +1815,9 @@
         "objective": "pincer",
         "formation": "pincer",
         "waves": [
-          2,
-          2,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 515,
         "tier": 0,
@@ -1846,8 +1846,8 @@
         "objective": "intercept",
         "formation": "line",
         "waves": [
-          2,
-          3
+          5,
+          6
         ],
         "altitude": 1180,
         "tier": 0,
@@ -1876,9 +1876,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          2,
-          3,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 870,
         "tier": 0,
@@ -1907,8 +1907,8 @@
         "objective": "low",
         "formation": "pincer",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 213,
         "tier": 0,
@@ -1937,9 +1937,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          3,
-          2,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 1500,
         "tier": 0,
@@ -1968,9 +1968,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          2,
-          3,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 630,
         "ace": "mirage",
@@ -2000,9 +2000,9 @@
         "objective": "pincer",
         "formation": "stack",
         "waves": [
-          2,
-          3,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 1220,
         "tier": 0,
@@ -2031,8 +2031,8 @@
         "objective": "sweep",
         "formation": "pincer",
         "waves": [
-          3,
-          3
+          5,
+          6
         ],
         "altitude": 720,
         "tier": 0,
@@ -2061,9 +2061,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          2,
-          3,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1130,
         "tier": 0,
@@ -2092,8 +2092,8 @@
         "objective": "low",
         "formation": "line",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 195,
         "tier": 0,
@@ -2122,9 +2122,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          2,
-          3,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1680,
         "tier": 0,
@@ -2153,9 +2153,9 @@
         "objective": "sweep",
         "formation": "line",
         "waves": [
-          3,
-          2,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 2120,
         "tier": 1,
@@ -2184,8 +2184,8 @@
         "objective": "screen",
         "formation": "pincer",
         "waves": [
-          3,
-          2
+          5,
+          6
         ],
         "altitude": 1440,
         "tier": 1,
@@ -2214,9 +2214,9 @@
         "objective": "pincer",
         "formation": "screen",
         "waves": [
-          3,
-          3,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 825,
         "tier": 1,
@@ -2245,8 +2245,8 @@
         "objective": "low",
         "formation": "stack",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 250,
         "tier": 1,
@@ -2275,9 +2275,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          3,
-          3,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1670,
         "ace": "hornet",
@@ -2307,8 +2307,8 @@
         "objective": "intercept",
         "formation": "pincer",
         "waves": [
-          3,
-          3
+          5,
+          6
         ],
         "altitude": 1820,
         "tier": 1,
@@ -2337,9 +2337,9 @@
         "objective": "sweep",
         "formation": "pincer",
         "waves": [
-          3,
-          3,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1760,
         "tier": 1,
@@ -2368,9 +2368,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 950,
         "tier": 1,
@@ -2400,8 +2400,8 @@
         "objective": "low",
         "formation": "screen",
         "waves": [
-          3,
-          3
+          5,
+          6
         ],
         "altitude": 205,
         "tier": 1,
@@ -2431,9 +2431,9 @@
         "objective": "pincer",
         "formation": "stack",
         "waves": [
-          3,
-          4,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 2260,
         "tier": 1,
@@ -2462,9 +2462,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          3,
-          3,
-          2
+          5,
+          6,
+          5
         ],
         "altitude": 1380,
         "tier": 1,
@@ -2493,9 +2493,9 @@
         "objective": "screen",
         "formation": "pincer",
         "waves": [
-          3,
-          3,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1070,
         "tier": 1,
@@ -2525,9 +2525,9 @@
         "objective": "sweep",
         "formation": "stack",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 2570,
         "tier": 1,
@@ -2557,8 +2557,8 @@
         "objective": "pincer",
         "formation": "screen",
         "waves": [
-          4,
-          3
+          5,
+          6
         ],
         "altitude": 1970,
         "tier": 1,
@@ -2587,9 +2587,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 2420,
         "ace": "gripen",
@@ -2620,9 +2620,9 @@
         "objective": "screen",
         "formation": "stack",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 845,
         "tier": 2,
@@ -2651,9 +2651,9 @@
         "objective": "intercept",
         "formation": "line",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1560,
         "tier": 2,
@@ -2682,8 +2682,8 @@
         "objective": "low",
         "formation": "pincer",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 229,
         "tier": 2,
@@ -2712,9 +2712,9 @@
         "objective": "pincer",
         "formation": "pincer",
         "waves": [
-          3,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1150,
         "tier": 2,
@@ -2743,9 +2743,9 @@
         "objective": "sweep",
         "formation": "pincer",
         "waves": [
-          4,
-          3,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1800,
         "tier": 2,
@@ -2774,9 +2774,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          4,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1240,
         "tier": 2,
@@ -2805,9 +2805,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          3,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2110,
         "tier": 2,
@@ -2836,9 +2836,9 @@
         "objective": "pincer",
         "formation": "line",
         "waves": [
-          4,
-          3,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1100,
         "tier": 2,
@@ -2867,8 +2867,8 @@
         "objective": "low",
         "formation": "stack",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 246,
         "tier": 2,
@@ -2897,9 +2897,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          3,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2000,
         "ace": "su35",
@@ -2929,9 +2929,9 @@
         "objective": "sweep",
         "formation": "stack",
         "waves": [
-          4,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 965,
         "tier": 2,
@@ -2960,8 +2960,8 @@
         "objective": "low",
         "formation": "screen",
         "waves": [
-          3,
-          3
+          5,
+          6
         ],
         "altitude": 245,
         "tier": 2,
@@ -2990,9 +2990,9 @@
         "objective": "intercept",
         "formation": "pincer",
         "waves": [
-          4,
-          3,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1400,
         "tier": 2,
@@ -3021,9 +3021,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          4,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1740,
         "tier": 2,
@@ -3052,9 +3052,9 @@
         "objective": "pincer",
         "formation": "stack",
         "waves": [
-          3,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1810,
         "tier": 2,
@@ -3083,9 +3083,9 @@
         "objective": "sweep",
         "formation": "pincer",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1620,
         "tier": 3,
@@ -3114,9 +3114,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2070,
         "tier": 3,
@@ -3145,8 +3145,8 @@
         "objective": "low",
         "formation": "line",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 268,
         "tier": 3,
@@ -3175,9 +3175,9 @@
         "objective": "screen",
         "formation": "pincer",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1070,
         "tier": 3,
@@ -3206,9 +3206,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          4,
-          4,
-          3
+          5,
+          6,
+          5
         ],
         "altitude": 1520,
         "ace": "j20",
@@ -3238,9 +3238,9 @@
         "objective": "intercept",
         "formation": "stack",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2740,
         "tier": 3,
@@ -3269,9 +3269,9 @@
         "objective": "screen",
         "formation": "pincer",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1810,
         "tier": 3,
@@ -3300,8 +3300,8 @@
         "objective": "low",
         "formation": "stack",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 258,
         "tier": 3,
@@ -3330,9 +3330,9 @@
         "objective": "pincer",
         "formation": "pincer",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1270,
         "tier": 3,
@@ -3361,9 +3361,9 @@
         "objective": "sweep",
         "formation": "line",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1930,
         "tier": 3,
@@ -3392,9 +3392,9 @@
         "objective": "intercept",
         "formation": "pincer",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2010,
         "tier": 3,
@@ -3423,9 +3423,9 @@
         "objective": "screen",
         "formation": "screen",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 1670,
         "tier": 3,
@@ -3454,8 +3454,8 @@
         "objective": "low",
         "formation": "pincer",
         "waves": [
-          2,
-          2
+          5,
+          6
         ],
         "altitude": 270,
         "tier": 3,
@@ -3484,9 +3484,9 @@
         "objective": "pincer",
         "formation": "stack",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2190,
         "tier": 3,
@@ -3515,9 +3515,9 @@
         "objective": "sweep",
         "formation": "ace",
         "waves": [
-          4,
-          4,
-          4
+          5,
+          6,
+          5
         ],
         "altitude": 2590,
         "ace": "j20",

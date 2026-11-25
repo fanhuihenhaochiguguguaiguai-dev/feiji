@@ -23,6 +23,7 @@ var viewed_plane := "j20"
 var takeoff := false
 var list_chapter := 0
 var capture_dir := ""
+var capture_free := false
 var capture_time := 0.0
 var screenshot_pending := false
 var fixture_stage := 0
@@ -48,6 +49,8 @@ func _ready() -> void:
 		if arg.begins_with("--capture-dir="):
 			capture_dir = arg.trim_prefix("--capture-dir=")
 			DirAccess.make_dir_recursive_absolute(capture_dir)
+		elif arg == "--capture-free":
+			capture_free = true
 	_open("lobby")
 
 func _open(page: String) -> void:
@@ -165,7 +168,7 @@ func _render_menu() -> void:
 		_text(info + Vector2(14, 4), str(plane.name), 26)
 		_text(info + Vector2(16, 36), str(plane.role), 14, Color("#aac4d7"))
 		_cut(Rect2(size.x - 345, size.y - 169, 321, 66), "开始战斗", "plane", 1, _start_campaign.bind(int(profile.state.campaign)))
-		_cut(Rect2(size.x - 328, size.y - 92, 304, 51), "无限空战", "infinite", 2, _enter.bind("free", {"name":"无限空战", "region":0, "detail":"多阵营自由交战"}, false))
+		_cut(Rect2(size.x - 328, size.y - 92, 304, 51), "无限空战", "infinite", 2, _start_free)
 		_button(Rect2(size.x - 492, size.y - 83, 139, 40), "训练模式", _open.bind("training"))
 		return
 	var p := Vector2(204, 94)
@@ -236,6 +239,9 @@ func _render_menu() -> void:
 				_button(Rect2(sidebar + Vector2(18, 253 + i * 43), Vector2(385, 36)), "%s   ·   %s   ·   %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(catalogue.aircraft(viewed_plane), id))
 				i += 1
 		"pilot", "report":
+			if route == "report" and debrief.get("mode") == "free":
+				_show_free_report(p, size)
+				return
 			_panel(Rect2(sidebar - Vector2(35, 0), Vector2(box_w + 35, 416)))
 			var line := sidebar - Vector2(14, 0)
 			if route == "report":
@@ -262,6 +268,32 @@ func _render_menu() -> void:
 			_button(Rect2(sidebar + Vector2(20, 242), Vector2(375, 44)), "声音   %s" % ("关闭" if profile.state.settings.mute else "开启"), _set_setting.bind("mute", not profile.state.settings.mute))
 	if not note.is_empty():
 		_text(Vector2(size.x - 416, size.y - 29), note, 15, Color("#f2d18e"))
+
+func _show_free_report(at: Vector2, viewport_size: Vector2) -> void:
+	var width := viewport_size.x - at.x - 23.0
+	_panel(Rect2(at, Vector2(width, viewport_size.y - at.y - 23.0)))
+	_text(at + Vector2(20, 13), "无限空战战报", 28)
+	_text(at + Vector2(20, 59), "第 %d 名   ·   击落 %d   ·   死亡 %d   ·   信用点 +%d" % [
+		debrief.place, debrief.kills, debrief.deaths, debrief.credits], 22, Color("#ecd29f"))
+	var col_width := (width - 62.0) * 0.5
+	for section in 2:
+		var left := at.x + 21.0 + section * (col_width + 18.0)
+		var head := at.y + 112.0
+		_text(Vector2(left + 7.0, head), "名次", 15, Color("#a9c7d8"))
+		_text(Vector2(left + 60.0, head), "飞行员", 15, Color("#a9c7d8"))
+		_text(Vector2(left + col_width - 110.0, head), "击落", 15, Color("#a9c7d8"))
+		_text(Vector2(left + col_width - 55.0, head), "死亡", 15, Color("#a9c7d8"))
+		for slot in 6:
+			var row: Dictionary = debrief.ranking[section * 6 + slot]
+			var y := head + 29.0 + slot * 34.0
+			var local: bool = int(row.slot) == 0
+			var name := "玩家" if local else "人机 %02d" % int(row.slot)
+			_panel(Rect2(left, y - 2.0, col_width, 31.0), Color("#59462fbd") if local else Color("#142b3dc9"))
+			_text(Vector2(left + 9.0, y), str(int(row.place)), 17)
+			_text(Vector2(left + 60.0, y), name, 17, Color("#f3dda9") if local else Color("#d6e8f3"))
+			_text(Vector2(left + col_width - 106.0, y), str(int(row.kills)), 17)
+			_text(Vector2(left + col_width - 51.0, y), str(int(row.deaths)), 17)
+	_button(Rect2(at.x + width - 224.0, viewport_size.y - 77.0, 197.0, 41), "返回大厅", _open.bind("lobby"))
 
 func _set_setting(key: String, value: Variant) -> void:
 	profile.state.settings[key] = value
@@ -366,6 +398,9 @@ func _set_showcase_aircraft(id: String) -> void:
 func _start_campaign(n: int) -> void:
 	_enter("campaign", catalogue.source.campaign[clampi(n - 1, 0, 59)], false)
 
+func _start_free() -> void:
+	_enter("free", {"name":"无限空战", "region":0, "detail":"各自为战"}, false)
+
 func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	if loading:
 		return
@@ -412,16 +447,29 @@ func show_pause(show: bool) -> void:
 	_button(Rect2(centre - Vector2(115, -10), Vector2(230, 35)), "收放起落架", func():
 		current_battle.action.gear = true
 		hud_view.get_child(0).input_actions.pause.pressed.emit())
-	_button(Rect2(centre - Vector2(115, -57), Vector2(230, 35)), "结束出击并结算", func(): current_battle.finish(false))
+	var exit_area := Rect2(centre - Vector2(115, -57), Vector2(230, 35))
+	if current_battle.mode == "free":
+		_button(exit_area, "退出本局", _abort_free)
+	else:
+		_button(exit_area, "结束出击并结算", func(): current_battle.finish(false))
 	view = hud_view
+
+func _abort_free() -> void:
+	if not is_instance_valid(current_battle) or current_battle.ended:
+		return
+	_close_battle()
+	_open("lobby")
+
+func _close_battle() -> void:
+	remove_child(current_battle)
+	current_battle.queue_free()
+	current_battle = null
 
 func _battle_finished(result: Dictionary) -> void:
 	debrief = result
 	if capture_dir.is_empty():
 		profile.debrief(result)
-	remove_child(current_battle)
-	current_battle.queue_free()
-	current_battle = null
+	_close_battle()
 	_open("report")
 
 func _input(event: InputEvent) -> void:
@@ -446,7 +494,10 @@ func _process(delta: float) -> void:
 	if fixture_stage == 0 and capture_time > 1.15:
 		fixture_stage = 1
 		await _snapshot("lobby")
-		_start_campaign(1)
+		if capture_free:
+			_start_free()
+		else:
+			_start_campaign(1)
 	elif fixture_stage == 1 and is_instance_valid(current_battle) and current_battle.ready_for_play:
 		var t: float = current_battle.time
 		current_battle.action.gun = t > 0.8 and t < 4.2
@@ -464,10 +515,10 @@ func _process(delta: float) -> void:
 		if t > 4.60 and not "maneuver" in fixture_marks:
 			fixture_marks.append("maneuver")
 			_snapshot("maneuver")
-		if t > 7.5:
+		if t > (3.4 if capture_free else 7.5):
 			fixture_stage = 2
 			var f := FileAccess.open(capture_dir + "/desktop-run.json", FileAccess.WRITE)
-			f.store_string(JSON.stringify({"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
+			f.store_string(JSON.stringify({"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"mode":current_battle.mode,"aircraft_slots":current_battle.fleet.size(),"first_wave_alive":current_battle.alive_enemies(),"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
 			current_battle.audio.stop_all()
 			for i in range(3):
 				await get_tree().process_frame

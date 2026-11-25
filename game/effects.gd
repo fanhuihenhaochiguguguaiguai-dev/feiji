@@ -1,5 +1,6 @@
 extends Node3D
 
+const PROJECTILE_CAPACITY := 192
 const PARTICLE = preload("res://shaders/particle.gdshader")
 const PRESSURE = preload("res://shaders/pressure.gdshader")
 const FIRE = preload("res://assets/surface/combustion.webp")
@@ -44,7 +45,7 @@ func pool() -> void:
 	stream.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(stream)
 	puff_quad.size = Vector2(2, 2)
-	for i in 112:
+	for i in PROJECTILE_CAPACITY:
 		var shell := MeshInstance3D.new()
 		shell.visible = false
 		add_child(shell)

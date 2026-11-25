@@ -26,6 +26,9 @@ var handling := 1.0
 var damage := Vector3.ZERO
 var side := 0
 var index := 0
+var kills := 0
+var deaths := 0
+var life_id := 0
 var model: Node3D
 var rig := {}
 var until_respawn := 0.0
@@ -42,6 +45,8 @@ var ai_until := 0.0
 var target: RefCounted
 
 func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runway := false) -> void:
+	life_id += 1
+	until_respawn = 0.0
 	position = at
 	previous = at
 	forward = nose.normalized()

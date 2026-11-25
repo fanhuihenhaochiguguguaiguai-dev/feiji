@@ -17,6 +17,9 @@ func run() -> void:
 	var catalogue := Data.new()
 	var profile := Profile.new(catalogue)
 	check(catalogue.source.campaign.size() == 60, "Campaign catalogue lost a stage")
+	for stage in catalogue.source.campaign:
+		for count in stage.engagement.waves:
+			check(count == 5 or count == 6, "Campaign wave outside the requested squad size")
 	check(ClassDB.class_exists("Terrain3D") and ClassDB.class_exists("SkyTerrainKernel"), "Native terrain classes unavailable")
 	var source := Vector2(-1536.0, 15360.0)
 	var scalar: float = ClassDB.class_call_static("SkyTerrainKernel", "height_m", float(source.x), float(source.y), 413)
@@ -44,20 +47,49 @@ func run() -> void:
 	root.add_child(battle)
 	battle.setup(catalogue, profile, "free", {"name":"自由空战", "region":0}, false)
 	battle.paused = true
-	check(battle.fleet.size() == 7 and battle.alive_enemies() == 6, "Free air combat roster is not fixed")
+	check(battle.fleet.size() == 12 and battle.alive_enemies() == 11, "Free air combat roster is not fixed at twelve")
+	var factions := {}
+	for participant in battle.fleet:
+		factions[participant.side] = true
+	check(factions.size() == 12, "Free air combat assigned teammates")
 	var jet := battle.fleet[1]
-	var deaths := battle.respawns
 	battle._destroy(jet, battle.player)
 	battle._destroy(battle.player, jet)
-	check(battle.player_kills == 1 and battle.respawns == deaths + 1 and not battle.ended, "Free combat knockdown ended the sortie")
-	battle.time = 4.5
+	check(battle.player_kills == 1 and battle.respawns == 1 and jet.kills == 1 and jet.deaths == 1,
+		"Eliminations and deaths were not credited to both pilots")
+	battle.finish(false)
+	check(not battle.ended and battle.player.until_respawn == 3.0 and jet.until_respawn == 3.0,
+		"Early finish or incorrect free air combat respawn delay")
 	battle.paused = false
-	battle._physics_process(1.0 / 90.0)
+	battle.time = 2.98
+	battle._physics_process(0.01)
+	check(battle.player.hp <= 0.0 and jet.hp <= 0.0, "A pilot respawned before three seconds")
+	battle._physics_process(0.011)
 	battle.paused = true
-	check(battle.player.hp > 0.0 and jet.hp > 0.0 and battle.alive_enemies() == 6, "Free combat did not respawn the fixed roster")
+	check(battle.player.hp > 0.0 and jet.hp > 0.0 and battle.alive_enemies() == 11 and jet.kills == 1,
+		"Free combat did not respawn the fixed roster with its original stats")
 	var origin_before: Vector2i = battle.world.origin
 	var rebase: Vector3 = battle.world.follow(Vector3(6000, 1000, 0), Vector3.FORWARD * 200.0)
 	check(origin_before != battle.world.origin and rebase.x > 0.0, "Floating origin did not rebase")
+	var result := []
+	battle.finished.connect(func(value): result.append(value))
+	battle.fleet[2].kills = 8
+	battle.fleet[2].deaths = 4
+	battle.fleet[3].kills = 8
+	battle.fleet[3].deaths = 2
+	battle.time = 599.999
+	battle._physics_process(0.02)
+	check(result.is_empty() and battle.time < 600.0, "Pause advanced the countdown")
+	battle.paused = false
+	battle._physics_process(0.02)
+	battle._physics_process(0.02)
+	check(result.size() == 1 and battle.ended and battle.time == 600.0, "The ten-minute match did not settle exactly once")
+	if result.size() == 1:
+		var standings: Array = result[0].ranking
+		check(standings.size() == 12 and standings[0].slot == 3 and standings[1].slot == 2,
+			"Free ranking did not use kills then deaths")
+		check(result[0].place == 3 and standings[3].place == 3 and result[0].credits == 620,
+			"Tied pilots or the credit award did not follow the ranking rules")
 	battle.queue_free()
 	await process_frame
 	battle = Battle.new()
@@ -69,7 +101,20 @@ func run() -> void:
 	for enemy in battle.fleet:
 		if enemy.hp > 0 and enemy.type.id == "shade-drone":
 			drones += 1
-	check(drones == 2 and battle.alive_enemies() == 3, "Chapter 3 squad and drones are incorrect")
+	check(drones == 2 and battle.alive_enemies() == 5 and battle.wave == 1, "Chapter 3 first wave or drones are incorrect")
+	var first := battle.fleet[1]
+	battle._destroy(first, battle.player)
+	battle.paused = false
+	battle._physics_process(1.0 / 90.0)
+	check(battle.wave == 1 and battle.next_wave == 0.0 and battle.alive_enemies() == 4,
+		"Campaign sent reinforcements before the remaining squad was cleared")
+	for i in range(2, 6):
+		battle._destroy(battle.fleet[i], battle.player)
+	battle._physics_process(1.0 / 90.0)
+	battle.time = battle.next_wave - 0.001
+	battle._physics_process(1.0 / 90.0)
+	check(battle.wave == 2 and not battle.ended and battle.alive_enemies() == 6,
+		"The next wave did not arrive together as a six-aircraft formation")
 	battle.queue_free()
 	await process_frame
 	var shell: Node = load("res://scenes/main.tscn").instantiate()

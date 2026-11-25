@@ -14,7 +14,10 @@ const BOOST_CYCLE := 5.8
 const LOCK_ANGLE := 0.195
 const CONTACT_DISTANCE := [100.0,200.0,300.0,500.0,750.0,1000.0,1500.0,2000.0,3000.0,4000.0,5000.0,6000.0]
 const CONTACT_PIXELS := [80.0,60.0,52.0,44.0,38.0,32.0,28.0,24.0,20.0,16.0,14.0,12.0]
-const FREE_ROSTER := ["f16", "j10", "mirage", "gripen", "hornet", "mig21"]
+const FREE_ROSTER := ["f16", "j10", "mirage", "gripen", "hornet", "mig21", "su35", "j20", "a10", "f16", "j10"]
+const FREE_LENGTH := 600.0
+const FREE_RESPAWN := 3.0
+const CAMPAIGN_CAPACITY := 6
 
 var catalogue: RefCounted
 var profile: RefCounted
@@ -31,8 +34,12 @@ var radar_range := 6000.0
 var time := 0.0
 var wave := 0
 var next_wave := 0.0
-var respawns := 0
-var player_kills := 0
+var respawns: int:
+	get:
+		return player.deaths if player else 0
+var player_kills: int:
+	get:
+		return player.kills if player else 0
 var shots_hit := 0
 var total_fired := 0
 var miles := 0.0
@@ -68,7 +75,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	missile_id = profile.selected_weapon(catalogue)
 	missile = Data.MISSILES[missile_id]
 	radar_range += profile.level_of("radar") * 350.0
-	for slot in 112:
+	for slot in Effects.PROJECTILE_CAPACITY:
 		shots.append({"active":false, "slot":slot})
 	add_child(world)
 	add_child(effects)
@@ -92,8 +99,9 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	player.engine = 1.0 + profile.level_of("engine") * 0.06
 	player.handling = 1.0 + profile.level_of("maneuver") * 0.06
 	throttle = 0.15 if use_runway else 0.74
-	for i in (6 if mode == "free" else 4):
-		var bot := _make_plane(FREE_ROSTER[i], 1 + i % 3 if mode == "free" else 1)
+	var bot_count := FREE_ROSTER.size() if mode == "free" else (CAMPAIGN_CAPACITY if mode == "campaign" else 1)
+	for i in bot_count:
+		var bot := _make_plane(FREE_ROSTER[i], i + 1 if mode == "free" else 1)
 		bot.model.visible = false
 	if mode == "free":
 		for i in range(1, fleet.size()):
@@ -115,6 +123,8 @@ func _make_plane(id: String, side: int) -> Airframe:
 	return jet
 
 func _change_plane(jet: Airframe, id: String) -> void:
+	if not jet.rig.is_empty() and jet.type.id == id:
+		return
 	jet.type = catalogue.aircraft(id)
 	for old in jet.model.get_children():
 		jet.model.remove_child(old)
@@ -168,14 +178,13 @@ func _jet_exhaust(root: Node3D, span: float) -> void:
 		root.add_child(ring)
 
 func _spawn_free(jet: Airframe, opening: bool) -> void:
-	var angle := (jet.index - 1) * TAU / 6.0 + (0.0 if opening else fmod(time, TAU))
+	var angle := (jet.index - 1) * TAU / FREE_ROSTER.size() + (0.0 if opening else fmod(time, TAU))
 	var offset := Vector3(sin(angle), 0.0, -cos(angle))
 	var at := player.position + offset * (1120.0 if opening else 1700.0)
 	at.y = maxf(world.height(at) + 260.0, player.position.y + 25.0 + jet.index * 34.0)
 	jet.reset(at, -offset, jet.type.trim * 0.83, 290.0)
 	jet.model.visible = true
-	jet.until_respawn = 0.0
-	jet.missile_at = time + 4.5 + jet.index * 1.26
+	jet.missile_at = time + (4.5 if opening else 1.7) + (jet.index % 4) * 0.3
 
 func _spawn_wave() -> void:
 	var plan: Dictionary = task.get("engagement", {})
@@ -184,6 +193,8 @@ func _spawn_wave() -> void:
 	wave += 1
 	var roster: Array = plan.get("roster", ["j10"])
 	var course := Vector3(player.forward.x, 0.0, player.forward.z).normalized()
+	if course.length_squared() < 0.01:
+		course = Vector3.FORWARD
 	var right := course.cross(Vector3.UP)
 	for i in range(1, fleet.size()):
 		var jet := fleet[i]
@@ -215,6 +226,10 @@ func _physics_process(dt: float) -> void:
 	if paused or ended or not ready_for_play:
 		return
 	time += dt
+	if mode == "free" and time >= FREE_LENGTH - 0.000001:
+		time = FREE_LENGTH
+		finish(false)
+		return
 	var drift := world.follow(player.position, player.velocity)
 	if drift != Vector3.ZERO:
 		for jet in fleet:
@@ -236,6 +251,10 @@ func _physics_process(dt: float) -> void:
 		player.reset(at, Vector3.FORWARD, player.type.trim, player.type.durability)
 		player.model.visible = true
 		camera_fresh = true
+		target = null
+		locked_time = 0.0
+		boost_until = 0.0
+		boost_at = time
 	for i in range(1, fleet.size()):
 		var jet := fleet[i]
 		if jet.hp > 0.0:
@@ -373,7 +392,7 @@ func _update_bot(jet: Airframe, dt: float) -> void:
 				jet.shot_at = time + 0.17
 			if time >= jet.missile_at and range_m < 2200.0 and (jet.forward.dot(offset.normalized()) > 0.93 or mode == "training") and not world.obstruction(jet.position, enemy.position):
 				_fire(jet, true, enemy)
-				jet.missile_at = time + 10.0 + jet.index * 1.15
+				jet.missile_at = time + (8.0 if mode == "free" else 10.0 + jet.index * 1.15)
 			if mode == "training" and task.lesson in ["counter","evade"] and time >= jet.missile_at + 2.0 and range_m < 7300.0:
 				_fire(jet, true, enemy)
 				jet.missile_at = time + 9.0
@@ -432,7 +451,7 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> void:
 	if originator == player:
 		total_fired += 1
 	shots[slot] = {"active":true, "slot":slot, "owner":originator, "target":intended, "position":start, "velocity":velocity, "nose":n,
-		"missile":guided, "profile":setup, "damage":power, "fuel":setup.life if guided else 2.1, "age":0.0, "trail":[], "soon":0.0, "decoy":false}
+		"missile":guided, "target_life":intended.life_id if intended else -1, "profile":setup, "damage":power, "fuel":setup.life if guided else 2.1, "age":0.0, "trail":[], "soon":0.0, "decoy":false}
 	effects.projectile(slot, start, n, guided)
 	audio.play_at("missile" if guided else "gun", start)
 
@@ -452,7 +471,7 @@ func _update_shots(dt: float) -> void:
 		var guided: bool = cast.missile
 		if guided and cast.age > 0.085:
 			var mark: Airframe = cast.target
-			if mark and mark.hp > 0.0 and not cast.decoy:
+			if mark and mark.hp > 0.0 and mark.life_id == cast.target_life and not cast.decoy:
 				var offset: Vector3 = mark.position - at
 				var distance := offset.length()
 				if mark == player and distance < 1600.0:
@@ -533,14 +552,16 @@ func _expire(cast: Dictionary) -> void:
 
 func _destroy(jet: Airframe, who: Airframe) -> void:
 	jet.hp = 0.0
-	jet.until_respawn = time + (2.8 if jet == player else 3.6)
+	jet.deaths += 1
+	jet.until_respawn = time + FREE_RESPAWN if mode == "free" else 0.0
 	jet.model.visible = false
 	effects.breakup(jet.position, jet.velocity, jet.position.y < 8.0)
 	audio.play_at("water" if jet.position.y < 8.0 else "fracture", jet.position)
-	if who == player:
-		player_kills += 1
+	if who and who != jet:
+		who.kills += 1
 	if jet == player:
-		respawns += 1
+		target = null
+		locked_time = 0.0
 		if mode != "free":
 			finish(false)
 
@@ -554,6 +575,12 @@ func alive_enemies() -> int:
 func finish(win: bool) -> void:
 	if ended:
 		return
+	if mode == "free":
+		if time < FREE_LENGTH:
+			return
+		ended = true
+		_finish_free()
+		return
 	ended = true
 	var total: int = int(task.get("engagement", {}).get("waves", [1]).reduce(func(a, b): return a + b, 0))
 	var progress := clampf(player_kills / float(maxi(1, total)), 0.0, 1.0) if mode == "campaign" else clampf(time / 180.0, 0.0, 1.0)
@@ -564,6 +591,31 @@ func finish(win: bool) -> void:
 		"grade":"王牌" if score >= 10800 else ("优秀" if score >= 8300 else ("合格" if score >= 5100 else "待精进")),
 		"credits":roundi(score * 0.105 + (450 if win else 60)), "xp":roundi(48 + player_kills * 20 + progress * 112 + (88 if win else 0) + score / 57.0 + float(task.get("threat", 0)) * 13.0)}
 	finished.emit(result)
+
+func _finish_free() -> void:
+	var ranking := []
+	for jet in fleet:
+		ranking.append({"slot":jet.index, "aircraft":str(jet.type.name), "kills":jet.kills, "deaths":jet.deaths})
+	ranking.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a.kills != b.kills:
+			return a.kills > b.kills
+		if a.deaths != b.deaths:
+			return a.deaths < b.deaths
+		return a.slot < b.slot)
+	var previous_place := 0
+	var player_place := 0
+	for i in ranking.size():
+		var row: Dictionary = ranking[i]
+		if i == 0 or row.kills != ranking[i - 1].kills or row.deaths != ranking[i - 1].deaths:
+			previous_place = i + 1
+		row.place = previous_place
+		if row.slot == player.index:
+			player_place = previous_place
+	var credits := (fleet.size() + 1 - player_place) * 55 + player_kills * 70 + maxi(0, player_kills - respawns) * 25
+	finished.emit({"id":"", "campaign":0, "mode":"free", "name":task.name, "aircraft":player.type.id,
+		"score":credits, "kills":player_kills, "seconds":FREE_LENGTH, "distance":miles, "win":player_place == 1,
+		"deaths":respawns, "place":player_place, "ranking":ranking, "grade":"第 %d 名" % player_place,
+		"credits":credits, "xp":48 + player_kills * 20 + (88 if player_place == 1 else 0)})
 
 func _process(dt: float) -> void:
 	if not ready_for_play:

@@ -128,14 +128,16 @@ func _draw() -> void:
 	_text(Vector2(45, 128), "航向    %03d°" % int(fposmod(rad_to_deg(atan2(jet.forward.x, -jet.forward.z)), 360)), 15, top_left)
 	_text(Vector2(35, 171), fight.task.name, 16, cream)
 	var progress: String
+	var clock := int(now)
 	if fight.mode == "campaign":
 		progress = "波次 %d / %d    ·    剩余敌机 %d" % [fight.wave, fight.task.engagement.waves.size(), fight.alive_enemies()]
 	elif fight.mode == "free":
-		progress = "击落 %d    ·    在场 %d / 7" % [fight.player_kills, fight.alive_enemies() + int(jet.hp > 0.0)]
+		progress = "击落 %d   ·   死亡 %d   ·   在场 %d/%d" % [fight.player_kills, fight.respawns, fight.alive_enemies() + int(jet.hp > 0.0), fight.fleet.size()]
+		clock = ceili(maxf(0.0, fight.FREE_LENGTH - now))
 	else:
 		progress = fight.task.detail
 	_panel(Rect2(w * 0.5 - 192, 14, 384, 34), 12.0, Color("#122337d0"), Color("#678b9a8c"))
-	_center_text(Vector2(w * 0.5, 37), "%s    |    %02d:%02d" % [progress, int(now / 60), int(now) % 60], 15, top_left)
+	_center_text(Vector2(w * 0.5, 37), "%s    |    %02d:%02d" % [progress, clock / 60, clock % 60], 15, top_left)
 	if fight.warning:
 		_center_text(Vector2(w * 0.5, 78), "⚠ 敌机导弹来袭", 19, pink)
 	var radar := Vector2(w - 93, 92)
@@ -204,7 +206,7 @@ func _draw() -> void:
 	if now < 13.0:
 		_center_text(Vector2(w * 0.5, h - 28), "‹‹   滑动空白区域控制飞行   ››", 15, Color(cyan, 0.75))
 	if jet.hp <= 0.0 and fight.mode == "free":
-		_center_text(Vector2(w * 0.5, h - 77), "战机即将返回空域", 22, cream)
+		_center_text(Vector2(w * 0.5, h - 77), "%d 秒后复活" % ceili(maxf(0.0, jet.until_respawn - now)), 22, cream)
 
 func _draw_action(item: Dictionary) -> void:
 	var slot: int = item.slot
