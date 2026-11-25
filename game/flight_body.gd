@@ -30,6 +30,7 @@ var load_g := 1.0
 var engine := 1.0
 var handling := 1.0
 var damage := Vector3.ZERO
+var surface_hits := {}
 var side := 0
 var index := 0
 var kills := 0
@@ -62,6 +63,7 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	velocity = forward * initial_speed
 	angular = Vector3.ZERO
 	damage = Vector3.ZERO
+	surface_hits.clear()
 	hp = health
 	max_hp = health
 	throttle = 1.0

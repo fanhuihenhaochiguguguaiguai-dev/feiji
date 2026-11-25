@@ -187,7 +187,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _draw() -> void:
-	if not is_instance_valid(fight) or not fight.ready_for_play:
+	if not is_instance_valid(fight) or not fight.is_inside_tree() or not fight.ready_for_play:
 		return
 	var w := size.x
 	var h := size.y
@@ -226,17 +226,6 @@ func _draw() -> void:
 	var radius := clampf(aim.distance_to(p1), 68.0, h * 0.33)
 	var locked: bool = fight.is_locked()
 	var acquired: float = fight.lock_fraction()
-	var lost: bool = now < fight.target_lost_until
-	var ring_color := Color("#79f0a6") if locked else Color("#ff6365")
-	var ring_alpha := 0.8 if locked else (0.62 if fight.target else 0.26)
-	var phase := -PI * 0.5 if locked else -PI * 0.5 + now * 0.33
-	draw_arc(aim, radius, 0, TAU, 96, Color(ring_color, ring_alpha * 0.26), 1.0, true)
-	for n in 12:
-		var start: float = phase + n * TAU / 12.0
-		var end: float = start + (0.29 if lost else 0.43)
-		draw_arc(aim, radius, start, end, 8, Color(ring_color, ring_alpha), 2.1 if locked else 1.5, true)
-	if acquired > 0.01:
-		draw_arc(aim, radius - 4.0, -PI * 0.5, -PI * 0.5 + TAU * acquired, 56, Color(ring_color, 0.68), 1.7, true)
 	if fight.warning:
 		var bearing: Vector3 = jet.attitude.inverse() * fight.incoming_heading
 		var edge := Vector2(bearing.x, clampf(bearing.z - bearing.y, -1.0, 1.0)).normalized()
@@ -280,16 +269,30 @@ func _draw() -> void:
 			contact_visibility[other.life_id * 32 + other.index] = not fight.world.obstruction(jet.position, other.position)
 		if not contact_visibility[other.life_id * 32 + other.index]:
 			continue
-		var lock: bool = other == fight.target and locked
-		var tint := Color("#79f0a6") if lock else Color(top_left, 0.64)
-		if lock:
+		var selected: bool = other == fight.target
+		var tint := (Color("#79f0a6") if locked else pink) if selected else Color(top_left, 0.64)
+		var frame_size := lerpf(h * 0.19, 24.0, smoothstep(0.0, 1.0, acquired)) if selected and not locked else 19.0
+		var corner_length := maxf(8.0, frame_size * 0.25) if selected else 8.0
+		if selected and locked:
+			draw_arc(p, radius, 0.0, TAU, 64, Color(tint, 0.48), 1.3, true)
 			draw_polyline(PackedVector2Array([p + Vector2(0, -15), p + Vector2(15, 0), p + Vector2(0, 15), p + Vector2(-15, 0), p + Vector2(0, -15)]), tint, 1.3, true)
 		for corner in [Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1), Vector2(1,1)]:
-			var base: Vector2 = p + corner * 19.0
-			draw_line(base, base - Vector2(corner.x * 8, 0), tint, 1.1, true)
-			draw_line(base, base - Vector2(0, corner.y * 8), tint, 1.1, true)
-		if other == fight.target:
+			var base: Vector2 = p + corner * frame_size
+			draw_line(base, base - Vector2(corner.x * corner_length, 0), tint, 1.8 if selected else 1.1, true)
+			draw_line(base, base - Vector2(0, corner.y * corner_length), tint, 1.8 if selected else 1.1, true)
+		if selected:
 			_center_text(p + Vector2(0, 42), "%s   %.2f 公里" % [other.type.name, jet.position.distance_to(other.position) / 1000.0], 14, tint)
+	var since_hit: float = now - fight.hit_time
+	var destroyed: bool = fight.hit_destroyed
+	if since_hit < (0.68 if destroyed else 0.14) and not fight.camera.is_position_behind(fight.hit_position):
+		var contact := _aim_at(fight.hit_position)
+		if input_pad.has_point(contact):
+			var mark := Color(cream, 1.0 - smoothstep(0.045, 0.68 if destroyed else 0.14, since_hit))
+			if destroyed:
+				_center_text(contact - Vector2(0, 20), "击毁", 19, mark)
+			else:
+				for direction in [Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1), Vector2(1,1)]:
+					draw_line(contact + direction * 6.0, contact + direction * 10.0, mark, 1.7, true)
 	for item in artifacts:
 		_draw_action(item)
 	if now < 13.0:

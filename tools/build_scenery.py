@@ -76,8 +76,12 @@ def relief_colors(ground, name):
         # Broad rock exposures sit on steep faces and concave gullies. Broad slopes hold snow.
         exposed = np.clip((slope + crease * .42 + (stratum - .5) * .17 - .16) / .45, 0, 1)
         exposed = (exposed * exposed * (3 - 2 * exposed))[..., None]
-        powder = np.array((.98, .99, 1.0)) * (1.0 - crease * .105)[..., None]
-        schist = np.array((.37, .45, .56)) * (.88 + stratum * .24)[..., None]
+        source = Image.open(SOURCES / "rock-color.jpg").convert("L").resize((192, 192), Image.Resampling.LANCZOS)
+        grain = np.asarray(source, dtype=np.float32) / 255
+        sampled = map_coordinates(grain, ((z / 54 + x / 290) % 192, (x / 88 - z / 218) % 192), order=1, mode="grid-wrap")
+        fluting = np.clip(cut / 24, -.8, .8)
+        powder = np.array((.98, .99, 1.0)) * (.96 - crease * .15 + fluting * .03)[..., None]
+        schist = np.array((.48, .47, .46)) * (.61 + stratum * .22 + sampled * .29 + fluting * .09)[..., None]
         color = powder + (schist - powder) * exposed
     boundary = np.minimum.reduce((x + 6144, 18432 - x, z + 6144, 18432 - z))
     weight = (np.clip((boundary - 1536) / 1700, 0, 1) * np.clip(height / 16, 0, 1))[..., None]

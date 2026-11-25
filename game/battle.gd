@@ -35,7 +35,6 @@ var locked_time := 0.0
 var queued_missile_target: Airframe
 var queued_missile_life := -1
 var seek_due := 0.0
-var target_lost_until := 0.0
 var launched_from_runway := false
 var participated := false
 var incoming_heading := Vector3.ZERO
@@ -55,6 +54,9 @@ var player_kills: int:
 	get:
 		return player.kills if player else 0
 var shots_hit := 0
+var hit_position := Vector3.ZERO
+var hit_time := -INF
+var hit_destroyed := false
 var total_fired := 0
 var miles := 0.0
 var paused := false
@@ -77,6 +79,8 @@ var camera_speed := Vector3.ZERO
 var exhaust_geometry := {}
 var exhaust_materials: Array[Material] = []
 var camera_fresh := true
+var camera_lock := 0.0
+var steering_amount := 0.0
 var exhaust_phase := 0.0
 var effects_phase := 0.0
 var warning := false
@@ -240,7 +244,6 @@ func _spawn_wave() -> void:
 	if wave > 0:
 		while not shots.is_empty():
 			_expire(shots.back())
-		target_lost_until = 0.0
 		locked_time = 0.0
 		target = null
 		audio.play_at("wave", player.position)
@@ -302,6 +305,7 @@ func _physics_process(dt: float) -> void:
 				shot.trail[n] -= drift
 		camera.position -= drift
 		camera_anchor -= drift
+		hit_position -= drift
 		effects.rebase(drift)
 		audio.rebase(drift)
 	if player.hp > 0:
@@ -364,7 +368,6 @@ func _departure_course(at: Vector3) -> Vector3:
 func _targeting(dt: float) -> void:
 	var was_locked := is_locked()
 	if target and (target.hp <= 0.0 or player.forward.dot((target.position - player.position).normalized()) < cos(LOCK_ANGLE * 1.34)):
-		target_lost_until = time + 0.48
 		target = null
 		locked_time = 0.0
 		seek_due = time
@@ -391,8 +394,6 @@ func _targeting(dt: float) -> void:
 				if held and was_locked:
 					break
 		if best != target:
-			if target and not best:
-				target_lost_until = time + 0.48
 			locked_time = 0.0
 			target = best
 	_refresh_lead(dt, was_locked)
@@ -429,10 +430,12 @@ func _trigger_held(weapon: String, key: Key) -> bool:
 
 func _reset_player_spawn() -> void:
 	camera_fresh = true
+	camera_lock = 0.0
+	steering_amount = 0.0
+	hit_time = -INF
 	target = null
 	locked_time = 0.0
 	queued_missile_target = null
-	target_lost_until = 0.0
 	countered_until = 0.0
 	boost_until = 0.0
 	boost_at = time
@@ -451,10 +454,11 @@ func _update_player(dt: float) -> void:
 	var keyboard := Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT)) - float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),
 		float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)) - float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN)))
 	var steering := (stick + keyboard).limit_length()
+	steering_amount = steering.length()
 	var response := flight_input(steering)
 	var control := Vector3(response.y, response.x, 0.0)
 	if is_locked() and not player.grounded and time >= player.evade_until:
-		var follow_gain := AUTO_TRACK_GAIN * (1.0 - smoothstep(0.015, 0.095, steering.length()))
+		var follow_gain := AUTO_TRACK_GAIN * (1.0 - smoothstep(0.015, 0.095, steering_amount))
 		var vector: Vector3 = player.attitude.inverse() * (target.position + target.velocity * 0.23 - player.position).normalized()
 		control += Vector3(clampf(vector.y * 0.48, -0.17, 0.17), clampf(vector.x * 0.47, -0.17, 0.17), 0.0) * follow_gain
 	if action.get("evade", false):
@@ -652,27 +656,41 @@ func _update_shots(dt: float) -> void:
 		var toward := at + velocity * dt
 		var minimum := at.min(toward) - Vector3.ONE * 29.0
 		var maximum := at.max(toward) + Vector3.ONE * 29.0
+		var first_hit := INF
+		var victim: Airframe
+		var surface := Vector3.ZERO
 		for jet in fleet:
 			if jet.hp <= 0.0 or jet.side == cast.owner.side:
 				continue
 			var point := jet.position
 			if point.x < minimum.x or point.x > maximum.x or point.y < minimum.y or point.y > maximum.y or point.z < minimum.z or point.z > maximum.z:
 				continue
-			var closest := Geometry3D.get_closest_point_to_segment(point, at, toward)
-			var local := jet.attitude.inverse() * (closest - jet.position)
-			var radius := jet.hit_extent
+			var inverse := jet.attitude.inverse()
+			var start := inverse * (at - jet.previous)
+			var end := inverse * (toward - jet.position)
+			var hit := _hull_entry(start / jet.hit_extent, end / jet.hit_extent)
+			if hit < first_hit:
+				first_hit = hit
+				victim = jet
+				surface = start.lerp(end, hit)
+		var clearance := toward.y - maxf(0.0, world.height(toward))
+		if clearance < 0.0:
+			var from_clearance := maxf(0.0, at.y - maxf(0.0, world.height(at)))
+			var ground_hit := from_clearance / (from_clearance - clearance)
+			if ground_hit < first_hit:
+				first_hit = ground_hit
+				victim = null
+		if first_hit <= 1.0:
+			var contact := at.lerp(toward, first_hit)
 			if guided:
-				radius += Vector3.ONE * 2.3
-			if (local / radius).length_squared() > 1.0:
-				continue
-			_apply_hit(cast, jet, closest, local)
-			break
-		if not cast.active:
-			continue
-		if toward.y < maxf(0.0, world.height(toward)):
-			if guided:
-				effects.impact(toward, 1, toward.y <= 1.0)
-			_expire(cast)
+				cast.trail.append(contact)
+				cast.sample_count += 1
+			if victim:
+				_apply_hit(cast, victim, contact, surface)
+			else:
+				if guided:
+					effects.impact(contact, 1, contact.y <= 1.0)
+				_expire(cast)
 			continue
 		cast.previous = at
 		cast.position = toward
@@ -682,6 +700,19 @@ func _update_shots(dt: float) -> void:
 			effects.move_projectile(int(cast.slot), toward, direction, cast.age > MISSILE_ARM_TIME)
 	if warning and not warning_before:
 		audio.play_at("warn", player.position)
+
+static func _hull_entry(start: Vector3, end: Vector3) -> float:
+	var c := start.length_squared() - 1.0
+	if c <= 0.0:
+		return 0.0
+	var step := end - start
+	var a := step.length_squared()
+	var b := start.dot(step)
+	var discriminant := b * b - a * c
+	if a < 0.000001 or b >= 0.0 or discriminant < 0.0:
+		return INF
+	var hit := c / (-b + sqrt(discriminant))
+	return hit if hit <= 1.0 else INF
 
 static func _track_missile(cast: Dictionary, nose: Vector3, speed: float, offset: Vector3, drift: Vector3, dt: float) -> Vector3:
 	if offset.length_squared() < 0.0001:
@@ -711,13 +742,22 @@ func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector
 	if jet == player:
 		hit_power *= damage_modifiers.z
 	jet.hp = maxf(0.0, jet.hp - hit_power)
+	if cast.owner == player:
+		hit_position = closest
+		hit_time = time
+		hit_destroyed = jet.hp <= 0.0
 	var zone := Vector3(maxf(0.0, -local.x), maxf(0.0, local.x), 3.3 if local.z > 0.0 else 1.0).normalized()
 	jet.damage = (jet.damage + zone * hit_power / jet.max_hp * 1.4).clamp(Vector3.ZERO, Vector3.ONE)
-	effects.impact(closest, int(guided))
+	if jet.hp > 0.0:
+		var panel := (0 if local.x < 0.0 else 1) if absf(local.x) > jet.hit_extent.x * 0.38 else 2
+		var previous_mark: Vector4 = jet.surface_hits.get(panel, Vector4.ZERO)
+		jet.surface_hits[panel] = Vector4(local.x, local.y, local.z, minf(1.0, previous_mark.w + hit_power / jet.max_hp))
+		var normal: Vector3 = jet.attitude * (local / (jet.hit_extent * jet.hit_extent)).normalized()
+		effects.impact(closest, int(guided), false, jet.velocity, normal)
 	audio.play_at("blast" if guided else "scrape", closest)
 	_expire(cast)
 	if jet.hp <= 0.0:
-		_destroy(jet, cast.owner)
+		_destroy(jet, cast.owner, closest)
 	if mode == "training" and cast.owner == player and task.lesson == ("missile" if guided else "gun"):
 		finish(true)
 
@@ -734,12 +774,14 @@ func _expire(cast: Dictionary) -> void:
 	if cast.missile:
 		effects.release_projectile(int(cast.slot), cast.trail, int(cast.sample_count))
 
-func _destroy(jet: Airframe, who: Airframe) -> void:
+func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF) -> void:
 	jet.hp = 0.0
 	jet.deaths += 1
 	jet.until_respawn = time + FREE_RESPAWN if mode == "free" else 0.0
 	var structure: Node3D = jet.rig.levels.Exterior
-	effects.breakup(jet.position, jet.velocity, jet.position.y < 8.0, structure)
+	jet.model.transform = Transform3D(Basis(jet.attitude), jet.position)
+	jet.rig.meshes.scale = Vector3.ONE
+	effects.breakup(contact if contact.is_finite() else jet.position, jet.velocity, jet.position.y < 8.0, structure)
 	jet.model.visible = false
 	audio.play_at("water" if jet.position.y < 8.0 else "fracture", jet.position)
 	if who and who != jet:
@@ -818,7 +860,7 @@ func _process(dt: float) -> void:
 	_render_pose(minf(dt, 0.05))
 	effects.sync_tracers(shots, Engine.get_physics_interpolation_fraction(), camera)
 	effects_phase += dt
-	if effects_phase >= 0.023:
+	if effects_phase >= 0.023 or effects.ribbon_dirty:
 		effects.tick(minf(effects_phase, 0.07), shots, camera)
 		effects_phase = 0.0
 
@@ -828,19 +870,20 @@ func _render_pose(dt: float) -> void:
 	var origin := player.previous.lerp(player.position, alpha)
 	var forward := pose * Vector3.FORWARD
 	var up := pose * Vector3.UP
-	var right := pose * Vector3.RIGHT
 	var speed := player.velocity.length()
 	var span: float = player.type.span
 	effects.update_heat(origin - forward * (float(player.type.length) * 0.5 + 3.6), pose, player.hp > 0.0 and player.boost > 0.5 and not manual_cockpit)
 	var focus := origin + forward * (span * 3.1) - Vector3.UP * (span * 0.23)
 	var chase := origin - forward * (span * 1.46 + player.boost * 1.35) + Vector3.UP * (span * 0.37) + up * (span * 0.08)
-	if target:
-		var contact_offset: Vector3 = target.position - origin
-		var side_offset := clampf(contact_offset.normalized().dot(right), -0.45, 0.45)
-		var framing := (0.42 + lock_fraction() * 0.58) * AUTO_TRACK_GAIN
-		chase -= right * span * side_offset * 0.40 * framing
-		focus += right * span * side_offset * 1.65 * framing
-		focus.y += clampf(contact_offset.y / maxf(180.0, contact_offset.length()), -0.2, 0.2) * span * framing
+	var tracking := is_locked() and not manual_cockpit and not player.grounded and time >= player.evade_until
+	var manual_weight := 1.0 - smoothstep(0.04, 0.46, steering_amount)
+	var zoom_request := lerpf(0.30, 1.0, manual_weight) if tracking else 0.0
+	camera_lock = 0.0 if manual_cockpit else lerpf(camera_lock, zoom_request, 1.0 - exp(-dt * 6.0))
+	if tracking:
+		var contact := target.previous.lerp(target.position, alpha)
+		var normal_view := focus - chase
+		var target_view := (contact - chase).normalized() * normal_view.length()
+		focus = chase + normal_view.slerp(target_view, camera_lock * manual_weight * 0.80)
 	if manual_cockpit:
 		var eye: Array = player.type.eye
 		chase = origin + pose * Vector3(eye[0], eye[1], eye[2])
@@ -863,7 +906,8 @@ func _render_pose(dt: float) -> void:
 		look_toward = look_toward.slerp((focus - camera.position).normalized(), 1.0 - exp(-dt * 13.0 * 0.85))
 	camera_anchor = origin
 	camera.look_at(camera.position + look_toward, up if manual_cockpit else Vector3.UP.slerp(up, 0.24 * 0.85).normalized())
-	camera.fov = lerpf(camera.fov, 52.0 + clampf((speed - player.type.trim) / 90.0, -1.0, 4.0), 1.0 - exp(-dt * 3.5))
+	var view_fov := 52.0 + clampf((speed - player.type.trim) / 90.0, -1.0, 4.0) - 10.0 * camera_lock
+	camera.fov = lerpf(camera.fov, view_fov, 1.0 - exp(-dt * 7.0))
 	var projection := 2.0 * tan(deg_to_rad(camera.fov * 0.5))
 	for jet in fleet:
 		if jet.hp <= 0.0:
@@ -912,15 +956,13 @@ func _render_pose(dt: float) -> void:
 			if jet.hp <= 0.0 or camera.position.distance_squared_to(jet.position) > 1450.0 * 1450.0:
 				continue
 			var at: Vector3 = jet.position - jet.forward * float(jet.type.length) * 0.49
-			if jet.damage.z > 0.31:
-				effects.puff(at, -jet.forward * 18.0 + Vector3.UP * 9.0, 2.4, 1.65, 4 if jet.damage.z > 0.56 else 0)
-				if jet.damage.z > 0.6:
-					effects.puff(at, -jet.forward * 15.0, 1.1, 0.55, 1)
-			for side in [-1, 1]:
-				var damage: float = jet.damage.x if side < 0 else jet.damage.y
-				if damage > 0.23:
-					var wing: Vector3 = jet.position + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.32 * side
-					effects.puff(wing, -jet.forward * 14.0 + Vector3.UP * 6.0, 0.9 + damage, 1.32, 4 if damage > 0.58 else 0, 0.72)
+			for hit: Vector4 in jet.surface_hits.values():
+				if hit.w < 0.21:
+					continue
+				var wound: Vector3 = jet.position + jet.attitude * Vector3(hit.x, hit.y, hit.z)
+				effects.puff(wound, jet.velocity * 0.15 + Vector3.UP * 8.0, 0.72 + hit.w * 1.7, 1.4, 4 if hit.w > 0.44 else 0, 0.77)
+				if hit.w > 0.48:
+					effects.puff(wound, jet.velocity * 0.35, 0.60 + hit.w * 0.66, 0.31, 1)
 			if jet.load_g > 2.1 or jet.position.y > 1950.0 and speed > 210.0:
 				for sign_side in [-1, 1]:
 					var tip: Vector3 = at + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46 * sign_side

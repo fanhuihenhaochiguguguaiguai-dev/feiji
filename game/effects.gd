@@ -10,11 +10,13 @@ const SPARK = preload("res://assets/surface/spark.webp")
 
 const MISSILE_VISUALS := 28
 const RIBBON_SPAN := 3.1
+const TRACER_LENGTH := 29.0
 var missile_visuals := {}
 var missile_pool: Array[MeshInstance3D] = []
 var tracers := MultiMesh.new()
 var spent_ribbons: Array[Dictionary] = []
 var ribbon_clock := 0.0
+var ribbon_dirty := false
 var burst_pool: Array[GPUParticles3D] = []
 var burst_slot := 0
 var puffs: Array[Dictionary] = []
@@ -102,7 +104,7 @@ func pool() -> void:
 		fragments.append({"node":fragment, "left":0.0})
 
 func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D) -> void:
-	impact(at, 2, wet)
+	impact(at, 2, wet, carried_velocity)
 	if not is_instance_valid(airframe):
 		return
 	var surfaces := airframe.find_children("*", "MeshInstance3D", true, false)
@@ -126,11 +128,12 @@ func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D
 		piece.core = i == 0
 		piece.emit_at = 0.08 * i
 
-func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacity := 1.0) -> void:
+func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacity := 1.0, delay := 0.0) -> void:
 	var item := puffs[cursor]
 	active_puffs[cursor] = true
 	cursor = (cursor + 1) % puffs.size()
-	var fire := kind == 1
+	var flash := kind == 6
+	var fire := kind == 1 or flash
 	var spark := kind == 2
 	var water := kind == 3
 	var tint := Color(1.0, 0.66, 0.36, opacity) if fire else (Color(1.0, 0.86, 0.57, opacity) if spark else Color(0.68, 0.74, 0.8, opacity))
@@ -138,9 +141,11 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 		tint = Color(0.33, 0.36, 0.39, opacity)
 	elif kind == 5:
 		tint = Color(0.19, 0.17, 0.16, opacity)
+	elif flash:
+		tint = Color(1.0, 0.96, 0.85, opacity)
 	item.node.position = at
 	item.node.scale = Vector3.ONE * size
-	item.node.visible = true
+	item.node.visible = delay == 0.0
 	var material := 1 if fire else (2 if spark else 0)
 	if item.kind != material:
 		item.kind = material
@@ -148,10 +153,13 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	item.node.set_instance_shader_parameter("atlas", not water)
 	item.node.set_instance_shader_parameter("hidden", float(water))
 	item.node.set_instance_shader_parameter("tint", tint)
-	item.node.set_instance_shader_parameter("emission_gain", 5.5 if fire else (6.0 if spark else 0.0))
+	item.node.set_instance_shader_parameter("life", 0.0)
+	item.node.set_instance_shader_parameter("soft_depth", clampf(size * 0.26, 0.42, 5.0))
+	item.node.set_instance_shader_parameter("roll", randf_range(-PI, PI))
+	item.node.set_instance_shader_parameter("emission_gain", 8.0 if flash else (5.5 if fire else (6.0 if spark else 0.0)))
 	item.left = span
 	item.total = span
-	item.uv_shift = randf() * 0.1
+	item.delay = delay
 	item.vel = vel
 	item.size = size
 	item.tint = tint
@@ -175,39 +183,47 @@ func end_prime(camera: Camera3D) -> void:
 	heat_wake.visible = false
 	tick(0.10, [], camera)
 
-func impact(at: Vector3, power: int, water := false) -> void:
-	_emit_burst(at, power, water)
-	var count := [3, 8, 13][clampi(power, 0, 2)] as int
-	var radius := [3.0, 12.0, 24.0][clampi(power, 0, 2)] as float
-	for i in count:
-		var flow := Vector3(randf_range(-1, 1), randf_range(0.12, 1), randf_range(-1, 1)) * radius
-		var kind := 3 if water else (2 if power == 0 else (1 if i < ceili(count * 0.38) else 5))
-		var span := randf_range(0.24, 0.55) if kind == 2 else (randf_range(0.35, 0.65) if kind == 1 else randf_range(1.25, 2.3))
-		puff(at + flow * 0.27, flow * (3.1 if power == 0 else 0.73), radius * randf_range(0.29, 0.73), span, kind)
+func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, normal := Vector3.ZERO) -> void:
+	var direction := normal if normal != Vector3.ZERO else Vector3.UP
+	_emit_burst(at, power, water, direction)
 	if power == 0:
+		puff(at + direction * 0.24, carried * 0.57 + direction * 26.0, 1.45, 0.13, 2)
 		return
-	if not water:
-		puff(at, Vector3.UP * 3.0, radius * 0.72, 0.19, 1)
-	for layer in (3 if power == 2 else 2):
-		var item := impacts[impact_slot]
-		active_impacts[impact_slot] = true
-		impact_slot = (impact_slot + 1) % impacts.size()
-		item.light.position = at
-		item.light.visible = layer == 0
-		item.light.light_energy = 8.0
-		item.wave.position = at
-		item.wave.scale = Vector3.ONE
-		item.wave.visible = true
-		item.total = 0.81 + layer * 0.11
-		item.left = item.total
-		item.radius = radius * (6.5 - layer * 1.23)
-		item.wave.set_instance_shader_parameter("amplitude", 0.88 - layer * 0.19)
+	var destroyed := power == 2
+	var radius := 21.0 if destroyed else 8.5
+	if water:
+		for i in (8 if destroyed else 5):
+			var spread := Vector3(randf_range(-0.70, 0.70), randf_range(0.8, 1.8), randf_range(-0.70, 0.70))
+			puff(at + spread * 2.0, spread * radius * 1.65, radius * randf_range(0.35, 0.62), randf_range(0.72, 1.5), 3)
+	else:
+		puff(at + direction * 0.35, carried * 0.45, radius * 0.54, 0.16 if destroyed else 0.10, 6)
+		for i in (4 if destroyed else 2):
+			var flow := Vector3(randf_range(-1, 1), randf_range(-0.43, 0.85), randf_range(-1, 1)) + direction * 0.30
+			puff(at + flow * radius * 0.24, carried * 0.49 + flow * radius * 1.18, radius * randf_range(0.40, 0.72), randf_range(0.31, 0.66), 1, 0.93)
+		for i in (5 if destroyed else 2):
+			var flow := Vector3(randf_range(-1, 1), randf_range(0.13, 1), randf_range(-1, 1))
+			puff(at + flow * radius * 0.20, carried * 0.33 + flow * radius * 0.67, radius * randf_range(0.37, 0.68), randf_range(1.35, 2.65), 5, 0.98, 0.11 + 0.036 * i)
+	var item := impacts[impact_slot]
+	active_impacts[impact_slot] = true
+	impact_slot = (impact_slot + 1) % impacts.size()
+	item.light.position = at
+	item.light.visible = not water
+	item.light.light_energy = 7.0 if destroyed else 4.5
+	item.light.omni_range = radius * 2.5
+	item.energy = item.light.light_energy
+	item.wave.position = at
+	item.wave.scale = Vector3.ONE
+	item.wave.visible = destroyed
+	item.total = 0.47 if destroyed else 0.15
+	item.left = item.total
+	item.radius = radius * 2.5
+	item.wave.set_instance_shader_parameter("amplitude", 0.33)
 
 func _prepare_projectiles() -> void:
 	var beam := CylinderMesh.new()
 	beam.top_radius = 0.072
 	beam.bottom_radius = 0.15
-	beam.height = 29.0
+	beam.height = TRACER_LENGTH
 	beam.radial_segments = 5
 	beam.rings = 0
 	beam.material = tracer
@@ -279,13 +295,16 @@ func _prepare_impacts() -> void:
 		add_child(emitter)
 		burst_pool.append(emitter)
 
-func _emit_burst(at: Vector3, power: int, water: bool) -> void:
+func _emit_burst(at: Vector3, power: int, water: bool, normal: Vector3) -> void:
 	if burst_pool.is_empty() or water:
 		return
 	var emitter := burst_pool[burst_slot]
 	burst_slot = (burst_slot + 1) % burst_pool.size()
 	emitter.position = at
 	emitter.amount_ratio = 0.52 if power == 0 else 1.0
+	var motion := emitter.process_material as ParticleProcessMaterial
+	motion.direction = normal
+	motion.spread = 58.0 if power == 0 else 137.0
 	emitter.restart()
 
 func projectile(slot: int, at: Vector3, direction: Vector3, missile: bool) -> void:
@@ -313,6 +332,7 @@ func release_projectile(slot: int, points: Array, sample_count: int) -> void:
 		if spent_ribbons.size() >= 16:
 			spent_ribbons.pop_front()
 		spent_ribbons.append({"points": points, "left":RIBBON_SPAN, "samples":sample_count})
+		ribbon_dirty = true
 
 func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> void:
 	var visible := 0
@@ -323,7 +343,7 @@ func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> v
 		if at.distance_squared_to(camera.position) > 4350.0 * 4350.0:
 			continue
 		var nose: Vector3 = shot.nose
-		tracers.set_instance_transform(visible, Transform3D(Basis(Quaternion(Vector3.UP, nose)), at))
+		tracers.set_instance_transform(visible, Transform3D(Basis(Quaternion(Vector3.UP, nose)), at - nose * (TRACER_LENGTH * 0.5)))
 		visible += 1
 	tracers.visible_instance_count = visible
 
@@ -331,31 +351,37 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 	var drag := exp(-dt * 1.51)
 	for slot in active_puffs.keys():
 		var item := puffs[slot]
-		item.left -= dt
+		var elapsed := maxf(0.0, dt - item.delay)
+		item.delay = maxf(0.0, item.delay - dt)
+		if elapsed == 0.0:
+			continue
+		item.left -= elapsed
 		if item.left <= 0.0:
 			item.node.visible = false
 			active_puffs.erase(slot)
 			continue
 		var t: float = 1.0 - item.left / item.total
-		item.node.position += item.vel * dt
+		item.node.visible = true
+		item.node.position += item.vel * elapsed
 		item.vel *= drag
 		item.node.scale = Vector3.ONE * item.size * (1.0 + t * (0.4 if item.spark else 1.65))
 		var fading: Color = item.tint
-		var rise := 1.0 if item.spark else smoothstep(0.0, 0.13 if item.fire else 0.24, t + 0.026)
+		var rise := 1.0 if item.spark or item.fire else smoothstep(0.0, 0.19, t + 0.035)
 		fading.a *= rise * pow(1.0 - t, 0.9)
-		item.node.set_instance_shader_parameter("life", t + item.uv_shift)
+		item.node.set_instance_shader_parameter("life", t)
 		item.node.set_instance_shader_parameter("tint", fading)
 	for slot in active_impacts.keys():
 		var item := impacts[slot]
 		item.left -= dt
 		var t := clampf(1.0 - item.left / item.total, 0, 1)
-		item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(t, 0.59))
-		item.wave.set_instance_shader_parameter("amplitude", 0.95 * pow(1.0 - t, 1.28))
+		if item.wave.visible:
+			item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(t, 0.59))
+			item.wave.set_instance_shader_parameter("amplitude", 0.33 * pow(1.0 - t, 1.65))
 		if item.light.visible:
-			if t > 0.24:
+			if t > 0.54:
 				item.light.visible = false
 			else:
-				item.light.light_energy = 7.0 * exp(-t * 13.0)
+				item.light.light_energy = item.energy * exp(-t * 9.0)
 		if t >= 1.0:
 			item.wave.visible = false
 			active_impacts.erase(slot)
@@ -387,8 +413,9 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 		if spent_ribbons[i].left <= 0.0:
 			spent_ribbons.remove_at(i)
 	ribbon_clock += dt
-	if ribbon_clock < 0.047:
+	if ribbon_clock < 0.047 and not ribbon_dirty:
 		return
+	ribbon_dirty = false
 	ribbon_clock = 0.0
 	ribbon_mesh.clear_surfaces()
 	var active := false

@@ -59,6 +59,8 @@ void sky() {
 		COLOR = vec3(AT_CUBEMAP_PASS ? vec2(0.0) : nearby_cloud(ray, POSITION, phase), 0.0);
 	} else {
 		vec2 uv = panorama_uv(ray);
+		// Place the photographed cloud band over the valley without adding distant volume samples.
+		uv.y -= 0.066 * (1.0 - storm) * smoothstep(0.025, 0.23, ray.y) * (1.0 - smoothstep(0.62, 1.0, ray.y));
 		vec3 photo = texture(panorama, uv).rgb * panorama_range;
 		vec3 scatter = texture(scattering, vec2(angle * 0.5 + 0.5, clamp(ray.y, 0.0, 1.0))).rgb;
 		vec3 base = photo * mix(0.51, 0.44, storm);
