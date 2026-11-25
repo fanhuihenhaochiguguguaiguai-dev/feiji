@@ -7,6 +7,8 @@ var wind: AudioStreamPlayer
 var mute := false
 
 func _ready() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
 	for kind in ["gun", "missile", "blast", "scrape", "fracture", "water", "counter", "lock", "warn", "wave", "victory"]:
 		cues[kind] = load("res://assets/audio/%s.wav" % kind)
 	for i in 18:
@@ -32,6 +34,8 @@ func _ambience(wav: AudioStreamWAV) -> AudioStreamPlayer:
 	return node
 
 func engine(dt: float, throttle: float, speed: float, boost: float, propeller: bool, active: bool) -> void:
+	if motor == null:
+		return
 	var audible := active and not mute
 	var level := (0.017 + throttle * 0.032 + boost * 0.044) if audible else 0.0
 	var air := (minf(0.075, speed * 0.00024) + boost * 0.025) if audible else 0.0
@@ -51,3 +55,15 @@ func play_at(cue: String, at: Vector3) -> void:
 		emitter.stream = cues[cue]
 		emitter.play()
 		break
+
+func stop_all() -> void:
+	for emitter in voices:
+		emitter.stop()
+		emitter.stream = null
+	for player in [motor, wind]:
+		if player:
+			player.stop()
+			player.stream = null
+
+func _exit_tree() -> void:
+	stop_all()
