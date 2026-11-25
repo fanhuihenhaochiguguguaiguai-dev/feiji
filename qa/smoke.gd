@@ -69,7 +69,7 @@ func run() -> void:
 	check(battle.player.hp > 0.0 and jet.hp > 0.0 and battle.alive_enemies() == 11 and jet.kills == 1,
 		"Free combat did not respawn the fixed roster with its original stats")
 	var origin_before: Vector2i = battle.world.origin
-	var rebase: Vector3 = battle.world.follow(Vector3(6000, 1000, 0), Vector3.FORWARD * 200.0)
+	var rebase: Vector3 = battle.world.follow(Vector3(6400, 1000, 0), Vector3.FORWARD * 200.0)
 	check(origin_before != battle.world.origin and rebase.x > 0.0, "Floating origin did not rebase")
 	var result := []
 	battle.finished.connect(func(value): result.append(value))
@@ -140,7 +140,8 @@ func run() -> void:
 		free_button._gui_input(pointer)
 		pointer.pressed = false
 		free_button._gui_input(pointer)
-		for i in range(4):
+		var timeout := Time.get_ticks_msec() + 10000
+		while shell.loading and Time.get_ticks_msec() < timeout:
 			await process_frame
 		check(is_instance_valid(shell.current_battle) and shell.current_battle.mode == "free",
 			"The lobby's second sortie button does not launch free combat")

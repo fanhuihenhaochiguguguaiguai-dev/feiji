@@ -1,41 +1,74 @@
 shader_type spatial;
-render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, shadows_disabled, diffuse_burley, specular_schlick_ggx;
 
 uniform vec2 world_offset;
-uniform vec4 deep : source_color = vec4(0.027, 0.095, 0.155, 1.0);
-uniform vec4 shallow : source_color = vec4(0.055, 0.22, 0.24, 1.0);
+uniform vec4 wake;
+uniform float wake_strength = 0.0;
+uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
+uniform vec4 scatter_color : source_color = vec4(0.067, 0.204, 0.224, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
-varying vec3 surface;
-varying float crest;
+uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
+uniform sampler2DArray spectral_normals : repeat_enable, filter_linear;
+uniform bool spectral_enabled = false;
+varying vec3 water_point;
+varying vec2 long_slope;
 
-void wave(vec2 axis, float length_m, float amplitude, float phase, vec2 ground, inout vec3 p, inout vec2 slope) {
-	float k = 6.283185 / length_m;
-	float angle = dot(axis, ground) * k + phase;
-	p.xz += axis * cos(angle) * amplitude * 0.54;
-	p.y += sin(angle) * amplitude;
+void swell(vec2 axis, float length_m, float amplitude, float phase, vec2 point, inout vec3 displacement, inout vec2 slope) {
+	float k = TAU / length_m;
+	float angle = dot(axis, point) * k + phase;
+	displacement.xz += axis * cos(angle) * amplitude * 0.5;
+	displacement.y += sin(angle) * amplitude;
 	slope += axis * cos(angle) * amplitude * k;
 }
 
 void vertex() {
-	vec3 p = VERTEX;
-	vec2 ground = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz + world_offset;
+	vec2 local = VERTEX.xz;
+	float radial = max(abs(local.x), abs(local.y));
+	// Keep metre spacing around the flight path and extend the outer rings to the horizon.
+	float factor = 1.0 + 46.0 * pow(clamp(radial / 256.0, 0.0, 1.0), 4.8);
+	VERTEX.xz *= factor;
+	vec2 surface = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz + world_offset;
+	vec3 displacement = vec3(0.0);
 	vec2 slope = vec2(0.0);
-	wave(vec2(0.863, -0.505), 113.0, 1.6, TIME * 0.71, ground, p, slope);
-	wave(vec2(0.33, 0.944), 82.0, 0.78, -TIME * 0.98, ground, p, slope);
-	wave(vec2(-0.71, 0.704), 39.0, 0.35, TIME * 1.36, ground, p, slope);
-	VERTEX = p;
-	NORMAL = normalize(vec3(-slope.x, 1.0, -slope.y));
-	surface = vec3(ground.x, p.y, ground.y);
-	crest = p.y;
+	float detail = 1.0 - smoothstep(125.0, 720.0, radial);
+	swell(vec2(0.863, -0.505), 154.0, 0.94, TIME * 0.61, surface, displacement, slope);
+	swell(vec2(0.33, 0.944), 61.0, 0.42, -TIME * 1.04, surface, displacement, slope);
+	if (spectral_enabled) {
+		displacement += texture(spectral_displacement, vec3(surface / 160.0, 0)).xyz * 0.84 * detail;
+		displacement += texture(spectral_displacement, vec3(surface / 39.0, 1)).xyz * 0.46 * detail;
+	}
+	VERTEX += displacement * detail;
+	water_point = vec3(surface.x, displacement.y, surface.y);
+	long_slope = slope;
 }
 
 void fragment() {
-	vec2 uv = surface.xz;
-	float small = texture(shore_noise, uv * 0.046 + vec2(TIME * 0.034, -TIME * 0.006)).r;
-	float swell = texture(shore_noise, uv * 0.018 + vec2(-TIME * 0.012, TIME * 0.016)).r;
-	float scatter = smoothstep(0.6, 1.0, small * 0.44 + swell * 0.7) * smoothstep(1.02, 2.5, crest);
-	ALBEDO = mix(deep.rgb, shallow.rgb, swell * 0.54 + scatter * 0.22) + scatter * vec3(0.16, 0.24, 0.25);
-	ROUGHNESS = mix(0.16, 0.36, small);
-	METALLIC = 0.29;
-	SPECULAR = 0.68;
+	float distance_m = length(VERTEX);
+	float grazing = 1.0 - clamp(dot(normalize(NORMAL), VIEW), 0.0, 1.0);
+	vec2 uv = water_point.xz;
+	float near_detail = 1.0 - smoothstep(390.0, 1700.0, distance_m);
+	vec2 flow = vec2(0.014, -0.009) * TIME;
+	vec2 fine = (texture(shore_noise, uv * 0.085 + flow).rg - texture(shore_noise, uv * 0.051 - flow * 0.65).gr) * 0.22;
+	vec2 gradient = long_slope * 0.73 + fine * near_detail;
+	float foam = 0.0;
+	if (spectral_enabled) {
+		vec4 outer = texture(spectral_normals, vec3(uv / 160.0, 0));
+		vec4 inner = texture(spectral_normals, vec3(uv / 39.0, 1));
+		gradient += (outer.xy * 0.8 + inner.xy * 0.65) * near_detail;
+		foam = smoothstep(0.12, 1.2, outer.w * 0.60 + inner.w * 0.45) * near_detail;
+	} else {
+		foam = smoothstep(0.76, 1.25, water_point.y) * near_detail * 0.22;
+	}
+	vec2 delta = uv - wake.xy;
+	float along = -dot(delta, wake.zw);
+	float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
+	float wake_line = exp(-max(along, 0.0)*0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
+	foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
+	float zenith_blend = pow(grazing, 3.5);
+	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
+	NORMAL = normalize((VIEW_MATRIX * vec4(normal_world, 0.0)).xyz);
+	ALBEDO = mix(mix(deep.rgb, scatter_color.rgb, smoothstep(-0.15, 1.45, water_point.y) * 0.36), vec3(0.44, 0.62, 0.64), clamp(foam, 0.0, 0.80));
+	ROUGHNESS = mix(0.22 + zenith_blend * 0.05, 0.55, foam);
+	METALLIC = 0.09;
+	SPECULAR = 0.37 + 0.23 * zenith_blend;
 }

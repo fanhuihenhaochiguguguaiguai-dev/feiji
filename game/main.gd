@@ -22,16 +22,34 @@ var note := ""
 var viewed_plane := "j20"
 var takeoff := false
 var list_chapter := 0
+var selected_mission := 1
+var panel_mods := false
+var card_scroll := 0
+var orbit_spin := -2.279
+var orbit_tilt := 0.105
+var orbit_scale := 1.0
+var orbit_active := false
+var orbit_touches := {}
+var orbit_span := 0.0
+var preview_camera: Camera3D
+var active_hud: Control
+var last_operation := {}
+var light_load_label: Label
+var load_meter: ProgressBar
 var capture_dir := ""
 var capture_free := false
 var capture_time := 0.0
 var screenshot_pending := false
 var fixture_stage := 0
 var fixture_marks := []
+var frame_wall_samples := PackedFloat64Array()
+var last_frame_usec := 0
 var loading := false
 var pause_ui: Control
 var adaptive_clock := 0.0
 var frame_average := 0.0
+var slow_windows := 0
+var fast_windows := 0
 
 func _ready() -> void:
 	font = load("res://assets/locale/PilotSC.otf")
@@ -44,7 +62,8 @@ func _ready() -> void:
 		if route != "battle":
 			_render_menu())
 	viewed_plane = str(profile.state.selected)
-	list_chapter = (int(profile.state.campaign) - 1) / 10
+	selected_mission = int(profile.state.campaign)
+	list_chapter = (selected_mission - 1) / 10
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--capture-dir="):
 			capture_dir = arg.trim_prefix("--capture-dir=")
@@ -61,7 +80,7 @@ func _open(page: String) -> void:
 		_build_showcase()
 	elif is_instance_valid(showcase):
 		showcase.get_viewport().get_camera_3d().current = true
-	if page in ["lobby", "mods", "campaign", "training", "pilot", "settings", "report"]:
+	if page in ["lobby", "training", "pilot", "settings", "report"]:
 		viewed_plane = str(profile.state.selected)
 		_set_showcase_aircraft(viewed_plane)
 	_render_menu()
@@ -152,14 +171,13 @@ func _render_menu() -> void:
 	crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	view.add_child(crest)
 	_text(Vector2(100, 5), "苍穹锋刃", 33, Color("#e2effa"))
-	_text(Vector2(104, 43), "S K Y   B L A D E", 10, Color("#99b8ca"))
-	_button(Rect2(size.x - 420, 12, 165, 41), "个人档案   Lv.%d" % Data.level(int(profile.state.xp)), _open.bind("pilot"))
+	_button(Rect2(size.x - 420, 12, 165, 41), "个人档案 · 等级 %d" % Data.level(int(profile.state.xp)), _open.bind("pilot"))
 	_text(Vector2(size.x - 229, 19), "信用点  %s" % int(profile.state.credits), 19, Color("#f1d392"))
 	_button(Rect2(size.x - 86, 12, 64, 41), "设置", _open.bind("settings"))
-	for i in 5:
-		var pages := ["lobby", "aircraft", "mods", "campaign", "hangar"]
-		var labels := ["大厅", "战机", "改装", "战役", "机库"]
-		var icons := ["home", "plane", "mods", "map", "hangar"]
+	for i in 3:
+		var pages := ["lobby", "hangar", "campaign"]
+		var labels := ["大厅", "战机机库", "战役"]
+		var icons := ["home", "hangar", "map"]
 		_cut(Rect2(21, size.y * 0.205 + i * 61.0, 166, 52), labels[i], icons[i], 0, _open.bind(pages[i]))
 	if route == "lobby":
 		var info := Vector2(24, size.y - 78)
@@ -185,11 +203,15 @@ func _render_menu() -> void:
 				var row: Dictionary = ops[list_chapter * 10 + j]
 				var xy: Vector2 = p + Vector2(22 + (j % 2) * 270, 156 + (j / 2) * 49)
 				var unlocked: bool = row.campaign <= profile.state.campaign
-				_button(Rect2(xy, Vector2(254, 39)), "%02d   %s%s" % [row.campaign, row.name, "" if unlocked else "  ·  未解锁"], _start_campaign.bind(int(row.campaign)), unlocked)
-			if size.x > 1040:
-				var mission: Dictionary = ops[clampi(int(profile.state.campaign) - 1, 0, 59)]
-				_text(p + Vector2(596, 167), str(mission.name), 21, Color("#e8d8aa"))
-				_text(p + Vector2(596, 207), mission.detail, 17, Color("#bfccd8"), size.x - p.x - 642.0)
+				_button(Rect2(xy, Vector2(254, 39)), "%02d   %s%s" % [row.campaign, row.name, "" if unlocked else "  ·  未解锁"], _focus_campaign.bind(int(row.campaign)))
+			var mission: Dictionary = ops[selected_mission - 1]
+			var brief := p + Vector2(596, 157)
+			var brief_width := size.x - brief.x - 44.0
+			_panel(Rect2(brief - Vector2(16, 12), Vector2(brief_width + 25.0, 247.0)), Color("#142638cd"))
+			_text(brief + Vector2(0, 15), str(mission.name), 24, Color("#ecd09a"))
+			_text(brief + Vector2(0, 57), mission.detail, 17, Color("#cbd8e4"), brief_width)
+			_button(Rect2(brief + Vector2(0, 185), Vector2(minf(220.0, brief_width), 40)), "开始任务" if mission.campaign <= profile.state.campaign else "未解锁", _start_campaign.bind(selected_mission), mission.campaign <= profile.state.campaign)
+
 		"training":
 			_panel(Rect2(sidebar, Vector2(box_w, 446)))
 			_text(sidebar + Vector2(20, 12), "飞行训练", 26)
@@ -197,47 +219,9 @@ func _render_menu() -> void:
 				var lesson: Array = Data.TRAINING[i]
 				_button(Rect2(sidebar + Vector2(19, 61 + i * 57), Vector2(380, 38)), "%s   ·   %s" % [lesson[0], lesson[1]], _enter.bind("training", {"id":"training_"+lesson[2],"name":lesson[0],"detail":lesson[1],"lesson":lesson[2],"region":0}, takeoff and i == 0))
 			_button(Rect2(sidebar + Vector2(19, 369), Vector2(380, 40)), "起飞方式  ·  %s" % ("跑道" if takeoff else "空中"), _toggle_takeoff)
-		"aircraft", "hangar":
-			var spec := catalogue.aircraft(viewed_plane)
-			_panel(Rect2(sidebar, Vector2(box_w, 294)))
-			_text(sidebar + Vector2(21, 15), str(spec.name), 29)
-			_text(sidebar + Vector2(21, 58), "%s   /   %s" % [spec.origin, spec.role], 17, Color("#9dc3d7"))
-			_text(sidebar + Vector2(21, 104), "翼展 %.1f 米   ·   机长 %.1f 米\n最高速度 %d 公里/时\n机体耐久 %d" % [spec.span, spec.length, spec.maxSpeed * 3.6, spec.durability], 18)
-			var state := "已选择" if viewed_plane == profile.state.selected else ("选择战机" if viewed_plane in profile.state.unlocked else "未解锁 · 1150 信用点")
-			_button(Rect2(sidebar + Vector2(21, 228), Vector2(294, 41)), state, _select_plane, viewed_plane != profile.state.selected)
-			var scroll := ScrollContainer.new()
-			scroll.position = Vector2(203, size.y - 91.0)
-			scroll.size = Vector2(size.x - 225.0, 64.0)
-			scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-			var bar := HBoxContainer.new()
-			for plane in catalogue.source.fleet:
-				if plane.support:
-					continue
-				var b := Button.new()
-				b.text = plane.name
-				b.custom_minimum_size = Vector2(129, 44)
-				b.pressed.connect(_browse_plane.bind(str(plane.id)))
-				bar.add_child(b)
-			scroll.add_child(bar)
-			view.add_child(scroll)
-		"mods":
-			_panel(Rect2(sidebar, Vector2(box_w, size.y - sidebar.y - 24)))
-			_text(sidebar + Vector2(19, 13), "武器与性能改装", 26)
-			var i := 0
-			for part in Data.UPGRADE_LABELS:
-				var rank := profile.level_of(part)
-				var stat: float = Data.UPGRADE_GAINS[part]
-				var delta_text := "+%d 米" % int(stat) if part == "radar" else "+%s%%" % snappedf(stat * 100.0, 0.1)
-				var caption := "%s  Lv.%d   %s   ·   %d" % [Data.UPGRADE_LABELS[part], rank, delta_text, 560 + rank * 360]
-				_button(Rect2(sidebar + Vector2(18 + (i % 2) * 197, 58 + (i / 2) * 51), Vector2(188, 42)), caption, _upgrade.bind(part), rank < 3)
-				i += 1
-			_text(sidebar + Vector2(19, 221), "空空导弹挂载", 19, Color("#9dc3d7"))
-			i = 0
-			for id in Data.MISSILES:
-				var item: Dictionary = Data.MISSILES[id]
-				var status := "已挂载" if profile.selected_weapon(catalogue) == id else ("挂载" if profile.state.inventory.has(id) else "%d 信用点" % int(item.price))
-				_button(Rect2(sidebar + Vector2(18, 253 + i * 43), Vector2(385, 36)), "%s   ·   %s   ·   %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(catalogue.aircraft(viewed_plane), id))
-				i += 1
+		"hangar":
+			_aircraft_details(sidebar, box_w, size)
+
 		"pilot", "report":
 			if route == "report" and debrief.get("mode") == "free":
 				_show_free_report(p, size)
@@ -245,14 +229,22 @@ func _render_menu() -> void:
 			_panel(Rect2(sidebar - Vector2(35, 0), Vector2(box_w + 35, 416)))
 			var line := sidebar - Vector2(14, 0)
 			if route == "report":
-				_text(line + Vector2(0, 12), "出击战报", 28)
+				_text(line + Vector2(0, 12), "任务完成" if debrief.win else "任务失败", 30, Color("#eacf98") if debrief.win else Color("#f0958c"))
 				_text(line + Vector2(0, 70), "%s   ·   %s" % [debrief.name, debrief.grade], 24, Color("#ecd29f"))
 				_text(line + Vector2(0, 116), "战斗评分    %d\n击落战机    %d\n损失战机    %d\n飞行距离    %.1f 公里\n信用点    +%d\n经验    +%d" % [debrief.score, debrief.kills, debrief.deaths, debrief.distance/1000.0, debrief.credits, debrief.xp], 19)
-				_button(Rect2(line + Vector2(0, 349), Vector2(375, 42)), "返回大厅", _open.bind("lobby"))
+				if debrief.win:
+					_button(Rect2(line + Vector2(0, 349), Vector2(375, 42)), "返回大厅", _open.bind("lobby"))
+				else:
+					_button(Rect2(line + Vector2(0, 349), Vector2(178, 42)), "重新挑战", _restart_last)
+					_button(Rect2(line + Vector2(191, 349), Vector2(184, 42)), "返回大厅", _open.bind("lobby"))
 			else:
 				_text(line + Vector2(0, 12), "个人档案", 28)
 				_text(line + Vector2(0, 65), "等级 %d   ·   经验 %d\n累计出击 %d   ·   击落 %d   ·   胜利 %d" % [Data.level(int(profile.state.xp)), profile.state.xp, profile.state.sorties, profile.state.kills, profile.state.victories], 18)
-				_text(line + Vector2(0, 144), "历史战绩", 21, Color("#ecd29f"))
+				var counts: Dictionary = profile.state.modes
+				_text(line + Vector2(0, 118), "战役 %d   ·   训练 %d   ·   无限空战 %d" % [
+					int(counts.get("campaign", {}).get("sorties", 0)), int(counts.get("training", {}).get("sorties", 0)),
+					int(counts.get("free", {}).get("sorties", 0))], 16)
+				_text(line + Vector2(0, 155), "历史战绩", 21, Color("#ecd29f"))
 				var i := 0
 				for record in profile.state.records.slice(0, 6):
 					_text(line + Vector2(0, 180 + i * 29), "%s   ·   %s   %d" % [record.name, record.grade, int(record.score)], 16)
@@ -261,13 +253,65 @@ func _render_menu() -> void:
 			_panel(Rect2(sidebar, Vector2(box_w, 388)))
 			_text(sidebar + Vector2(19, 11), "飞行设置", 26)
 			var fps := int(profile.state.settings.fps)
-			_button(Rect2(sidebar + Vector2(20, 68), Vector2(375, 44)), "帧率目标   %d FPS" % fps, _set_setting.bind("fps", 90 if fps == 60 else 60))
+			_button(Rect2(sidebar + Vector2(20, 68), Vector2(375, 44)), "帧率目标   %d 帧/秒" % fps, _set_setting.bind("fps", 90 if fps == 60 else 60))
 			var scale := float(profile.state.settings.quality)
 			_button(Rect2(sidebar + Vector2(20, 126), Vector2(375, 44)), "三维渲染精度   %d%%" % roundi(scale * 100.0), _set_setting.bind("quality", 1.0 if scale < 0.95 and scale > 0.75 else (0.7 if scale > 0.95 else 0.85)))
 			_button(Rect2(sidebar + Vector2(20, 184), Vector2(375, 44)), "反转垂直操控   %s" % ("开启" if profile.state.settings.invert else "关闭"), _set_setting.bind("invert", not profile.state.settings.invert))
 			_button(Rect2(sidebar + Vector2(20, 242), Vector2(375, 44)), "声音   %s" % ("关闭" if profile.state.settings.mute else "开启"), _set_setting.bind("mute", not profile.state.settings.mute))
 	if not note.is_empty():
 		_text(Vector2(size.x - 416, size.y - 29), note, 15, Color("#f2d18e"))
+
+func _aircraft_details(sidebar: Vector2, width: float, viewport_size: Vector2) -> void:
+	var spec := catalogue.aircraft(viewed_plane)
+	_panel(Rect2(sidebar, Vector2(width, 365)))
+	_text(sidebar + Vector2(21, 14), str(spec.name), 28)
+	_text(sidebar + Vector2(21, 53), "%s · %s" % [spec.origin, spec.role], 16, Color("#a4c4d9"))
+	var owned: bool = viewed_plane in profile.state.unlocked
+	if not panel_mods or not owned:
+		_text(sidebar + Vector2(21, 105), "翼展 %.1f 米   ·   机长 %.1f 米\n最高速度 %d 公里/时\n机体耐久 %d" % [spec.span, spec.length, spec.maxSpeed * 3.6, spec.durability], 18)
+		var selection := "已选择" if viewed_plane == profile.state.selected else ("选择战机" if owned else "未解锁 · 1150 信用点")
+		_button(Rect2(sidebar + Vector2(21, 227), Vector2(190, 40)), selection, _select_plane, viewed_plane != profile.state.selected)
+		if owned and viewed_plane == profile.state.selected:
+			_button(Rect2(sidebar + Vector2(226, 227), Vector2(165, 40)), "进入改装", _toggle_mods)
+	else:
+		_button(Rect2(sidebar + Vector2(295, 49), Vector2(114, 32)), "查看机体", _toggle_mods)
+		var index := 0
+		for part in Data.UPGRADE_LABELS:
+			var rank := profile.level_of(part)
+			var gain: float = Data.UPGRADE_GAINS[part]
+			var level_text := "%d → %d" % [rank, mini(3, rank + 1)]
+			var delta_text := "+%d 米" % int(gain) if part == "radar" else "+%s%%" % snappedf(gain * 100.0, 0.1)
+			var caption := "%s %s\n%s · %d 信用点" % [Data.UPGRADE_LABELS[part], level_text, delta_text, 560 + rank * 360]
+			_button(Rect2(sidebar + Vector2(17 + (index % 2) * 199, 87 + (index / 2) * 47), Vector2(191, 43)), caption, _upgrade.bind(part), rank < 3)
+			index += 1
+		index = 0
+		for id in Data.MISSILES:
+			var item: Dictionary = Data.MISSILES[id]
+			var status := "已挂载" if profile.selected_weapon(catalogue) == id else ("挂载" if profile.state.inventory.has(id) else "%d 信用点" % int(item.price))
+			_button(Rect2(sidebar + Vector2(18, 232 + index * 36), Vector2(388, 32)), "%s · %s · %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(spec, id) and profile.selected_weapon(catalogue) != id)
+			index += 1
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(201, viewport_size.y - 97.0)
+	scroll.size = Vector2(viewport_size.x - 222.0, 69.0)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 9)
+	for plane in catalogue.source.fleet:
+		if plane.support:
+			continue
+		var button := Button.new()
+		button.text = "%s\n%s" % [plane.name, "已选择" if plane.id == viewed_plane else ("可使用" if plane.id in profile.state.unlocked else "未解锁")]
+		button.custom_minimum_size = Vector2(150, 49)
+		button.pressed.connect(_browse_plane.bind(str(plane.id)))
+		bar.add_child(button)
+	scroll.add_child(bar)
+	view.add_child(scroll)
+	scroll.set_deferred("scroll_horizontal", card_scroll)
+	scroll.get_h_scroll_bar().value_changed.connect(func(value): card_scroll = int(value))
+
+func _toggle_mods() -> void:
+	panel_mods = not panel_mods
+	_render_menu()
 
 func _show_free_report(at: Vector2, viewport_size: Vector2) -> void:
 	var width := viewport_size.x - at.x - 23.0
@@ -296,8 +340,8 @@ func _show_free_report(at: Vector2, viewport_size: Vector2) -> void:
 	_button(Rect2(at.x + width - 224.0, viewport_size.y - 77.0, 197.0, 41), "返回大厅", _open.bind("lobby"))
 
 func _set_setting(key: String, value: Variant) -> void:
-	profile.state.settings[key] = value
-	profile.save()
+	if not profile.set_option(key, value):
+		note = "设置保存失败"
 	Engine.max_fps = int(profile.state.settings.fps)
 	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
 	_render_menu()
@@ -308,9 +352,14 @@ func _toggle_takeoff() -> void:
 
 func _select_chapter(index: int) -> void:
 	list_chapter = index
+	_focus_campaign(index * 10 + 1)
+
+func _focus_campaign(number: int) -> void:
+	selected_mission = number
 	_render_menu()
 
 func _browse_plane(id: String) -> void:
+	panel_mods = false
 	viewed_plane = id
 	_set_showcase_aircraft(id)
 	_render_menu()
@@ -320,10 +369,14 @@ func _select_plane() -> void:
 	_render_menu()
 
 func _upgrade(part: String) -> void:
+	if viewed_plane != profile.state.selected:
+		return
 	note = profile.upgrade(part)
 	_render_menu()
 
 func _equip(id: String) -> void:
+	if viewed_plane != profile.state.selected:
+		return
 	note = profile.equip(id)
 	_render_menu()
 
@@ -331,6 +384,7 @@ func _build_showcase() -> void:
 	showcase = Node3D.new()
 	add_child(showcase)
 	var camera := Camera3D.new()
+	preview_camera = camera
 	showcase.add_child(camera)
 	camera.current = true
 	camera.fov = 34.0
@@ -390,10 +444,7 @@ func _set_showcase_aircraft(id: String) -> void:
 	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
 	showcase_aircraft.position.y = Landscape.APRON_HEIGHT + maxf(0.8, spec.gearClearance)
 	showcase_aircraft.rotation.y = 0.0
-	var camera := showcase.get_viewport().get_camera_3d()
-	var frame := clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
-	var p: Vector3 = showcase_aircraft.position
-	camera.look_at_from_position(p + Vector3(-20.9, 3.9, -17.9) * frame, p + Vector3(-0.5, 1.1, 0.0), Vector3.UP)
+	_tick_orbit(0.0, true)
 
 func _start_campaign(n: int) -> void:
 	_enter("campaign", catalogue.source.campaign[clampi(n - 1, 0, 59)], false)
@@ -401,16 +452,30 @@ func _start_campaign(n: int) -> void:
 func _start_free() -> void:
 	_enter("free", {"name":"无限空战", "region":0, "detail":"各自为战"}, false)
 
+func _restart_last() -> void:
+	if last_operation.is_empty():
+		return
+	var next := last_operation
+	if is_instance_valid(current_battle):
+		profile.abort(current_battle.mode)
+		_close_battle()
+	_enter(next.mode, next.task, next.runway)
+
 func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	if loading:
 		return
 	loading = true
-	_clear_ui()
-	var center := get_viewport().get_visible_rect().size * 0.5
-	_panel(Rect2(Vector2.ZERO, center * 2.0), Color("#091a2cf6"))
-	_text(center - Vector2(160, 68), str(operation.name), 39, Color("#f2d08c"))
-	_text(center - Vector2(160, 8), "正在准备战机与空域", 21)
+	last_operation = {"mode":mode, "task":operation, "runway":runway}
+	_show_loading(str(operation.name))
 	await get_tree().process_frame
+	var prepared: Dictionary = await _prepare_sortie(mode, operation, runway)
+	if prepared.is_empty():
+		loading = false
+		_open("lobby")
+		note = "战机或战区加载失败，请重试"
+		_render_menu()
+		return
+	light_load_label.text = "正在装配战场"
 	await get_tree().process_frame
 	if is_instance_valid(showcase):
 		remove_child(showcase)
@@ -420,47 +485,168 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	current_battle = Battle.new()
 	add_child(current_battle)
 	current_battle.finished.connect(_battle_finished, CONNECT_DEFERRED)
-	current_battle.setup(catalogue, profile, mode, operation, runway)
+	current_battle.setup(catalogue, profile, mode, operation, runway, prepared)
+	current_battle.paused = true
+	load_meter.value = load_meter.max_value
+	light_load_label.text = "准备完成"
+	await get_tree().process_frame
+	var fade := create_tween()
+	fade.tween_property(view, "modulate:a", 0.0, 0.23)
+	await fade.finished
 	_clear_ui()
 	var hud := Hud.new()
 	hud.fight = current_battle
 	hud.typeface = font
 	hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	view.add_child(hud)
+	active_hud = hud
+	current_battle.paused = false
 	loading = false
+
+func _show_loading(title: String) -> void:
+	_clear_ui()
+	var size := get_viewport().get_visible_rect().size
+	var image := TextureRect.new()
+	image.texture = preload("res://assets/loading/alpine.webp")
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	view.add_child(image)
+	_panel(Rect2(Vector2.ZERO, size), Color("#08152675"))
+	var midpoint := size * Vector2(0.5, 0.77)
+	_panel(Rect2(midpoint - Vector2(290.0, 72.0), Vector2(580.0, 126.0)), Color("#081725e8"))
+	_text(midpoint - Vector2(257.0, 57.0), title, 28, Color("#f2d397"))
+	light_load_label = _text(midpoint - Vector2(257.0, 20.0), "正在准备战机与空域", 16)
+	load_meter = ProgressBar.new()
+	load_meter.position = midpoint - Vector2(257.0, -23.0)
+	load_meter.size = Vector2(510.0, 11.0)
+	load_meter.show_percentage = false
+	view.add_child(load_meter)
+
+func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dictionary:
+	var start := Battle.start_position(mode, operation, runway)
+	var tiles := Landscape.opening_tiles(start, false)
+	var seed_value := int(catalogue.source.theatres[int(operation.get("region", 0))].seed)
+	var ids := [str(profile.state.selected)]
+	if mode == "free":
+		ids.append_array(Battle.FREE_ROSTER)
+	elif mode == "campaign":
+		var plan: Dictionary = operation.engagement
+		ids.append_array(plan.roster)
+		if plan.has("ace"):
+			ids.append(plan.ace)
+		if plan.get("drones", 0) > 0:
+			ids.append("shade-drone")
+	else:
+		ids.append("j10")
+	var requests := {}
+	for id in ids:
+		if catalogue.scenes.has(id) or requests.has(id):
+			continue
+		var path := "res://assets/fleet/%s.glb" % id
+		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
+			return {}
+		requests[id] = path
+	var total := tiles.size() + requests.size() + 1
+	load_meter.max_value = total
+	var ready := {}
+	var workers := {}
+	var failure := false
+	while not tiles.is_empty() or not requests.is_empty() or not workers.is_empty():
+		for coord in workers.keys():
+			var job: Thread = workers[coord]
+			if not job.is_alive():
+				var data: PackedFloat32Array = job.wait_to_finish()
+				workers.erase(coord)
+				if data.size() != Landscape.SIZE * Landscape.SIZE:
+					failure = true
+				ready[coord] = data
+				load_meter.value += 1
+		for id in requests.keys():
+			var path: String = requests[id]
+			var state := ResourceLoader.load_threaded_get_status(path)
+			if state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+				continue
+			if state == ResourceLoader.THREAD_LOAD_LOADED:
+				catalogue.scenes[id] = ResourceLoader.load_threaded_get(path)
+			else:
+				failure = true
+			requests.erase(id)
+			load_meter.value += 1
+		while workers.size() < 3 and not tiles.is_empty():
+			var coord: Vector2i = tiles.pop_front()
+			var job := Thread.new()
+			if job.start(Landscape.bake_tile.bind(coord, seed_value)) == OK:
+				workers[coord] = job
+			else:
+				failure = true
+		light_load_label.text = "已准备 %d / %d 项" % [int(load_meter.value), total]
+		await get_tree().process_frame
+	return {} if failure else ready
 
 func show_pause(show: bool) -> void:
 	if not show:
 		if is_instance_valid(pause_ui):
 			pause_ui.queue_free()
 		return
+	_pause_panel("pause")
+
+func _pause_panel(page: String) -> void:
+	if is_instance_valid(pause_ui):
+		view.remove_child(pause_ui)
+		pause_ui.queue_free()
 	pause_ui = Control.new()
 	pause_ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	pause_ui.mouse_filter = Control.MOUSE_FILTER_STOP
 	view.add_child(pause_ui)
-	var hud_view := view
+	var flight_view := view
 	view = pause_ui
 	var centre := get_viewport().get_visible_rect().size * 0.5
-	_panel(Rect2(centre - Vector2(156, 112), Vector2(312, 238)), Color("#0b1729f5"))
-	_text(centre - Vector2(114, 86), "战斗暂停", 27, Color("#ecd4a6"))
-	_button(Rect2(centre - Vector2(115, 37), Vector2(230, 35)), "继续飞行", func(): hud_view.get_child(0).input_actions.pause.pressed.emit())
-	_button(Rect2(centre - Vector2(115, -10), Vector2(230, 35)), "收放起落架", func():
-		current_battle.action.gear = true
-		hud_view.get_child(0).input_actions.pause.pressed.emit())
-	var exit_area := Rect2(centre - Vector2(115, -57), Vector2(230, 35))
-	if current_battle.mode == "free":
-		_button(exit_area, "退出本局", _abort_free)
-	else:
-		_button(exit_area, "结束出击并结算", func(): current_battle.finish(false))
-	view = hud_view
+	var top := centre - Vector2(176, 154)
+	_panel(Rect2(top, Vector2(352, 308)), Color("#0b1729f5"))
+	var title := "战斗暂停" if page == "pause" else ("飞行设置" if page == "settings" else "退出本局")
+	_text(top + Vector2(28, 15), title, 26, Color("#ecd4a6"))
+	match page:
+		"pause":
+			_button(Rect2(top + Vector2(28, 60), Vector2(296, 35)), "继续飞行", _resume)
+			_button(Rect2(top + Vector2(28, 106), Vector2(143, 35)), "重新开始", _restart_last)
+			_button(Rect2(top + Vector2(181, 106), Vector2(143, 35)), "飞行设置", _pause_panel.bind("settings"))
+			_button(Rect2(top + Vector2(28, 152), Vector2(296, 35)), "收放起落架", func():
+				_resume()
+				current_battle.action.gear = true)
+			_button(Rect2(top + Vector2(28, 218), Vector2(296, 35)), "退出本局", _pause_panel.bind("leave"))
+		"settings":
+			var fps := int(profile.state.settings.fps)
+			_button(Rect2(top + Vector2(28, 62), Vector2(296, 36)), "帧率目标 · %d 帧/秒" % fps, _pause_option.bind("fps", 90 if fps == 60 else 60))
+			_button(Rect2(top + Vector2(28, 108), Vector2(296, 36)), "反转垂直操控 · %s" % ("开启" if profile.state.settings.invert else "关闭"), _pause_option.bind("invert", not profile.state.settings.invert))
+			_button(Rect2(top + Vector2(28, 154), Vector2(296, 36)), "声音 · %s" % ("关闭" if profile.state.settings.mute else "开启"), _pause_option.bind("mute", not profile.state.settings.mute))
+			_button(Rect2(top + Vector2(28, 218), Vector2(296, 35)), "返回暂停", _pause_panel.bind("pause"))
+		"leave":
+			_text(top + Vector2(28, 76), "退出后返回大厅，本局不结算奖励。", 17, Color("#c4d4e1"))
+			_button(Rect2(top + Vector2(28, 188), Vector2(143, 39)), "取消", _pause_panel.bind("pause"))
+			_button(Rect2(top + Vector2(181, 188), Vector2(143, 39)), "确认退出", _abort_battle)
+	view = flight_view
 
-func _abort_free() -> void:
+func _pause_option(key: String, value: Variant) -> void:
+	profile.set_option(key, value)
+	Engine.max_fps = int(profile.state.settings.fps)
+	current_battle.audio.mute = profile.state.settings.mute
+	_pause_panel("settings")
+
+func _resume() -> void:
+	if is_instance_valid(active_hud):
+		active_hud.input_actions.pause.pressed.emit()
+
+func _abort_battle() -> void:
 	if not is_instance_valid(current_battle) or current_battle.ended:
 		return
+	profile.abort(current_battle.mode)
 	_close_battle()
 	_open("lobby")
 
 func _close_battle() -> void:
+	active_hud = null
+	pause_ui = null
 	remove_child(current_battle)
 	current_battle.queue_free()
 	current_battle = null
@@ -472,20 +658,59 @@ func _battle_finished(result: Dictionary) -> void:
 	_close_battle()
 	_open("report")
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED and is_instance_valid(active_hud) and is_instance_valid(current_battle) and not current_battle.paused:
+		active_hud.input_actions.pause.pressed.emit()
+
 func _input(event: InputEvent) -> void:
-	if route not in ["aircraft", "hangar"] or not is_instance_valid(showcase_aircraft):
+	if route not in ["lobby", "hangar"] or loading or not is_instance_valid(showcase_aircraft):
 		return
-	var camera := get_viewport().get_camera_3d()
-	if event is InputEventScreenDrag and Rect2(190.0, 70.0, 620.0, 400.0).has_point(event.position):
-		showcase_aircraft.rotation.y -= event.relative.x * 0.007
-	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and Rect2(190.0, 70.0, 620.0, 400.0).has_point(event.position):
-		showcase_aircraft.rotation.y -= event.relative.x * 0.007
-	elif event is InputEventMagnifyGesture:
-		camera.fov = clampf(camera.fov / event.factor, 26.0, 56.0)
-	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-		camera.fov = clampf(camera.fov + (-3.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 3.0), 26.0, 56.0)
+	var area := Rect2(191.0, 74.0, 620.0, 395.0)
+	if event is InputEventScreenTouch:
+		if event.pressed and area.has_point(event.position):
+			orbit_touches[event.index] = event.position
+		else:
+			orbit_touches.erase(event.index)
+		orbit_span = 0.0
+	elif event is InputEventScreenDrag and orbit_touches.has(event.index):
+		orbit_touches[event.index] = event.position
+		if orbit_touches.size() == 2:
+			var fingers := orbit_touches.values()
+			var gap: float = fingers[0].distance_to(fingers[1])
+			if orbit_span > 6.0 and gap > 6.0:
+				orbit_scale = clampf(orbit_scale * orbit_span / gap, 0.55, 1.7)
+			orbit_span = gap
+		else:
+			_orbit_drag(event.relative)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.device != InputEvent.DEVICE_ID_EMULATION:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			orbit_active = event.pressed and area.has_point(event.position)
+		elif event.pressed and area.has_point(event.position) and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			orbit_scale = clampf(orbit_scale * (0.88 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.13), 0.55, 1.7)
+	elif event is InputEventMouseMotion and orbit_active and event.device != InputEvent.DEVICE_ID_EMULATION:
+		_orbit_drag(event.relative)
+
+func _orbit_drag(relative: Vector2) -> void:
+	orbit_spin = wrapf(orbit_spin - relative.x * 0.005, -PI, PI)
+	orbit_tilt = clampf(orbit_tilt + relative.y * 0.004, 0.025, 0.91)
+
+func _tick_orbit(delta: float, snap := false) -> void:
+	if not is_instance_valid(preview_camera) or not is_instance_valid(showcase_aircraft):
+		return
+	var spec := catalogue.aircraft(viewed_plane)
+	var frame := clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
+	var distance := 27.7 * frame * orbit_scale
+	var target_point := showcase_aircraft.position + Vector3(0, 1.1, 0)
+	var offset := Vector3(sin(orbit_spin) * cos(orbit_tilt), sin(orbit_tilt), cos(orbit_spin) * cos(orbit_tilt)) * distance
+	var at := target_point + offset
+	var alpha := 1.0 if snap else (1.0 - exp(-delta * 10.0))
+	preview_camera.position = preview_camera.position.lerp(at, alpha)
+	preview_camera.look_at(target_point, Vector3.UP)
 
 func _process(delta: float) -> void:
+	if route in ["lobby", "hangar"] and not loading:
+		_tick_orbit(delta)
 	if capture_dir.is_empty():
 		if OS.has_feature("android") and is_instance_valid(current_battle):
 			_adapt_resolution(delta)
@@ -500,6 +725,10 @@ func _process(delta: float) -> void:
 			_start_campaign(1)
 	elif fixture_stage == 1 and is_instance_valid(current_battle) and current_battle.ready_for_play:
 		var t: float = current_battle.time
+		var wall := Time.get_ticks_usec()
+		if last_frame_usec != 0 and t >= 0.25:
+			frame_wall_samples.append((wall - last_frame_usec) / 1000.0)
+		last_frame_usec = wall
 		current_battle.action.gun = t > 0.8 and t < 4.2
 		current_battle.action.missile = t > 1.1 and t < 3.6
 		if t > 3.1 and t < 3.7:
@@ -518,7 +747,16 @@ func _process(delta: float) -> void:
 		if t > (3.4 if capture_free else 7.5):
 			fixture_stage = 2
 			var f := FileAccess.open(capture_dir + "/desktop-run.json", FileAccess.WRITE)
-			f.store_string(JSON.stringify({"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"mode":current_battle.mode,"aircraft_slots":current_battle.fleet.size(),"first_wave_alive":current_battle.alive_enemies(),"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
+			frame_wall_samples.sort()
+			var mean := 0.0
+			for sample in frame_wall_samples:
+				mean += sample
+			mean /= maxf(1.0, float(frame_wall_samples.size()))
+			var tail_ms := 0.0
+			var tail_count := maxi(1, ceili(frame_wall_samples.size() * 0.01))
+			for i in range(maxi(0, frame_wall_samples.size() - tail_count), frame_wall_samples.size()):
+				tail_ms += frame_wall_samples[i] / tail_count
+			f.store_string(JSON.stringify({"movie_frame_ms_mean":mean,"movie_fps_one_percent_low":1000.0 / maxf(0.001, tail_ms),"ocean_fft":current_battle.world.ocean.material.get_shader_parameter("spectral_enabled"),"driver":RenderingServer.get_video_adapter_api_version(),"device":RenderingServer.get_video_adapter_name(),"physics_s":t,"mode":current_battle.mode,"aircraft_slots":current_battle.fleet.size(),"first_wave_alive":current_battle.alive_enemies(),"gun_and_missile_launches":current_battle.total_fired,"hits":current_battle.shots_hit,"regions":current_battle.world.current.size(),"fps_now":Engine.get_frames_per_second(),"static_memory":Performance.get_monitor(Performance.MEMORY_STATIC),"video_memory":Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)}, "\t"))
 			current_battle.paused = true
 			current_battle.audio.stop_all()
 			for i in range(3):
@@ -530,16 +768,25 @@ func _snapshot(name: String) -> void:
 	get_viewport().get_texture().get_image().save_png(capture_dir + "/" + name + ".png")
 
 func _adapt_resolution(dt: float) -> void:
-	frame_average = lerpf(frame_average, dt, 1.0 - exp(-dt * 3.0))
+	if current_battle.paused or dt > 0.25:
+		return
+	frame_average = lerpf(frame_average, dt, 1.0 - exp(-dt * 2.2))
 	adaptive_clock += dt
-	if adaptive_clock < 1.4:
+	if adaptive_clock < 1.8:
 		return
 	adaptive_clock = 0.0
 	var budget := 1.0 / float(profile.state.settings.fps)
 	var viewport := get_viewport()
-	var configured: float = float(profile.state.settings.quality)
+	var configured := float(profile.state.settings.quality)
 	var scale := viewport.scaling_3d_scale
-	if frame_average > budget * 1.16:
-		viewport.scaling_3d_scale = maxf(0.67, scale - 0.06)
-	elif frame_average < budget * 0.94:
-		viewport.scaling_3d_scale = minf(configured, scale + 0.025)
+	slow_windows = slow_windows + 1 if frame_average > budget * 1.19 else 0
+	fast_windows = fast_windows + 1 if frame_average < budget * 0.91 else 0
+	if slow_windows >= 2:
+		scale = maxf(0.71, scale - 0.05)
+		slow_windows = 0
+	elif fast_windows >= 4:
+		scale = minf(configured, scale + 0.04)
+		fast_windows = 0
+	if not is_equal_approx(scale, viewport.scaling_3d_scale):
+		viewport.scaling_3d_scale = scale
+		current_battle.world.set_quality(scale)

@@ -38,9 +38,55 @@ double height_at(double x,double z,int64_t seed) {
     const double climate=(seed==704?1.34:1.0);
     return (coast-.435)*920+climate*belt*(ridge*ridge*ridge*755+rib*rib*113-incision*150+terrace*27);
 }
-double terrain_height(double x,double z,int64_t seed) {
+double base_height(double x,double z,int64_t seed) {
     const double pad=(1.0-smooth((abs_value(x+340)-36.0)/220.0))*(1.0-smooth((abs_value(z-350)-443.0)/305.0));
     return blend(height_at(x,z,seed),26.0,pad);
+}
+
+constexpr double erosion_spacing = 6.0;
+
+double thermal_flux(double difference) {
+    const double angle_limit = erosion_spacing * 0.73;
+    const double moving_height = bound(abs_value(difference) - angle_limit, 0.0, 7.0);
+    return difference < 0.0 ? -moving_height * 0.145 : moving_height * 0.145;
+}
+
+double transported_height(double centre, double north, double south, double east, double west) {
+    return centre + thermal_flux(north-centre) + thermal_flux(south-centre)
+        + thermal_flux(east-centre) + thermal_flux(west-centre);
+}
+
+double terrain_height(double x,double z,int64_t seed) {
+    return transported_height(base_height(x,z,seed),
+        base_height(x,z-erosion_spacing,seed), base_height(x,z+erosion_spacing,seed),
+        base_height(x+erosion_spacing,z,seed), base_height(x-erosion_spacing,z,seed));
+}
+
+void tile_heights(float* output, int64_t size, double x, double z, double step, int64_t seed) {
+    if (step != erosion_spacing) {
+        for (int64_t y=0; y<size; ++y)
+            for (int64_t i=0; i<size; ++i)
+                output[y*size+i]=static_cast<float>(terrain_height(x+i*step,z+y*step,seed));
+        return;
+    }
+
+    // A one-vertex halo gives neighbouring tiles the same boundary transport.
+    double strip[3][514];
+    const auto fill_row = [=](double* row, int64_t offset) {
+        for (int64_t i=0; i<size+2; ++i)
+            row[i]=base_height(x+(i-1)*step,z+offset*step,seed);
+    };
+    fill_row(strip[0],-1);
+    fill_row(strip[1],0);
+    for (int64_t y=0; y<size; ++y) {
+        const auto north=y%3;
+        const auto centre=(y+1)%3;
+        const auto south=(y+2)%3;
+        fill_row(strip[south],y+1);
+        for (int64_t i=1; i<=size; ++i)
+            output[y*size+i-1]=static_cast<float>(transported_height(strip[centre][i],
+                strip[north][i],strip[south][i],strip[centre][i+1],strip[centre][i-1]));
+    }
 }
 
 GDExtensionClassLibraryPtr library;
@@ -84,9 +130,7 @@ void tile(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *a
     if(result.error!=GDEXTENSION_CALL_OK){destroy(&values);*err=result;return;}
     to_array(&array,&values);
     float *data=float_index(&array,0);
-    for(int64_t row=0;row<size;row++)
-        for(int64_t col=0;col<size;col++)
-            data[row*size+col]=static_cast<float>(terrain_height(x+col*step,z+row*step,seed));
+    tile_heights(data, size, x, z, step, seed);
     destroy(out);
     from_array(out,&array);
     get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY)(&array);

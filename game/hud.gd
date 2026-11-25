@@ -11,7 +11,10 @@ var touch_origin := Vector2.ZERO
 var touch_index := -3
 var steer_touch := false
 var paused := false
-var throttle_bar: HSlider
+var weapon_fingers := {}
+var last_tap := -1.0
+var tap_start := 0.0
+var touch_position := Vector2.ZERO
 var input_actions := {}
 var input_pad := Rect2()
 
@@ -25,9 +28,11 @@ func _ready() -> void:
 		button.tooltip_text = data[0]
 		if data[1] == "missile":
 			button.disabled = fight.player.type.rails.is_empty()
-		button.button_down.connect(func(): fight.action[data[1]] = true)
+		button.button_down.connect(func(): _trigger(data[1], true))
 		if data[1] in ["gun", "missile"]:
-			button.button_up.connect(func(): fight.action[data[1]] = false)
+			button.button_up.connect(func(): _trigger(data[1], false))
+		if OS.has_feature("android"):
+			button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		button.pressed.connect(func(): queue_redraw())
 		add_child(button)
 		artifacts.append({"button":button,"label":data[0],"action":data[1],"icon":data[2],"slot":data[3]})
@@ -39,8 +44,7 @@ func _ready() -> void:
 			if entry[1] == "pause":
 				paused = not paused
 				fight.paused = paused
-				fight.action.clear()
-				fight.stick = Vector2.ZERO
+				clear_input()
 				get_parent().get_parent().get_parent().show_pause(paused)
 			else:
 				fight.manual_cockpit = not fight.manual_cockpit
@@ -49,13 +53,6 @@ func _ready() -> void:
 		button.add_theme_font_override("font", typeface)
 		add_child(button)
 		input_actions[entry[1]] = button
-	throttle_bar = HSlider.new()
-	throttle_bar.max_value = 1.0
-	throttle_bar.step = 0.01
-	throttle_bar.value = fight.throttle
-	throttle_bar.focus_mode = Control.FOCUS_NONE
-	throttle_bar.value_changed.connect(func(value): fight.throttle = value)
-	add_child(throttle_bar)
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(fight):
@@ -64,8 +61,40 @@ func _process(delta: float) -> void:
 		fight.stick = fight.stick.lerp(Vector2.ZERO, 1.0 - exp(-delta * 9.0))
 	queue_redraw()
 
+func _trigger(action: String, pressed: bool) -> void:
+	if action in ["gun", "missile"]:
+		fight.set_weapon_trigger(action, pressed)
+	elif pressed:
+		fight.action[action] = true
+
+func clear_input() -> void:
+	steer_touch = false
+	touch_index = -3
+	last_tap = -1.0
+	weapon_fingers.clear()
+	if is_instance_valid(fight):
+		fight.action.clear()
+		fight.stick = Vector2.ZERO
+
+func _input(event: InputEvent) -> void:
+	if not is_instance_valid(fight) or not fight.ready_for_play or paused or fight.paused:
+		return
+	if event is InputEventScreenTouch and event.pressed:
+		for item in artifacts:
+			if not item.button.disabled and item.button.get_global_rect().has_point(event.position):
+				weapon_fingers[event.index] = item.action
+				_trigger(item.action, true)
+				get_viewport().set_input_as_handled()
+				return
+	elif event is InputEventScreenTouch and weapon_fingers.has(event.index):
+		var action: String = weapon_fingers[event.index]
+		weapon_fingers.erase(event.index)
+		if action not in weapon_fingers.values():
+			_trigger(action, false)
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_instance_valid(fight) or paused:
+	if not is_instance_valid(fight) or paused or fight.paused:
 		return
 	var i := -3
 	var pos := Vector2.ZERO
@@ -74,17 +103,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		i = event.index
 		pos = event.position
-		pressed = event.pressed
+		pressed = event.pressed and not event.canceled
 		button = true
 	elif event is InputEventScreenDrag:
 		i = event.index
 		pos = event.position
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
 		i = -1
 		pos = event.position
 		pressed = event.pressed
 		button = true
 	elif event is InputEventMouseMotion:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
 		i = -1
 		pos = event.position
 	elif event is InputEventKey and event.pressed and not event.echo:
@@ -93,6 +126,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Q: fight.action.counter = true
 			KEY_SHIFT: fight.action.boost = true
 			KEY_G: fight.action.gear = true
+			KEY_R: fight.action.turn = true
 			KEY_ESCAPE: input_actions.pause.pressed.emit()
 		return
 	if button:
@@ -100,11 +134,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			steer_touch = true
 			touch_index = i
 			touch_origin = pos
+			touch_position = pos
+			tap_start = fight.time
 			get_viewport().set_input_as_handled()
 		elif not pressed and touch_index == i:
 			steer_touch = false
 			touch_index = -3
+			var quick: bool = fight.time - tap_start < 0.22 and touch_position.distance_squared_to(touch_origin) < 14.0 * 14.0
+			if quick and (not event is InputEventScreenTouch or not event.canceled):
+				if fight.time - last_tap < 0.32:
+					fight.action.turn = true
+					last_tap = -1.0
+				else:
+					last_tap = fight.time
+			get_viewport().set_input_as_handled()
 	elif steer_touch and i == touch_index:
+		touch_position = pos
 		var drive := (pos - touch_origin) / maxf(78.0, size.y * 0.17)
 		drive.y *= 1.0 if fight.profile.state.settings.invert else -1.0
 		fight.stick = (drive * fight.profile.state.settings.sensitivity).limit_length()
@@ -139,7 +184,9 @@ func _draw() -> void:
 	_panel(Rect2(w * 0.5 - 192, 14, 384, 34), 12.0, Color("#122337d0"), Color("#678b9a8c"))
 	_center_text(Vector2(w * 0.5, 37), "%s    |    %02d:%02d" % [progress, clock / 60, clock % 60], 15, top_left)
 	if fight.warning:
-		_center_text(Vector2(w * 0.5, 78), "⚠ 敌机导弹来袭", 19, pink)
+		_center_text(Vector2(w * 0.5, 78), "导弹来袭", 19, pink)
+	elif now < fight.countered_until:
+		_center_text(Vector2(w * 0.5, 78), "反制成功", 18, Color("#77e6a3"))
 	var radar := Vector2(w - 93, 92)
 	draw_circle(radar, 63.0, Color("#091b2baa"), true, -1.0, true)
 	for radius in [21, 42, 63]:
@@ -147,7 +194,7 @@ func _draw() -> void:
 	draw_line(radar - Vector2(63, 0), radar + Vector2(63, 0), Color("#5995b67a"))
 	draw_line(radar - Vector2(0, 63), radar + Vector2(0, 63), Color("#5995b67a"))
 	draw_colored_polygon(PackedVector2Array([radar + Vector2(0, -5), radar + Vector2(4, 5), radar + Vector2(-4, 5)]), cyan)
-	_center_text(radar + Vector2(0, -68), "N", 12, top_left)
+	_center_text(radar + Vector2(0, -68), "北", 12, top_left)
 	for other in fight.fleet:
 		if other == jet or other.hp <= 0.0:
 			continue
@@ -162,22 +209,46 @@ func _draw() -> void:
 	var aim := _aim_at(jet.position + jet.forward * 1200.0)
 	var p1 := _aim_at(jet.position + jet.forward.rotated(jet.attitude * Vector3.UP, fight.LOCK_ANGLE) * 1200.0)
 	var radius := clampf(aim.distance_to(p1), 68.0, h * 0.33)
-	var circle_color := Color(cyan, 0.45 if fight.target else 0.24)
-	for n in 48:
-		var start: float = n * TAU / 48.0
-		draw_arc(aim, radius, start, start + 0.085, 3, circle_color, 1.1, true)
+	var locked: bool = fight.is_locked()
+	var acquired: float = fight.lock_fraction()
+	var lost: bool = now < fight.target_lost_until
+	var ring_color := Color("#79f0a6") if locked else Color("#ff6365")
+	var ring_alpha := 0.8 if locked else (0.62 if fight.target else 0.26)
+	var phase := -PI * 0.5 if locked else -PI * 0.5 + now * 0.33
+	draw_arc(aim, radius, 0, TAU, 96, Color(ring_color, ring_alpha * 0.26), 1.0, true)
+	for n in 12:
+		var start: float = phase + n * TAU / 12.0
+		var end: float = start + (0.29 if lost else 0.43)
+		draw_arc(aim, radius, start, end, 8, Color(ring_color, ring_alpha), 2.1 if locked else 1.5, true)
+	if acquired > 0.01:
+		draw_arc(aim, radius - 4.0, -PI * 0.5, -PI * 0.5 + TAU * acquired, 56, Color(ring_color, 0.68), 1.7, true)
+	if fight.warning:
+		var bearing: Vector3 = jet.attitude.inverse() * fight.incoming_heading
+		var edge := Vector2(bearing.x, clampf(bearing.z - bearing.y, -1.0, 1.0)).normalized()
+		if edge.length_squared() > 0.0001:
+			var p := aim + edge * (radius + 12.0)
+			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
 	var reticle: Vector2 = _aim_at(fight.lead) if fight.target else aim
 	draw_arc(reticle, 17, 0.0, TAU, 36, Color(cyan, 0.69), 1.0, true)
 	for n in 4:
 		var a := Vector2.RIGHT.rotated(n * PI * 0.5)
 		draw_line(reticle + a * 14, reticle + a * 25, cyan, 1, true)
 	draw_circle(reticle, 2.1, Color(cyan, 0.74), true, -1, true)
+	var primary = fight.target
+	if not primary and fight.mode == "campaign":
+		var nearest := INF
+		for other in fight.fleet:
+			if other != jet and other.hp > 0.0:
+				var range_squared: float = jet.position.distance_squared_to(other.position)
+				if range_squared < nearest:
+					nearest = range_squared
+					primary = other
 	for other in fight.fleet:
-		if other == jet or other.hp <= 0.0 or jet.position.distance_to(other.position) > fight.radar_range:
+		if other == jet or other.hp <= 0.0 or (other != primary and jet.position.distance_to(other.position) > fight.radar_range):
 			continue
 		var p := _aim_at(other.position)
 		if fight.camera.is_position_behind(other.position) or not Rect2(132, 85, w - 265, h - 152).has_point(p):
-			if other == fight.target or other.index == 1:
+			if other == primary:
 				var off: Vector2 = p - center
 				if fight.camera.is_position_behind(other.position):
 					off = -off
@@ -188,7 +259,7 @@ func _draw() -> void:
 		if fight.world.obstruction(jet.position, other.position):
 			continue
 		var lock: bool = other == fight.target and fight.is_locked()
-		var tint := pink if lock else Color(top_left, 0.64)
+		var tint := Color("#79f0a6") if lock else Color(top_left, 0.64)
 		if lock:
 			draw_polyline(PackedVector2Array([p + Vector2(0, -15), p + Vector2(15, 0), p + Vector2(0, 15), p + Vector2(-15, 0), p + Vector2(0, -15)]), tint, 1.3, true)
 		for corner in [Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1), Vector2(1,1)]:
@@ -199,12 +270,8 @@ func _draw() -> void:
 			_center_text(p + Vector2(0, 42), "%s   %.2f 公里" % [other.type.name, jet.position.distance_to(other.position) / 1000.0], 14, tint)
 	for item in artifacts:
 		_draw_action(item)
-	_panel(Rect2(27, h - 59, 326, 39), 8.0, Color("#10263bdc"), Color("#456a7880"))
-	_text(Vector2(44, h - 34), "油门 %d%%" % roundi(fight.throttle * 100.0), 15, top_left)
-	throttle_bar.position = Vector2(135, h - 52)
-	throttle_bar.size = Vector2(192, 28)
 	if now < 13.0:
-		_center_text(Vector2(w * 0.5, h - 28), "‹‹   滑动空白区域控制飞行   ››", 15, Color(cyan, 0.75))
+		_center_text(Vector2(w * 0.5, h - 28), "滑动控制方向 · 双击空白处掉头", 15, Color(cyan, 0.75))
 	if jet.hp <= 0.0 and fight.mode == "free":
 		_center_text(Vector2(w * 0.5, h - 77), "%d 秒后复活" % ceili(maxf(0.0, jet.until_respawn - now)), 22, cream)
 
@@ -217,7 +284,7 @@ func _draw_action(item: Dictionary) -> void:
 	var at := Vector2(size.x - 84.0, size.y - (110.0 if slot == 1 else 227.0)) if side else Vector2(72.0, size.y * 0.49 + slot * 77.0)
 	item.button.position = at - Vector2.ONE * radius
 	item.button.size = Vector2.ONE * radius * 2.0
-	var active: bool = item.button.button_pressed
+	var active: bool = item.button.button_pressed or name in weapon_fingers.values()
 	var color := Color("#8ae7ff") if name == "missile" and fight.is_locked() else Color("#a8c5d8")
 	var label := Color(top_left, 0.40) if item.button.disabled else top_left
 	if item.button.disabled:

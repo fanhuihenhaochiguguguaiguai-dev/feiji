@@ -10,10 +10,11 @@ var previous := Vector3.ZERO
 var velocity := Vector3.ZERO
 var angular := Vector3.ZERO
 var attitude := Quaternion.IDENTITY
+var previous_attitude := Quaternion.IDENTITY
 var forward := Vector3.FORWARD
 var hp := 0.0
 var max_hp := 0.0
-var throttle := 0.74
+var throttle := 1.0
 var boost := 0.0
 var gear := 0.0
 var gear_target := 0.0
@@ -42,6 +43,8 @@ var counter_until := 0.0
 var counter_age := 0.0
 var ai_state := "intercept"
 var ai_until := 0.0
+var ai_lock := 0.0
+var ai_safe_altitude := -INF
 var target: RefCounted
 
 func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runway := false) -> void:
@@ -51,12 +54,13 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	previous = at
 	forward = nose.normalized()
 	attitude = Basis.looking_at(forward, Vector3.UP).get_rotation_quaternion()
+	previous_attitude = attitude
 	velocity = forward * initial_speed
 	angular = Vector3.ZERO
 	damage = Vector3.ZERO
 	hp = health
 	max_hp = health
-	throttle = 0.74
+	throttle = 1.0
 	boost = 0.0
 	aoa = 0.0
 	stall = 0.0
@@ -70,10 +74,13 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	counter_at = 0.0
 	counter_until = 0.0
 	ai_until = 0.0
+	ai_lock = 0.0
+	ai_safe_altitude = -INF
 	ai_state = "intercept"
 	target = null
 
 func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool) -> void:
+	previous_attitude = attitude
 	var speed := velocity.length()
 	var up := attitude * Vector3.UP
 	var right := attitude * Vector3.RIGHT
@@ -90,7 +97,9 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	var nose_rate: float = input.x * type.pitch * (0.72 + 0.63 * sqrt(absf(input.x)))
 	if input.x > 0.0 and up.y > 0.0:
 		nose_rate = minf(nose_rate, (1.29 - slope) * 3.7)
-	nose_rate *= 1.0 - 0.52 * stall
+	# Use airspeed and angle of attack to keep full deflection inside the envelope.
+	var load_margin := 1.0 - smoothstep(3.9, 6.1, absf(load_g)) * 0.43
+	nose_rate *= (1.0 - 0.52 * stall) * load_margin
 	var target_rate := Vector3(nose_rate, -input.y * type.yaw * (1.0 + absf(input.y) * 0.65), input.z * type.roll)
 	target_rate *= control * type.grip * handling * lerpf(0.78, 1.0, hp / max_hp)
 	target_rate += correction + Vector3(0.0, 0.0, (damage.y - damage.x) * 0.46)
@@ -128,7 +137,7 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	velocity += acceleration * dt
 	position += velocity * dt
 	if grounded:
-		if runway and not (forward.y > 0.098 and speed > type.stall * 1.20 and command.x > 0.21):
+		if runway and not (forward.y > 0.079 and speed > type.stall * 1.15 and command.x > 0.18):
 			position.y = ground + maxf(0.8, type.gearClearance)
 			velocity.y = 0.0
 			velocity *= exp(-dt * (0.39 if throttle < 0.28 else 0.041))

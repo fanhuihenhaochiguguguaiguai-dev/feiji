@@ -1,5 +1,9 @@
 extends Node
 
+const PRIORITY := {"gun":1.0,"scrape":2.0,"missile":3.0,"water":3.0,"blast":4.0,"fracture":5.0,"wave":5.0,
+	"counter":6.0,"lock":6.0,"warn":7.0,"victory":8.0}
+var last_cue := {}
+
 var cues := {}
 var voices: Array[AudioStreamPlayer3D] = []
 var motor: AudioStreamPlayer
@@ -46,15 +50,40 @@ func engine(dt: float, throttle: float, speed: float, boost: float, propeller: b
 	wind.pitch_scale = clampf((280.0 + speed * 3.1) / 740.0, 0.4, 2.5)
 
 func play_at(cue: String, at: Vector3) -> void:
-	if mute:
+	if mute or voices.is_empty() or not cues.has(cue):
 		return
+	var now := Time.get_ticks_msec()
+	var gap := 420 if cue in ["warn", "lock", "wave"] else (38 if cue == "gun" else 70)
+	if now - int(last_cue.get(cue, -2000)) < gap:
+		return
+	var camera := get_viewport().get_camera_3d()
+	var distance := camera.global_position.distance_to(at) if camera else 0.0
+	if distance > 5400.0:
+		return
+	var rating: float = float(PRIORITY.get(cue, 1.0)) - distance / 5200.0
+	var channel: AudioStreamPlayer3D
+	var lowest: AudioStreamPlayer3D
+	var low_rating := INF
 	for emitter in voices:
-		if emitter.playing:
-			continue
-		emitter.global_position = at
-		emitter.stream = cues[cue]
-		emitter.play()
-		break
+		if not emitter.playing:
+			channel = emitter
+			break
+		var weight: float = emitter.get_meta("rating", 0.0)
+		if weight < low_rating:
+			low_rating = weight
+			lowest = emitter
+	if not channel and rating > low_rating + 0.45:
+		channel = lowest
+	if not channel:
+		return
+	if channel.playing:
+		channel.stop()
+	channel.set_meta("rating", rating)
+	channel.global_position = at
+	channel.stream = cues[cue]
+	channel.pitch_scale = randf_range(0.92, 1.08) if cue in ["gun", "blast", "scrape"] else 1.0
+	last_cue[cue] = now
+	channel.play()
 
 func stop_all() -> void:
 	for emitter in voices:

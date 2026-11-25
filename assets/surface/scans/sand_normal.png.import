@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b61fblgcfxtjf"
-path="res://.godot/imported/terrain-normal.png-45cc8b4b3f59b7cd5ce420f817ad03c6.ctex"
+uid="uid://cv7hhn2orc85r"
+path="res://.godot/imported/sand_normal.png-5dbea4cf049a8af54a043d51c56b1f7a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/surface/terrain-normal.png"
-dest_files=["res://.godot/imported/terrain-normal.png-45cc8b4b3f59b7cd5ce420f817ad03c6.ctex"]
+source_file="res://assets/surface/scans/sand_normal.png"
+dest_files=["res://.godot/imported/sand_normal.png-5dbea4cf049a8af54a043d51c56b1f7a.ctex"]
 
 [params]
 

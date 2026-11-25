@@ -1,8 +1,8 @@
-name: V18.1 native Android
+name: V18.2 native Android
 
 on:
   push:
-    branches: [v18.1-native]
+    branches: [v18.2-native]
   workflow_dispatch:
 
 permissions:
@@ -56,10 +56,17 @@ jobs:
           tools/build_extension.sh
           godot --headless --editor --import
           godot --headless --script res://qa/smoke.gd
+          godot --headless --script res://qa/v182.gd
       - name: Gradle export and signature verification
+        env:
+          SKYBLADE_ANDROID_KEYSTORE_B64: ${{ secrets.SKYBLADE_ANDROID_KEYSTORE_B64 }}
         run: |
           mkdir -p "$XDG_CONFIG_HOME/godot" dist
-          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -dname 'CN=Sky Blade CI' -validity 3650
+          if [[ -n "$SKYBLADE_ANDROID_KEYSTORE_B64" ]]; then
+            printf '%s' "$SKYBLADE_ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/debug.keystore"
+          else
+            keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -dname 'CN=Sky Blade CI' -validity 3650
+          fi
           cat > "$XDG_CONFIG_HOME/godot/editor_settings-4.7.tres" <<SETTINGS
           [gd_resource type="EditorSettings" format=3]
 
@@ -71,12 +78,12 @@ jobs:
           export/android/debug_keystore_pass = "android"
           SETTINGS
           sed -i 's|gradle_build/use_gradle_build=false|gradle_build/use_gradle_build=true|' export_presets.cfg
-          godot --headless --export-debug 'Android ARM64' dist/skyblade-v18.1-arm64.apk
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose dist/skyblade-v18.1-arm64.apk
-          unzip -l dist/skyblade-v18.1-arm64.apk | grep 'lib/arm64-v8a/libskyterrain'
-          unzip -l dist/skyblade-v18.1-arm64.apk | grep 'lib/arm64-v8a/libterrain'
+          godot --headless --export-debug 'Android ARM64' dist/skyblade-v18.2-arm64.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose dist/skyblade-v18.2-arm64.apk
+          unzip -l dist/skyblade-v18.2-arm64.apk | grep 'lib/arm64-v8a/libskyterrain'
+          unzip -l dist/skyblade-v18.2-arm64.apk | grep 'lib/arm64-v8a/libterrain'
       - uses: actions/upload-artifact@v4
         with:
-          name: skyblade-v18.1-arm64-debug
-          path: dist/skyblade-v18.1-arm64.apk
+          name: skyblade-v18.2-arm64-debug
+          path: dist/skyblade-v18.2-arm64.apk
           if-no-files-found: error

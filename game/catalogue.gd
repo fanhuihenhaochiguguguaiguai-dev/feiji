@@ -1,12 +1,14 @@
 extends RefCounted
 
+const NAMES := {"a10": "雷电二型", "alphajet": "阿尔法喷气", "b2": "幽灵轰炸机", "bf109": "梅塞施密特战斗机", "c130": "大力神运输机", "camel": "索普威斯骆驼", "dr1": "福克三翼机", "e2": "鹰眼预警机", "ea6b": "徘徊者电子战机", "f16": "战隼战斗机", "g91": "菲亚特攻击机", "gripen": "鹰狮战斗机", "hornet": "大黄蜂战斗机", "j10": "歼十战斗机", "j20": "歼二十战斗机", "me262": "燕式喷气战斗机", "mig21": "米格二十一战斗机", "mirage": "幻影两千战斗机", "p51": "野马战斗机", "shade-drone": "影隼无人机", "spitfire": "喷火战斗机", "su35": "苏三十五战斗机", "zero": "零式战斗机"}
+
 const MISSILES = {
 	"interceptor": {"label":"巡星标准弹", "price":0, "acquire":0.69, "range":4950.0, "turn":2.23, "speed":1040.0, "accel":490.0, "life":8.0, "damage":118.0, "infrared":false},
 	"flarewing": {"label":"赤尾红外弹", "price":620, "acquire":0.43, "range":3870.0, "turn":3.36, "speed":940.0, "accel":545.0, "life":6.5, "damage":112.0, "infrared":true},
 	"skylance": {"label":"苍矛远程弹", "price":1150, "acquire":0.91, "range":6100.0, "turn":1.82, "speed":1340.0, "accel":635.0, "life":9.5, "damage":144.0, "infrared":false},
 }
 const TRAINING = [
-	["基础飞行", "保持飞行并调整油门。", "flight"],
+	["基础飞行", "滑动控制方向，保持安全飞行十五秒。", "flight"],
 	["航炮瞄准", "使用航炮命中练习机。", "gun"],
 	["锁定与发射", "自动捕捉目标，发射导弹并命中。", "missile"],
 	["来袭反制", "使用反制导弹解除来袭威胁。", "counter"],
@@ -23,6 +25,7 @@ var scenes := {}
 func _init() -> void:
 	source = JSON.parse_string(FileAccess.get_file_as_string("res://assets/campaign.json"))
 	for plane in source.fleet:
+		plane.name = NAMES.get(plane.id, "战机")
 		planes[plane.id] = plane
 
 func aircraft(id: String) -> Dictionary:

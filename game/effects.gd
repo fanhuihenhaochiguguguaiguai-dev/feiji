@@ -7,8 +7,15 @@ const FIRE = preload("res://assets/surface/combustion.webp")
 const SMOKE = preload("res://assets/surface/soot.webp")
 const SPARK = preload("res://assets/surface/spark.webp")
 
-var ammo_meshes := {}
-var shell_list: Array[MeshInstance3D] = []
+const MISSILE_VISUALS := 28
+const RIBBON_SPAN := 2.35
+var missile_visuals := {}
+var missile_pool: Array[MeshInstance3D] = []
+var tracers := MultiMesh.new()
+var spent_ribbons: Array[Dictionary] = []
+var ribbon_clock := 0.0
+var burst_pool: Array[GPUParticles3D] = []
+var burst_slot := 0
 var puffs: Array[Dictionary] = []
 var impacts: Array[Dictionary] = []
 var fragments: Array[Dictionary] = []
@@ -45,11 +52,8 @@ func pool() -> void:
 	stream.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(stream)
 	puff_quad.size = Vector2(2, 2)
-	for i in PROJECTILE_CAPACITY:
-		var shell := MeshInstance3D.new()
-		shell.visible = false
-		add_child(shell)
-		shell_list.append(shell)
+	_prepare_projectiles()
+	_prepare_impacts()
 	for i in 104:
 		var puff := MeshInstance3D.new()
 		puff.mesh = puff_quad
@@ -76,35 +80,35 @@ func pool() -> void:
 		wave.visible = false
 		add_child(wave)
 		impacts.append({"light":bulb, "wave":wave, "left":0.0, "radius":1.0})
-	var shard := PrismMesh.new()
-	shard.size = Vector3(1.25, 0.18, 0.63)
-	var charred := StandardMaterial3D.new()
-	charred.albedo_color = Color("#3a3d47")
-	charred.metallic = 0.71
-	charred.roughness = 0.57
-	shard.material = charred
 	for i in 48:
 		var fragment := MeshInstance3D.new()
-		fragment.mesh = shard
 		fragment.visible = false
 		fragment.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(fragment)
 		fragments.append({"node":fragment, "left":0.0})
 
-func breakup(at: Vector3, carried_velocity: Vector3, wet: bool) -> void:
+func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D) -> void:
 	impact(at, 2, wet)
-	for i in (10 if wet else 16):
+	if not is_instance_valid(airframe):
+		return
+	var surfaces := airframe.find_children("*", "MeshInstance3D", true, false)
+	surfaces = surfaces.filter(func(surface):
+		return surface.mesh != null and surface.visible and surface.get_aabb().get_longest_axis_size() > 0.45)
+	surfaces.sort_custom(func(a, b): return a.get_aabb().get_longest_axis_size() > b.get_aabb().get_longest_axis_size())
+	for i in mini(7, surfaces.size()):
+		var surface: MeshInstance3D = surfaces[i]
 		var piece := fragments[debris_cursor]
 		debris_cursor = (debris_cursor + 1) % fragments.size()
 		var spread := Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1))
-		piece.node.position = at + spread * 2.8
-		piece.node.scale = Vector3.ONE * randf_range(0.35, 2.3)
-		piece.node.rotation = Vector3(randf() * TAU, randf() * TAU, randf() * TAU)
+		piece.node.mesh = surface.mesh
+		piece.node.material_override = surface.material_override
+		piece.node.global_transform = surface.global_transform
 		piece.node.visible = true
-		piece.left = randf_range(1.7, 4.5)
-		piece.vel = carried_velocity * 0.39 + spread * randf_range(21.0, 72.0)
-		piece.spin = spread * randf_range(3.0, 10.0)
-		piece.smoke = i < 3
+		piece.left = randf_range(1.7, 4.5) if i > 0 else 6.5
+		piece.vel = carried_velocity * 0.71 + spread * (14.0 if i == 0 else 59.0)
+		piece.spin = spread * (1.8 if i == 0 else 5.0)
+		piece.smoke = i < 2
+		piece.core = i == 0
 		piece.emit_at = 0.08 * i
 
 func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacity := 1.0) -> void:
@@ -132,6 +136,7 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	item.spark = spark
 
 func impact(at: Vector3, power: int, water := false) -> void:
+	_emit_burst(at, power, water)
 	var count := [3, 8, 13][clampi(power, 0, 2)] as int
 	var radius := [3.0, 12.0, 24.0][clampi(power, 0, 2)] as float
 	for i in count:
@@ -155,35 +160,115 @@ func impact(at: Vector3, power: int, water := false) -> void:
 		item.radius = radius * (6.5 - layer * 1.23)
 		item.wave.set_instance_shader_parameter("amplitude", 0.88 - layer * 0.19)
 
+func _prepare_projectiles() -> void:
+	var beam := CylinderMesh.new()
+	beam.top_radius = 0.035
+	beam.bottom_radius = 0.105
+	beam.height = 16.0
+	beam.radial_segments = 5
+	beam.rings = 0
+	beam.material = tracer
+	tracers.transform_format = MultiMesh.TRANSFORM_3D
+	tracers.mesh = beam
+	tracers.instance_count = PROJECTILE_CAPACITY
+	tracers.visible_instance_count = 0
+	var draws := MultiMeshInstance3D.new()
+	draws.multimesh = tracers
+	draws.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	draws.extra_cull_margin = 10000.0
+	add_child(draws)
+	var body := CapsuleMesh.new()
+	body.radial_segments = 8
+	body.rings = 2
+	body.radius = 0.15
+	body.height = 3.6
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#b2bacc")
+	material.metallic = 0.56
+	material.roughness = 0.28
+	body.material = material
+	for i in MISSILE_VISUALS:
+		var shell := MeshInstance3D.new()
+		shell.mesh = body
+		shell.visible = false
+		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(shell)
+		missile_pool.append(shell)
+
+func _prepare_impacts() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var spark := BoxMesh.new()
+	spark.size = Vector3(0.09, 0.40, 0.07)
+	spark.material = emissive(Color("#ffc280"), 3.8)
+	for index in 8:
+		var emitter := GPUParticles3D.new()
+		emitter.amount = 20
+		emitter.lifetime = 0.32
+		emitter.one_shot = true
+		emitter.explosiveness = 0.93
+		emitter.emitting = false
+		emitter.draw_pass_1 = spark
+		emitter.local_coords = false
+		emitter.visibility_aabb = AABB(Vector3(-65, -65, -65), Vector3(130, 130, 130))
+		var motion := ParticleProcessMaterial.new()
+		motion.direction = Vector3.UP
+		motion.spread = 115.0
+		motion.gravity = Vector3(0, -28, 0)
+		motion.initial_velocity_min = 14.0
+		motion.initial_velocity_max = 62.0
+		motion.scale_min = 0.3
+		motion.scale_max = 1.0
+		emitter.process_material = motion
+		add_child(emitter)
+		burst_pool.append(emitter)
+
+func _emit_burst(at: Vector3, power: int, water: bool) -> void:
+	if burst_pool.is_empty() or water:
+		return
+	var emitter := burst_pool[burst_slot]
+	burst_slot = (burst_slot + 1) % burst_pool.size()
+	emitter.position = at
+	emitter.amount_ratio = 0.52 if power == 0 else 1.0
+	emitter.restart()
+
 func projectile(slot: int, at: Vector3, direction: Vector3, missile: bool) -> void:
-	var node := shell_list[slot]
-	if not ammo_meshes.has(missile):
-		if missile:
-			var body := CapsuleMesh.new()
-			body.radial_segments = 8
-			body.rings = 2
-			body.radius = 0.15
-			body.height = 3.6
-			var material := StandardMaterial3D.new()
-			material.albedo_color = Color("#b2bacc")
-			material.metallic = 0.46
-			material.roughness = 0.31
-			body.material = material
-			ammo_meshes[true] = body
-		else:
-			var beam := CylinderMesh.new()
-			beam.top_radius = 0.045
-			beam.bottom_radius = 0.105
-			beam.height = 16.0
-			beam.radial_segments = 5
-			beam.rings = 0
-			beam.material = tracer
-			ammo_meshes[false] = beam
-	node.mesh = ammo_meshes[missile]
-	node.visible = true
-	node.position = at
-	node.quaternion = Quaternion(Vector3.UP, direction.normalized())
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if not missile or missile_pool.is_empty():
+		return
+	var mesh := missile_pool.pop_back() as MeshInstance3D
+	missile_visuals[slot] = mesh
+	mesh.visible = true
+	move_projectile(slot, at, direction)
+
+func move_projectile(slot: int, at: Vector3, direction: Vector3) -> void:
+	var body: MeshInstance3D = missile_visuals.get(slot)
+	if body:
+		body.position = at
+		body.quaternion = Quaternion(Vector3.UP, direction)
+
+func release_projectile(slot: int, points: Array) -> void:
+	var body: MeshInstance3D = missile_visuals.get(slot)
+	if body:
+		body.visible = false
+		missile_visuals.erase(slot)
+		missile_pool.append(body)
+	if points.size() >= 2:
+		if spent_ribbons.size() >= 16:
+			spent_ribbons.pop_front()
+		spent_ribbons.append({"points": points, "left":RIBBON_SPAN})
+
+func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> void:
+	var visible := 0
+	for shot in shots:
+		if not shot.active or shot.missile:
+			continue
+		var at: Vector3 = shot.previous.lerp(shot.position, alpha)
+		if at.distance_squared_to(camera.position) > 4350.0 * 4350.0:
+			continue
+		var nose: Vector3 = shot.nose
+		tracers.set_instance_transform(visible, Transform3D(Basis(Quaternion(Vector3.UP, nose)), at))
+		visible += 1
+	tracers.visible_instance_count = visible
 
 func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 	for item in puffs:
@@ -219,8 +304,16 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 			continue
 		piece.left -= dt
 		if piece.left <= 0.0 or piece.node.position.y < 0.1:
+			if piece.core and piece.node.position.y < 0.1:
+				var surface: Vector3 = piece.node.position
+				surface.y = 0.04
+				for i in 5:
+					puff(surface + Vector3(randf_range(-4.0, 4.0), i * 1.7, randf_range(-4.0, 4.0)),
+						Vector3(randf_range(-9, 9), 24.0 + i * 3.4, randf_range(-8, 8)), 2.1 + i * 0.43, 1.45, 3, 0.82)
+				impact(surface, 1, true)
 			piece.left = 0.0
 			piece.node.visible = false
+			piece.node.mesh = null
 			continue
 		piece.vel.y -= 9.81 * dt
 		piece.node.position += piece.vel * dt
@@ -229,30 +322,54 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 		if piece.smoke and piece.emit_at < 0.0:
 			piece.emit_at = 0.18
 			puff(piece.node.position, piece.vel * 0.22 + Vector3.UP * 4.0, 0.7, 0.87, 0, 0.42)
+	for i in range(spent_ribbons.size() - 1, -1, -1):
+		spent_ribbons[i].left -= dt
+		if spent_ribbons[i].left <= 0.0:
+			spent_ribbons.remove_at(i)
+	ribbon_clock += dt
+	if ribbon_clock < 0.047:
+		return
+	ribbon_clock = 0.0
 	ribbon_mesh.clear_surfaces()
 	var active := false
 	for shot in shots:
-		if not shot.get("missile", false) or not shot.active or shot.trail.size() < 2:
+		if not shot.active or not shot.missile or shot.trail.size() < 2:
 			continue
 		if not active:
 			ribbon_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 			active = true
-		var points: Array = shot.trail
-		for i in range(points.size() - 1):
-			var a: Vector3 = points[i]
-			var b: Vector3 = points[i + 1]
-			var axis := (b - a).cross(camera.position - a).normalized()
-			var t := i / float(points.size())
-			var radius := lerpf(1.45, 0.13, t)
-			var c := Color(0.67, 0.73, 0.80, lerpf(0.04, 0.37, sin(t * PI)))
-			var points_strip := [a - axis * radius, a + axis * radius, b + axis * radius, a - axis * radius, b + axis * radius, b - axis * radius]
-			for point in points_strip:
-				ribbon_mesh.surface_set_color(c)
-				ribbon_mesh.surface_add_vertex(point)
+		_draw_ribbon(shot.trail, camera.position, 1.0)
+	for trail in spent_ribbons:
+		if not active:
+			ribbon_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+			active = true
+		_draw_ribbon(trail.points, camera.position, trail.left / RIBBON_SPAN)
 	if active:
 		ribbon_mesh.surface_end()
 
+func _draw_ribbon(points: Array, eye: Vector3, opacity: float) -> void:
+	for i in range(points.size() - 1):
+		var a: Vector3 = points[i]
+		var b: Vector3 = points[i + 1]
+		var axis := (b - a).cross(eye - a).normalized()
+		var t := i / float(points.size())
+		var width := lerpf(1.6, 0.24, t) * (1.0 + (1.0 - opacity) * 2.3)
+		var trim := axis * width
+		var tone := Color(0.63, 0.70, 0.79, lerpf(0.04, 0.38, sin(t * PI)) * opacity)
+		ribbon_mesh.surface_set_color(tone)
+		ribbon_mesh.surface_add_vertex(a - trim)
+		ribbon_mesh.surface_add_vertex(a + trim)
+		ribbon_mesh.surface_add_vertex(b + trim)
+		ribbon_mesh.surface_add_vertex(a - trim)
+		ribbon_mesh.surface_add_vertex(b + trim)
+		ribbon_mesh.surface_add_vertex(b - trim)
+
 func rebase(delta: Vector3) -> void:
+	for trail in spent_ribbons:
+		for i in trail.points.size():
+			trail.points[i] -= delta
+	for body in missile_visuals.values():
+		body.position -= delta
 	for puff_item in puffs:
 		if puff_item.left > 0.0:
 			puff_item.node.position -= delta

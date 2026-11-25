@@ -4,19 +4,21 @@ const SIZE := 256
 const STEP := 6.0
 const TILE := SIZE * STEP
 const APRON_HEIGHT := 150.0
-const MAX_JOBS := 5
+const MAX_JOBS := 3
+const STREAM_INTERVAL := 0.12
+const UPLOAD_BUDGET := 2
 const RADIUS := 2
 const SKY = preload("res://shaders/sky.gdshader")
-const SEA = preload("res://shaders/sea.gdshader")
-const ROCK = preload("res://assets/surface/rock-grain.png")
-const NORMAL_ROCK = preload("res://assets/surface/terrain-normal.png")
+const Ocean = preload("res://game/ocean.gd")
+const ROCK = preload("res://assets/surface/scans/rock_color.jpg")
+const LOWLAND = preload("res://assets/surface/scans/sand_color.jpg")
+const NORMAL_ROCK = preload("res://assets/surface/scans/rock_normal.png")
+const NORMAL_LOWLAND = preload("res://assets/surface/scans/sand_normal.png")
 const DENSITY = preload("res://assets/surface/cloud-density.png")
-const WATER_DETAIL = preload("res://assets/surface/water.png")
 
 var terrain: Terrain3D
 var rider: Node3D
-var ocean: MeshInstance3D
-var ocean_material: ShaderMaterial
+var ocean: Ocean
 var climate := {}
 var seed_value := 413
 var origin := Vector2i.ZERO
@@ -24,17 +26,32 @@ var current: Dictionary = {}
 var cache: Dictionary = {}
 var jobs: Dictionary = {}
 var target := Vector2i.ZERO
-var snapped_center := Vector2(INF, INF)
-var seeded := false
-var start_changed := false
+var stream_clock := 0.0
+var completed_tiles: Dictionary = {}
+var cloud_material: ShaderMaterial
+var flight_environment: Environment
 
-func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase := false) -> void:
+static func opening_tiles(start: Vector3, showcase: bool) -> Array[Vector2i]:
+	var centre := Vector2i(floori(start.x / TILE), floori(start.z / TILE))
+	var coordinates: Array[Vector2i] = []
+	for z in range(-2, 3 if showcase else 2):
+		for x in range(-2, 3):
+			coordinates.append(centre + Vector2i(x, z))
+	return coordinates
+
+func local_position(absolute_position: Vector3) -> Vector3:
+	return absolute_position - Vector3(origin.x * TILE, 0.0, origin.y * TILE)
+
+func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase := false, prepared := {}) -> void:
 	climate = theatre
 	seed_value = int(theatre.seed)
 	_add_environment(showcase)
 	rider = Node3D.new()
 	add_child(rider)
-	rider.position = start
+	if not showcase:
+		origin = Vector2i(floori(start.x / TILE), floori(start.z / TILE))
+	cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
+	rider.position = local_position(start)
 	terrain = Terrain3D.new()
 	terrain.region_size = SIZE
 	terrain.vertex_spacing = STEP
@@ -47,32 +64,29 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase :
 	terrain.material.set_auto_shader_enabled(true)
 	terrain.material.set_dual_scaling_enabled(true)
 	terrain.material.texture_filtering = 1
-	terrain.assets.set_texture_asset(0, _surface("侵蚀岩层", Color("#74726a"), 0.44))
-	terrain.assets.set_texture_asset(1, _surface("高地", Color("#b0b9c1") if theatre.snow else Color("#4f5945"), 0.28))
+	terrain.assets.set_texture_asset(0, _surface("砂砾地表", Color("#b2c1ce") if theatre.snow else Color("#777c64"), 0.33, LOWLAND, NORMAL_LOWLAND))
+	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#a1a8b0") if theatre.snow else Color("#85817b"), 0.42, ROCK, NORMAL_ROCK))
+	terrain.material.set_shader_param("auto_base_texture", 0)
+	terrain.material.set_shader_param("auto_overlay_texture", 1)
 	terrain.set_clipmap_target(rider)
-	var centre := cell(start)
-	var south := 3 if showcase else 2
-	for z in range(-2, south):
-		for x in range(-2, 3):
-			var coord := centre + Vector2i(x, z)
-			var heights := _bake(coord, seed_value)
-			if showcase:
-				var corner := Vector2(coord) * TILE
-				var apron := Vector2(start.x, start.z) - corner
-				for row in SIZE:
-					for column in SIZE:
-						var distance := apron.distance_to(Vector2(column * STEP, row * STEP))
-						var f := smoothstep(135.0, 1180.0, distance)
-						var idx := row * SIZE + column
-						heights[idx] = lerpf(APRON_HEIGHT - 0.35, minf(heights[idx], APRON_HEIGHT + distance * 0.083), f)
-			_activate(coord, heights)
+	for coord in opening_tiles(start, showcase):
+		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else bake_tile(coord, seed_value)
+		if showcase:
+			var corner := Vector2(coord) * TILE
+			var apron := Vector2(start.x, start.z) - corner
+			for row in SIZE:
+				for column in SIZE:
+					var distance := apron.distance_to(Vector2(column * STEP, row * STEP))
+					var f := smoothstep(135.0, 1180.0, distance)
+					var idx := row * SIZE + column
+					heights[idx] = lerpf(APRON_HEIGHT - 0.35, minf(heights[idx], APRON_HEIGHT + distance * 0.083), f)
+		_activate(coord, heights)
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
 	terrain.snap()
 	_make_sea()
 	if not showcase:
 		_make_runway()
-	seeded = true
 
 func _add_environment(showcase: bool) -> void:
 	var light_color := Color(climate.light[0], climate.light[1], climate.light[2])
@@ -83,7 +97,9 @@ func _add_environment(showcase: bool) -> void:
 	var env_node := WorldEnvironment.new()
 	env_node.environment = Environment.new()
 	var environment := env_node.environment
+	flight_environment = environment
 	var panorama := ShaderMaterial.new()
+	cloud_material = panorama
 	panorama.shader = SKY
 	panorama.set_shader_parameter("panorama", load("res://assets/surface/probe-%s.hdr" % ("dusk" if sunset else ("day" if climate.snow else "storm"))))
 	panorama.set_shader_parameter("density", DENSITY)
@@ -126,11 +142,11 @@ func _add_environment(showcase: bool) -> void:
 		add_child(fill)
 		fill.rotation_degrees = Vector3(-36, -34, 0)
 
-func _surface(label: String, tint: Color, texture_scale: float) -> Terrain3DTextureAsset:
+func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D) -> Terrain3DTextureAsset:
 	var asset := Terrain3DTextureAsset.new()
 	asset.set_asset_name(label)
-	asset.set_albedo_texture(ROCK)
-	asset.set_normal_texture(NORMAL_ROCK)
+	asset.set_albedo_texture(albedo)
+	asset.set_normal_texture(surface_normal)
 	asset.set_albedo_color(tint)
 	asset.set_uv_scale(texture_scale)
 	asset.set_detiling_rotation(0.68)
@@ -138,7 +154,7 @@ func _surface(label: String, tint: Color, texture_scale: float) -> Terrain3DText
 	asset.set_normal_depth(1.25)
 	return asset
 
-static func _bake(coord: Vector2i, seed_id: int) -> PackedFloat32Array:
+static func bake_tile(coord: Vector2i, seed_id: int) -> PackedFloat32Array:
 	return ClassDB.class_call_static("SkyTerrainKernel", "height_tile", coord.x * TILE, coord.y * TILE, SIZE, STEP, seed_id)
 
 func cell(local_point: Vector3) -> Vector2i:
@@ -173,7 +189,7 @@ func _make_runway() -> void:
 	asphalt.uv1_scale = Vector3(4, 55, 1)
 	asphalt.roughness = 0.57
 	strip.material_override = asphalt
-	strip.position = Vector3(-340.0, 26.2, 350.0)
+	strip.position = local_position(Vector3(-340.0, 26.2, 350.0))
 	strip.name = "Runway"
 	add_child(strip)
 	var paint := StandardMaterial3D.new()
@@ -188,18 +204,10 @@ func _make_runway() -> void:
 		strip.add_child(line)
 
 func _make_sea() -> void:
-	ocean = MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(23000, 23000)
-	plane.subdivide_width = 220
-	plane.subdivide_depth = 220
-	ocean.mesh = plane
-	ocean_material = ShaderMaterial.new()
-	ocean_material.shader = SEA
-	ocean_material.set_shader_parameter("shore_noise", WATER_DETAIL)
-	ocean.material_override = ocean_material
-	ocean.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ocean = Ocean.new()
 	add_child(ocean)
+	ocean.setup(seed_value == 116)
+	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
 
 func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 	var region := Terrain3DRegion.new()
@@ -213,31 +221,47 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 	current[coord] = region
 	cache[coord] = heights
 
-func follow(p: Vector3, velocity: Vector3) -> Vector3:
+func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	var here := cell(p)
-	target = cell(p + velocity.limit_length(350.0) * 2.2)
+	target = cell(p + velocity.limit_length(420.0) * 4.4)
 	var delta := Vector3.ZERO
-	if absi(here.x - origin.x) >= 3 or absi(here.y - origin.y) >= 3:
+	if absi(here.x - origin.x) >= 4 or absi(here.y - origin.y) >= 4:
 		var shift := here - origin
 		delta = Vector3(shift.x * TILE, 0.0, shift.y * TILE)
-		for coord in current:
+		var previous := current
+		current = {}
+		for coord in previous:
 			terrain.data.remove_regionl(coord - origin, false)
-		var old_cells := current.keys()
-		current.clear()
 		origin = here
-		for coord in old_cells:
-			if Vector2i(coord - here).length_squared() <= 18:
-				_activate(coord, cache[coord])
+		cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
+		for coord in previous:
+			if Vector2i(coord - here).length_squared() <= 20:
+				var tile: Terrain3DRegion = previous[coord]
+				tile.location = coord - origin
+				tile.set_deleted(false)
+				terrain.data.add_region(tile, false)
+				current[coord] = tile
 		if has_node("Runway"):
 			get_node("Runway").position -= delta
 		terrain.data.update_maps()
 		terrain.snap()
 	rider.position = p - delta
-	var actual := Vector2(rider.position.x, rider.position.z)
-	if actual.distance_squared_to(snapped_center) > 420.0 * 420.0:
-		snapped_center = (actual / 220.0).floor() * 220.0
-		ocean.position = Vector3(snapped_center.x, 0.0, snapped_center.y)
-		ocean_material.set_shader_parameter("world_offset", Vector2(origin) * TILE)
+	ocean.track(rider.position, Vector2(origin) * TILE, velocity, true)
+	stream_clock += dt
+	if stream_clock >= STREAM_INTERVAL:
+		stream_clock = 0.0
+		_publish_and_prefetch(here)
+		var low := 640.0 if seed_value == 116 else 1150.0
+		var high := low + (1180.0 if seed_value == 116 else 780.0)
+		var in_cloud := smoothstep(low, low + 170.0, p.y) * (1.0 - smoothstep(high - 215.0, high, p.y))
+		flight_environment.fog_density = 0.000132 + 0.00019 * in_cloud
+	return delta
+
+func set_quality(scale_value: float) -> void:
+	cloud_material.set_shader_parameter("cloud_samples", 5 if scale_value < 0.74 else 7)
+	ocean.set_quality(scale_value)
+
+func _publish_and_prefetch(here: Vector2i) -> void:
 	var changed := false
 	for coord in jobs.keys():
 		var thread: Thread = jobs[coord]
@@ -246,23 +270,34 @@ func follow(p: Vector3, velocity: Vector3) -> Vector3:
 		var heights: PackedFloat32Array = thread.wait_to_finish()
 		jobs.erase(coord)
 		if Vector2i(coord - here).length_squared() <= 21 and not current.has(coord):
-			_activate(coord, heights)
+			completed_tiles[coord] = heights
+	var published := 0
+	for coord in completed_tiles.keys():
+		if Vector2i(coord - here).length_squared() > 21:
+			completed_tiles.erase(coord)
+			continue
+		if published >= UPLOAD_BUDGET:
+			break
+		if not current.has(coord):
+			_activate(coord, completed_tiles[coord])
+			published += 1
 			changed = true
+		completed_tiles.erase(coord)
 	var candidates: Array[Vector2i] = []
 	for z in range(-RADIUS, RADIUS + 1):
 		for x in range(-RADIUS, RADIUS + 1):
 			var key := target + Vector2i(x, z)
-			if not current.has(key) and not jobs.has(key):
+			if not current.has(key) and not jobs.has(key) and not completed_tiles.has(key):
 				candidates.append(key)
 	candidates.sort_custom(func(a: Vector2i, b: Vector2i): return (a - target).length_squared() < (b - target).length_squared())
-	if jobs.size() < MAX_JOBS and not candidates.is_empty():
-		var key := candidates[0]
+	for key in candidates:
+		if jobs.size() + completed_tiles.size() >= MAX_JOBS:
+			break
 		if cache.has(key):
-			_activate(key, cache[key])
-			changed = true
+			completed_tiles[key] = cache[key]
 		else:
 			var task := Thread.new()
-			if task.start(_bake.bind(key, seed_value)) == OK:
+			if task.start(bake_tile.bind(key, seed_value)) == OK:
 				jobs[key] = task
 	for key in current.keys():
 		if (key - here).length_squared() > 20:
@@ -270,12 +305,15 @@ func follow(p: Vector3, velocity: Vector3) -> Vector3:
 			current.erase(key)
 			changed = true
 	if cache.size() > 56:
-		for key in cache.keys():
-			if (key - here).length_squared() > 32:
+		var distant: Array = cache.keys()
+		distant.sort_custom(func(a: Vector2i, b: Vector2i): return (a - here).length_squared() > (b - here).length_squared())
+		for key in distant:
+			if cache.size() <= 56:
+				break
+			if not current.has(key):
 				cache.erase(key)
 	if changed:
 		terrain.data.update_maps()
-	return delta
 
 func _exit_tree() -> void:
 	for task in jobs.values():
