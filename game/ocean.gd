@@ -10,6 +10,7 @@ var maps: Array[WaveCascadeParameters] = []
 var displacement: Texture2DArrayRD
 var normals: Texture2DArrayRD
 var elapsed := 0.0
+var waves_visible := false
 var cadence := 0.055
 var origin := Vector2.ZERO
 var wake := Vector4(0, 0, 1, 0)
@@ -18,10 +19,13 @@ var wake_sent := Vector4.ZERO
 var strength_sent := 0.0
 var shallows: ImageTexture
 
-func setup(windy: bool) -> void:
+func setup(theatre: Dictionary) -> void:
+	var windy: bool = int(theatre.seed) == 116
+	var hue: Array = theatre.sea
 	mesh = CLIPMAP
 	material.shader = SURFACE
 	material.set_shader_parameter("shore_noise", NOISE)
+	material.set_shader_parameter("deep", Color(hue[0] * 0.76, hue[1] * 0.79, hue[2] * 0.79))
 	material_override = material
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	extra_cull_margin = 18000.0
@@ -100,7 +104,9 @@ func _process(dt: float) -> void:
 	elapsed += dt
 	if elapsed < cadence or fft.pass_num_cascades_remaining != 0:
 		return
-	material.set_shader_parameter("spectral_enabled", true)
+	if not waves_visible:
+		waves_visible = true
+		material.set_shader_parameter("spectral_enabled", true)
 	fft.update(elapsed, maps)
 	elapsed = 0.0
 

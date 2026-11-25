@@ -1,0 +1,14 @@
+V18.3 environment sources
+
+Relief and hangar ridge geometry adapted from the U.S. Geological Survey 3D Elevation Program, National Map seamless elevation service. Public-domain source data. This scene is a fictional adaptation with remapped elevation and approximated shoreline depth.
+https://www.usgs.gov/3d-elevation-program/about-3dep-products-services
+https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
+Source survey request bbox -136.62,58.43,-135.87,58.82 (EPSG:4326). The service adjusted the delivered raster to -136.62,58.25,-135.87,59.00 to preserve its square pixels. Fetched on 2026-11-25, 1281 x 1281 float GeoTIFF with bilinear sampling.
+
+Sky photography by Poly Haven, CC0 1.0. Original HDR files resampled to 1024 x 512 and packed with an exposure shoulder into sRGB PNG. Sky shaders and probes restore the stored linear exposure range. The sky and sun use the same panorama alignment.
+https://polyhaven.com/a/qwantani_sunset_puresky
+https://polyhaven.com/a/qwantani_dusk_2_puresky
+https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky
+https://polyhaven.com/license
+
+Rock 04 and Gravelly Sand textures by Poly Haven, CC0 1.0. The existing 1K diffuse and GL normal are packed with the original 1K displacement and roughness maps. See PolyHaven-CC0.txt for asset links.

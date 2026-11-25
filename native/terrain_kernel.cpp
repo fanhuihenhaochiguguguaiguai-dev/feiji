@@ -44,6 +44,32 @@ double base_height(double x,double z,int64_t seed) {
 }
 
 constexpr double erosion_spacing = 6.0;
+constexpr int relief_side = 1025;
+constexpr double relief_size = 24576.0;
+constexpr double relief_x = -6250.0;
+constexpr double relief_z = -6200.0;
+int16_t relief[relief_side * relief_side];
+bool has_relief = false;
+
+double relief_mask(double x, double z, int64_t seed) {
+    if (!has_relief || seed != 413) return 0.0;
+    const double local_x = x - relief_x;
+    const double local_z = z - relief_z;
+    double weight = smooth(local_x / 2100.0) * smooth((relief_size-local_x) / 2100.0)
+        * smooth(local_z / 2100.0) * smooth((relief_size-local_z) / 2100.0);
+    // Leave the existing runway and its climb-out corridor at their authored grade.
+    const double dx = x + 340.0, dz = z - 350.0;
+    return weight * smooth((dx*dx + dz*dz - 3700.0*3700.0) / (4900.0*4900.0 - 3700.0*3700.0));
+}
+
+double relief_sample(double x, double z) {
+    x = (x-relief_x) * (relief_side-1) / relief_size;
+    z = (z-relief_z) * (relief_side-1) / relief_size;
+    const auto a = ilower(x), b = ilower(z);
+    const int16_t *row = relief + b * relief_side + a;
+    return 0.25 * blend(blend(row[0], row[1], x-a),
+        blend(row[relief_side], row[relief_side+1], x-a), z-b);
+}
 
 double thermal_flux(double difference) {
     const double angle_limit = erosion_spacing * 0.73;
@@ -57,12 +83,24 @@ double transported_height(double centre, double north, double south, double east
 }
 
 double terrain_height(double x,double z,int64_t seed) {
-    return transported_height(base_height(x,z,seed),
+    const double mask = relief_mask(x,z,seed);
+    if (mask >= 1.0) return relief_sample(x,z);
+    const double original = transported_height(base_height(x,z,seed),
         base_height(x,z-erosion_spacing,seed), base_height(x,z+erosion_spacing,seed),
         base_height(x+erosion_spacing,z,seed), base_height(x-erosion_spacing,z,seed));
+    return mask > 0.0 ? blend(original, relief_sample(x,z), mask) : original;
 }
 
 void tile_heights(float* output, int64_t size, double x, double z, double step, int64_t seed) {
+    if (has_relief && seed == 413 && x > relief_x && z > relief_z &&
+        x + (size-1)*step < relief_x + relief_size && z + (size-1)*step < relief_z + relief_size &&
+        relief_mask(x,z,seed) == 1.0 && relief_mask(x+(size-1)*step,z+(size-1)*step,seed) == 1.0 &&
+        (x > 4600.0 || z > 5300.0 || z+(size-1)*step < -4600.0)) {
+        for (int64_t y=0; y<size; ++y)
+            for (int64_t i=0; i<size; ++i)
+                output[y*size+i] = static_cast<float>(relief_sample(x+i*step,z+y*step));
+        return;
+    }
     if (step != erosion_spacing) {
         for (int64_t y=0; y<size; ++y)
             for (int64_t i=0; i<size; ++i)
@@ -83,9 +121,13 @@ void tile_heights(float* output, int64_t size, double x, double z, double step, 
         const auto centre=(y+1)%3;
         const auto south=(y+2)%3;
         fill_row(strip[south],y+1);
-        for (int64_t i=1; i<=size; ++i)
-            output[y*size+i-1]=static_cast<float>(transported_height(strip[centre][i],
-                strip[north][i],strip[south][i],strip[centre][i+1],strip[centre][i-1]));
+        for (int64_t i=1; i<=size; ++i) {
+            const double px = x+(i-1)*step, pz = z+y*step;
+            const double mask = relief_mask(px,pz,seed);
+            const double h = transported_height(strip[centre][i],
+                strip[north][i],strip[south][i],strip[centre][i+1],strip[centre][i-1]);
+            output[y*size+i-1] = static_cast<float>(mask > 0.0 ? blend(h,relief_sample(px,pz),mask) : h);
+        }
     }
 }
 
@@ -97,14 +139,34 @@ GDExtensionInterfaceVariantDestroy destroy;
 GDExtensionInterfaceVariantConstruct construct;
 GDExtensionInterfaceVariantCall invoke;
 GDExtensionInterfacePackedFloat32ArrayOperatorIndex float_index;
+GDExtensionInterfacePackedByteArrayOperatorIndexConst byte_index;
+GDExtensionTypeFromVariantConstructorFunc to_bytes;
 GDExtensionVariantFromTypeConstructorFunc from_int,from_float,from_array;
 GDExtensionTypeFromVariantConstructorFunc to_float,to_int,to_array;
 struct alignas(16) Slot { unsigned char opaque[64]; };
-Slot klass, base, sample_name, tile_name, resize_name;
+Slot klass, base, sample_name, tile_name, resize_name, relief_name;
 
 template<class T> T fn(const char *name) { return reinterpret_cast<T>(proc(name)); }
 int64_t integer(GDExtensionConstVariantPtr v) { int64_t n=0; to_int(&n,const_cast<void *>(v)); return n; }
 double number(GDExtensionConstVariantPtr v) { double n=0; to_float(&n,const_cast<void *>(v)); return n; }
+
+void load_relief(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
+                 GDExtensionInt nargs,GDExtensionVariantPtr,GDExtensionCallError *err) {
+    if (nargs != 2 || integer(args[1]) != relief_side*relief_side*2) {
+        err->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
+        return;
+    }
+    if (!has_relief) {
+        Slot bytes;
+        to_bytes(&bytes,const_cast<void *>(args[0]));
+        const auto *src = byte_index(&bytes,0);
+        for (int i=0; i<relief_side*relief_side; ++i)
+            relief[i] = static_cast<int16_t>(src[i*2] | uint16_t(src[i*2+1]) << 8);
+        get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY)(&bytes);
+        has_relief = true;
+    }
+    err->error = GDEXTENSION_CALL_OK;
+}
 
 void sample(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
             GDExtensionInt nargs,GDExtensionVariantPtr out,GDExtensionCallError *err) {
@@ -152,7 +214,7 @@ void bind(Slot& name,GDExtensionClassMethodCall function,GDExtensionVariantType 
     }
     result.type=result_type;result.name=&empty;result.class_name=&empty;result.hint_string=&hint;result.usage=6;
     info.name=&name;info.call_func=function;info.method_flags=GDEXTENSION_METHOD_FLAG_NORMAL|GDEXTENSION_METHOD_FLAG_STATIC;
-    info.has_return_value=true;info.return_value_info=&result;
+    info.has_return_value=result_type!=GDEXTENSION_VARIANT_TYPE_NIL;info.return_value_info=&result;
     info.argument_count=count;info.arguments_info=arguments;info.arguments_metadata=metadata;
     fn<GDExtensionInterfaceClassdbRegisterExtensionClassMethod>("classdb_register_extension_class_method")(library,&klass,&info);
     for(uint32_t i=0;i<count;i++)get_dtor(GDEXTENSION_VARIANT_TYPE_STRING_NAME)(&argument_names[i]);
@@ -167,14 +229,17 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     from_array=from(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY);
     to_int=to(GDEXTENSION_VARIANT_TYPE_INT);to_float=to(GDEXTENSION_VARIANT_TYPE_FLOAT);
     to_array=to(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY);
+    to_bytes=to(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY);
     name_new=fn<GDExtensionInterfaceStringNameNewWithUtf8Chars>("string_name_new_with_utf8_chars");
     destroy=fn<GDExtensionInterfaceVariantDestroy>("variant_destroy");
     construct=fn<GDExtensionInterfaceVariantConstruct>("variant_construct");
     invoke=fn<GDExtensionInterfaceVariantCall>("variant_call");
     get_dtor=fn<GDExtensionInterfaceVariantGetPtrDestructor>("variant_get_ptr_destructor");
     float_index=fn<GDExtensionInterfacePackedFloat32ArrayOperatorIndex>("packed_float32_array_operator_index");
+    byte_index=fn<GDExtensionInterfacePackedByteArrayOperatorIndexConst>("packed_byte_array_operator_index_const");
     name_new(&klass,"SkyTerrainKernel");name_new(&base,"RefCounted");name_new(&sample_name,"height_m");
     name_new(&tile_name,"height_tile");name_new(&resize_name,"resize");
+    name_new(&relief_name,"load_relief");
     GDExtensionClassCreationInfo6 ci{};
     ci.is_abstract=true;ci.is_exposed=true;
     ci.free_instance_func=[](void *,GDExtensionClassInstancePtr){};
@@ -185,11 +250,15 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     const char *tile_labels[]{"x","z","size","step","seed"};
     bind(sample_name,sample,GDEXTENSION_VARIANT_TYPE_FLOAT,sample_args,sample_labels,3);
     bind(tile_name,tile,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,tile_args,tile_labels,5);
+    const GDExtensionVariantType relief_args[]{GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,GDEXTENSION_VARIANT_TYPE_INT};
+    const char *relief_labels[]{"elevations","byte_count"};
+    bind(relief_name,load_relief,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,relief_labels,2);
 }
 void deinitialize(void *,GDExtensionInitializationLevel level) {
     if(level!=GDEXTENSION_INITIALIZATION_SCENE)return;
     fn<GDExtensionInterfaceClassdbUnregisterExtensionClass>("classdb_unregister_extension_class")(library,&klass);
     const auto dtor=get_dtor(GDEXTENSION_VARIANT_TYPE_STRING_NAME);
+    dtor(&relief_name);
     dtor(&resize_name);dtor(&tile_name);dtor(&sample_name);dtor(&base);dtor(&klass);
 }
 }

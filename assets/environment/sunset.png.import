@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d11ydp6vn8q5f"
-path="res://.godot/imported/rock_color.jpg-cbf876e3f69920e731c6caa92a9c2485.ctex"
+uid="uid://bo8qk5ikvjs5n"
+path="res://.godot/imported/sunset.png-3a217aaf290bb138d704917bf9d5fcb1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/surface/scans/rock_color.jpg"
-dest_files=["res://.godot/imported/rock_color.jpg-cbf876e3f69920e731c6caa92a9c2485.ctex"]
+source_file="res://assets/environment/sunset.png"
+dest_files=["res://.godot/imported/sunset.png-3a217aaf290bb138d704917bf9d5fcb1.ctex"]
 
 [params]
 
@@ -37,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

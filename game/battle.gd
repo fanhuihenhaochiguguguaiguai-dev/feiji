@@ -114,7 +114,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	camera.fov = 53.0
 	camera.current = true
 	var absolute_start := start_position(selected_mode, operation, use_runway)
-	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, false, prepared)
+	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, prepared)
 	var p := world.local_position(absolute_start)
 	player = _make_plane(str(profile.state.selected), 0)
 	p.y = world.height(p) + player.type.gearClearance + 0.12 if use_runway else maxf(p.y, world.height(p) + 175.0)
@@ -198,10 +198,10 @@ func _exhaust_meshes(span: float) -> Array:
 			var flame := ShaderMaterial.new()
 			flame.shader = ExhaustShader
 			flame.set_shader_parameter("tint", Color("#6688fb") if k == 0 else Color("#ffd694"))
-			flame.set_shader_parameter("intensity", 1.8 if k == 0 else 3.9)
+			flame.set_shader_parameter("intensity", 1.18 if k == 0 else 2.65)
 			flame.set_shader_parameter("bias", 0.13 if k == 0 else 0.55)
 			exhaust_materials.append(flame)
-		exhaust_materials.append(effects.emissive(Color("#adc7ff"), 4.6))
+		exhaust_materials.append(effects.emissive(Color("#adc7ff"), 2.7))
 	var models := []
 	for k in 2:
 		var cone := CylinderMesh.new()

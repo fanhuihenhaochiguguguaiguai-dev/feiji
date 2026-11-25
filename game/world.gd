@@ -10,10 +10,15 @@ const UPLOAD_BUDGET := 2
 const RADIUS := 2
 const SKY = preload("res://shaders/sky.gdshader")
 const Ocean = preload("res://game/ocean.gd")
-const ROCK = preload("res://assets/surface/scans/rock_color.jpg")
-const LOWLAND = preload("res://assets/surface/scans/sand_color.jpg")
-const NORMAL_ROCK = preload("res://assets/surface/scans/rock_normal.png")
-const NORMAL_LOWLAND = preload("res://assets/surface/scans/sand_normal.png")
+const ROCK = preload("res://assets/environment/rock-height.webp")
+const LOWLAND = preload("res://assets/environment/sand-height.webp")
+const NORMAL_ROCK = preload("res://assets/environment/rock-rough.webp")
+const NORMAL_LOWLAND = preload("res://assets/environment/sand-rough.webp")
+const ATMOSPHERE = preload("res://assets/environment/air-scattering.png")
+const FIELD_DATA := "res://assets/environment/bay.height"
+const PANORAMA_RANGE := 2.34
+static var relief_ready := false
+
 const DENSITY = preload("res://assets/surface/cloud-density.png")
 
 var terrain: Terrain3D
@@ -39,10 +44,10 @@ var coast_enabled := false
 var cloud_material: ShaderMaterial
 var flight_environment: Environment
 
-static func opening_tiles(start: Vector3, showcase: bool) -> Array[Vector2i]:
+static func opening_tiles(start: Vector3) -> Array[Vector2i]:
 	var centre := Vector2i(floori(start.x / TILE), floori(start.z / TILE))
 	var coordinates: Array[Vector2i] = []
-	for z in range(-2, 3 if showcase else 2):
+	for z in range(-2, 2):
 		for x in range(-2, 3):
 			coordinates.append(centre + Vector2i(x, z))
 	return coordinates
@@ -50,15 +55,16 @@ static func opening_tiles(start: Vector3, showcase: bool) -> Array[Vector2i]:
 func local_position(absolute_position: Vector3) -> Vector3:
 	return absolute_position - Vector3(origin.x * TILE, 0.0, origin.y * TILE)
 
-func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase := false, prepared := {}) -> void:
+func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared := {}) -> void:
 	climate = theatre
-	coast_enabled = not showcase and DisplayServer.get_name() != "headless"
+	coast_enabled = DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
-	_add_environment(showcase)
+	prepare_relief()
+	flight_environment = add_environment(self, theatre)
+	cloud_material = flight_environment.sky.sky_material
 	rider = Node3D.new()
 	add_child(rider)
-	if not showcase:
-		origin = Vector2i(floori(start.x / TILE), floori(start.z / TILE))
+	origin = Vector2i(floori(start.x / TILE), floori(start.z / TILE))
 	cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
 	rider.position = local_position(start)
 	terrain = Terrain3D.new()
@@ -69,87 +75,101 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, showcase :
 	terrain.collision_mode = 0
 	terrain.free_editor_textures = false
 	add_child(terrain)
-	terrain.material.world_background = 1
+	terrain.material.world_background = Terrain3DMaterial.NONE
 	terrain.material.set_auto_shader_enabled(true)
-	terrain.material.set_dual_scaling_enabled(true)
-	terrain.material.texture_filtering = 1
-	terrain.assets.set_texture_asset(0, _surface("砂砾地表", Color("#b2c1ce") if theatre.snow else Color("#777c64"), 0.33, LOWLAND, NORMAL_LOWLAND))
-	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#a1a8b0") if theatre.snow else Color("#85817b"), 0.42, ROCK, NORMAL_ROCK))
+	terrain.material.set_dual_scaling_enabled(false)
+	terrain.material.set_shader_param("blend_sharpness", 0.26)
+	terrain.material.texture_filtering = Terrain3DMaterial.LINEAR_ANISOTROPIC
+	terrain.assets.set_texture_asset(0, _surface("砂砾地表", Color("#b2c1ce") if theatre.snow else Color("#b3b9a8"), 0.14, LOWLAND, NORMAL_LOWLAND))
+	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#bbc4ce") if theatre.snow else Color("#a6aaa5"), 0.155, ROCK, NORMAL_ROCK))
 	terrain.material.set_shader_param("auto_base_texture", 0)
 	terrain.material.set_shader_param("auto_overlay_texture", 1)
 	terrain.set_clipmap_target(rider)
-	for coord in opening_tiles(start, showcase):
+	for coord in opening_tiles(start):
 		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else bake_tile(coord, seed_value)
-		if showcase:
-			var corner := Vector2(coord) * TILE
-			var apron := Vector2(start.x, start.z) - corner
-			for row in SIZE:
-				for column in SIZE:
-					var distance := apron.distance_to(Vector2(column * STEP, row * STEP))
-					var f := smoothstep(135.0, 1180.0, distance)
-					var idx := row * SIZE + column
-					heights[idx] = lerpf(APRON_HEIGHT - 0.35, minf(heights[idx], APRON_HEIGHT + distance * 0.083), f)
 		_activate(coord, heights)
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
 	terrain.snap()
 	_make_sea()
-	if not showcase:
-		_make_runway()
+	_make_runway()
 
-func _add_environment(showcase: bool) -> void:
-	var light_color := Color(climate.light[0], climate.light[1], climate.light[2])
-	var sunset: bool = not climate.snow and seed_value != 116
-	var direction := Vector3(-0.56, 0.145, -0.82).normalized() if sunset else Vector3(climate.sun[0], climate.sun[1], climate.sun[2]).normalized()
-	if showcase:
-		direction = Vector3(0.38, 0.15, 0.91).normalized()
+static func prepare_relief() -> void:
+	if relief_ready:
+		return
+	relief_ready = true
+	const BYTES := 1025 * 1025 * 2
+	var elevations := FileAccess.get_file_as_bytes(FIELD_DATA).decompress(BYTES, FileAccess.COMPRESSION_GZIP)
+	if elevations.size() == BYTES:
+		ClassDB.class_call_static("SkyTerrainKernel", "load_relief", elevations, elevations.size())
+
+static func add_environment(host: Node3D, theatre: Dictionary, studio := false) -> Environment:
+	var storm: bool = int(theatre.seed) == 116
+	var daylight: bool = theatre.snow
+	var light := Color(1.0, 0.81, 0.65) if studio else Color(1.0, 0.94, 0.86)
+	if storm:
+		light = Color(0.76, 0.83, 0.95)
+	var air := Color("#91a8bf") if daylight else (Color("#788eaa") if storm else Color("#9babc1"))
+	var bearing := Vector3(-0.65, 0.72, -0.24).normalized()
+	var photo_sun := 0.595
+	if daylight:
+		bearing = Vector3(-0.39, 0.744, -0.558).normalized()
+		photo_sun = 0.595
+	elif storm:
+		bearing = Vector3(0.50, 0.218, -0.84).normalized()
+		photo_sun = 0.59
+	if studio:
+		bearing = Vector3(0.47, 0.11, 0.876).normalized()
+		photo_sun = 0.600
+	var yaw := photo_sun - (atan2(bearing.x, -bearing.z) / TAU + 0.5)
+	var image: Texture2D = load("res://assets/environment/%s.png" % ("sunset" if studio else ("dusk" if storm else "day")))
 	var env_node := WorldEnvironment.new()
-	env_node.environment = Environment.new()
-	var environment := env_node.environment
-	flight_environment = environment
-	var panorama := ShaderMaterial.new()
-	cloud_material = panorama
-	panorama.shader = SKY
-	panorama.set_shader_parameter("panorama", load("res://assets/surface/probe-%s.hdr" % ("dusk" if sunset else ("day" if climate.snow else "storm"))))
-	panorama.set_shader_parameter("density", DENSITY)
-	panorama.set_shader_parameter("dusk_sky", preload("res://assets/surface/dusk-panorama.webp"))
-	panorama.set_shader_parameter("sun_direction", direction)
-	panorama.set_shader_parameter("sun_color", light_color)
-	panorama.set_shader_parameter("storm", float(seed_value == 116))
-	panorama.set_shader_parameter("sunset", float(sunset))
-	environment.background_mode = Environment.BG_SKY
-	environment.sky = Sky.new()
-	environment.sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
-	environment.sky.sky_material = panorama
-	environment.sky.radiance_size = Sky.RADIANCE_SIZE_128
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_sky_contribution = 0.9
-	environment.ambient_light_energy = 0.76 if showcase else 0.66
-	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	environment.tonemap_exposure = 1.15
-	environment.glow_enabled = false
-	environment.glow_intensity = 0.37
-	environment.glow_hdr_threshold = 1.4
-	environment.fog_enabled = true
-	environment.fog_light_color = Color("#8a9bb3") if not sunset else Color("#8295ad")
-	environment.fog_sun_scatter = 0.09
-	environment.fog_density = 0.000132 if not showcase else 0.000161
-	environment.fog_aerial_perspective = 0.52
-	add_child(env_node)
+	var env := Environment.new()
+	env_node.environment = env
+	env.background_mode = Environment.BG_SKY
+	env.sky = Sky.new()
+	env.sky.process_mode = Sky.PROCESS_MODE_QUALITY if studio else Sky.PROCESS_MODE_INCREMENTAL
+	env.sky.radiance_size = Sky.RADIANCE_SIZE_128
+	if studio:
+		var photo := PanoramaSkyMaterial.new()
+		photo.panorama = image
+		photo.energy_multiplier = 0.34 * PANORAMA_RANGE
+		env.sky.sky_material = photo
+		env.sky_rotation.y = yaw * TAU
+	else:
+		var panorama := ShaderMaterial.new()
+		panorama.shader = SKY
+		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "density":DENSITY, "scattering":ATMOSPHERE,
+			"sun_direction":bearing, "sun_color":light, "air_color":air, "panorama_offset":yaw, "storm":float(storm)}
+		for key in parameters:
+			panorama.set_shader_parameter(key, parameters[key])
+		env.sky.sky_material = panorama
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_sky_contribution = 0.83
+	env.ambient_light_energy = 0.82 if studio else 0.76
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 0.97 if studio else 1.02
+	env.fog_enabled = not studio
+	env.fog_light_color = air
+	env.fog_sun_scatter = 0.045
+	env.fog_density = 0.00008
+	env.fog_aerial_perspective = 0.46
+	host.add_child(env_node)
 	var sun := DirectionalLight3D.new()
-	sun.light_color = light_color
-	sun.light_energy = 1.8 if sunset else 1.65
+	sun.light_color = light
+	sun.light_energy = (0.78 if storm else 1.21) if not studio else 1.18
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 160.0 if showcase else 450.0
+	sun.directional_shadow_max_distance = 160.0 if studio else 450.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	add_child(sun)
-	sun.look_at_from_position(direction * 100.0, Vector3.ZERO)
-	if showcase:
+	host.add_child(sun)
+	sun.look_at_from_position(bearing * 100.0, Vector3.ZERO)
+	if studio:
 		var fill := DirectionalLight3D.new()
-		fill.light_color = Color("#9ecbff")
-		fill.light_energy = 0.68
-		add_child(fill)
-		fill.rotation_degrees = Vector3(-36, -34, 0)
+		fill.light_color = Color("#b9d7fa")
+		fill.light_energy = 0.59
+		host.add_child(fill)
+		fill.rotation_degrees = Vector3(-31, -42, 0)
+	return env
 
 func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D) -> Terrain3DTextureAsset:
 	var asset := Terrain3DTextureAsset.new()
@@ -158,9 +178,9 @@ func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2
 	asset.set_normal_texture(surface_normal)
 	asset.set_albedo_color(tint)
 	asset.set_uv_scale(texture_scale)
-	asset.set_detiling_rotation(0.68)
-	asset.set_detiling_shift(0.55)
-	asset.set_normal_depth(0.82)
+	asset.set_detiling_rotation(0.0)
+	asset.set_detiling_shift(0.0)
+	asset.set_normal_depth(0.45)
 	return asset
 
 static func bake_tile(coord: Vector2i, seed_id: int) -> PackedFloat32Array:
@@ -215,7 +235,7 @@ func _make_runway() -> void:
 func _make_sea() -> void:
 	ocean = Ocean.new()
 	add_child(ocean)
-	ocean.setup(seed_value == 116)
+	ocean.setup(climate)
 	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
 
 func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
@@ -271,7 +291,7 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 		var low := 640.0 if seed_value == 116 else 1150.0
 		var high := low + (1180.0 if seed_value == 116 else 780.0)
 		var in_cloud := smoothstep(low, low + 170.0, p.y) * (1.0 - smoothstep(high - 215.0, high, p.y))
-		flight_environment.fog_density = 0.000132 + 0.00019 * in_cloud
+		flight_environment.fog_density = 0.00008 + 0.00017 * in_cloud
 	return delta
 
 func _update_shallows(at: Vector3) -> void:
@@ -303,7 +323,7 @@ static func _bake_shallows(corner: Vector2, side: int, step: float, seed_id: int
 	return Image.create_from_data(side, side, false, Image.FORMAT_R8, depth)
 
 func set_quality(scale_value: float) -> void:
-	cloud_material.set_shader_parameter("cloud_samples", 5 if scale_value < 0.74 else 7)
+	cloud_material.set_shader_parameter("cloud_samples", 3 if scale_value < 0.74 else 4)
 	ocean.set_quality(scale_value)
 
 func _publish_and_prefetch(here: Vector2i) -> void:

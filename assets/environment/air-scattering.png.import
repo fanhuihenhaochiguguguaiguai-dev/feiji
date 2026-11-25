@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b14iubagxyec"
-path="res://.godot/imported/sand_color.jpg-31aa77fe440152b5581073304078a148.ctex"
+uid="uid://bou4f5um7ah0v"
+path="res://.godot/imported/air-scattering.png-bf9d17579d109d7ca00e30f3fb6c6cf6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/surface/scans/sand_color.jpg"
-dest_files=["res://.godot/imported/sand_color.jpg-31aa77fe440152b5581073304078a148.ctex"]
+source_file="res://assets/environment/air-scattering.png"
+dest_files=["res://.godot/imported/air-scattering.png-bf9d17579d109d7ca00e30f3fb6c6cf6.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

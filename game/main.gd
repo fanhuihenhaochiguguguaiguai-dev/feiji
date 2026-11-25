@@ -407,9 +407,16 @@ func _build_showcase() -> void:
 	camera.fov = 34.0
 	camera.far = 18000.0
 	var at := Vector3(-340.0, Landscape.APRON_HEIGHT, 350.0)
-	var env := Landscape.new()
-	showcase.add_child(env)
-	env.configure(catalogue.source.theatres[0], camera, at, true)
+	Landscape.add_environment(showcase, catalogue.source.theatres[0], true)
+	var ridges := (load("res://assets/environment/airfield-ridges.glb") as PackedScene).instantiate() as Node3D
+	ridges.position = at
+	var baked := StandardMaterial3D.new()
+	baked.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	baked.vertex_color_use_as_albedo = true
+	for surface in ridges.find_children("*", "MeshInstance3D", true, false):
+		surface.material_override = baked
+		surface.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	showcase.add_child(ridges)
 	showcase_aircraft = Node3D.new()
 	showcase_aircraft.position = at + Vector3(0.0, 1.5, 0.0)
 	showcase.add_child(showcase_aircraft)
@@ -418,15 +425,14 @@ func _build_showcase() -> void:
 	tarmac.size = Vector2(260.0, 120)
 	airfield.mesh = tarmac
 	airfield.position = at + Vector3(0.0, 0.08, 0.0)
-	var wet := StandardMaterial3D.new()
+	var wet := ORMMaterial3D.new()
 	wet.albedo_texture = preload("res://assets/studio/tarmac.webp")
 	wet.albedo_color = Color("#929ba4")
-	wet.metallic = 0.44
-	wet.roughness = 0.36
+	wet.orm_texture = preload("res://assets/studio/tarmac-orm.png")
 	wet.normal_enabled = true
-	wet.normal_scale = 0.26
+	wet.normal_scale = 0.19
 	wet.normal_texture = preload("res://assets/studio/tarmac-normal.png")
-	wet.uv1_scale = Vector3(5.5, 3.1, 1.0)
+	wet.uv1_scale = Vector3(3.8, 1.8, 1.0)
 	airfield.material_override = wet
 	showcase.add_child(airfield)
 	var architecture: Node3D = (load("res://assets/studio/hangar-dusk.glb") as PackedScene).instantiate()
@@ -551,7 +557,8 @@ func _show_loading(title: String) -> void:
 
 func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dictionary:
 	var start := Battle.start_position(mode, operation, runway)
-	var tiles := Landscape.opening_tiles(start, false)
+	Landscape.prepare_relief()
+	var tiles := Landscape.opening_tiles(start)
 	var seed_value := int(catalogue.source.theatres[int(operation.get("region", 0))].seed)
 	var ids := [str(profile.state.selected)]
 	if mode == "free":

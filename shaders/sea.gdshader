@@ -5,7 +5,7 @@ uniform vec2 world_offset;
 uniform vec4 wake;
 uniform float wake_strength = 0.0;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
-uniform vec4 scatter_color : source_color = vec4(0.067, 0.204, 0.224, 1.0);
+uniform vec4 scatter_color : source_color = vec4(0.098, 0.264, 0.277, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
 uniform sampler2D coast_depth : repeat_disable, filter_linear;
 uniform vec4 coast_area = vec4(0.0);
@@ -26,8 +26,9 @@ void swell(vec2 axis, float length_m, float amplitude, float phase, vec2 point, 
 void vertex() {
 	vec2 local = VERTEX.xz;
 	float radial = max(abs(local.x), abs(local.y));
-	// Keep metre spacing around the flight path and extend the outer rings to the horizon.
-	float factor = 1.0 + 46.0 * pow(clamp(radial / 256.0, 0.0, 1.0), 4.8);
+	// Let the outer rings disappear into the air perspective before reaching the horizon.
+	float ring = clamp(radial / 256.0, 0.0, 1.0);
+	float factor = 1.0 + 46.0 * pow(ring, 4.8) + 144.0 * pow(ring, 15.0);
 	VERTEX.xz *= factor;
 	vec2 surface = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz + world_offset;
 	vec3 displacement = vec3(0.0);
@@ -46,14 +47,16 @@ void vertex() {
 
 void fragment() {
 	float distance_m = length(VERTEX);
-	float grazing = 1.0 - clamp(dot(normalize(NORMAL), VIEW), 0.0, 1.0);
 	vec2 uv = water_point.xz;
 	float near_detail = 1.0 - smoothstep(390.0, 1700.0, distance_m);
 	vec2 flow = vec2(0.014, -0.009) * TIME;
-	vec2 fine = (texture(shore_noise, uv * 0.085 + flow).rg - texture(shore_noise, uv * 0.051 - flow * 0.65).gr) * 0.22;
+	vec2 fine = vec2(0.0);
+	if (near_detail > 0.0) {
+		fine = (texture(shore_noise, uv * 0.087 + flow).rg - texture(shore_noise, uv * 0.047 - flow * 0.7).gr) * 0.135;
+	}
 	vec2 gradient = long_slope * 0.73 + fine * near_detail;
 	float foam = 0.0;
-	if (spectral_enabled) {
+	if (spectral_enabled && near_detail > 0.0) {
 		vec4 outer = texture(spectral_normals, vec3(uv / 160.0, 0));
 		vec4 inner = texture(spectral_normals, vec3(uv / 39.0, 1));
 		gradient += (outer.xy * 0.8 + inner.xy * 0.65) * near_detail;
@@ -61,27 +64,33 @@ void fragment() {
 	} else {
 		foam = smoothstep(0.76, 1.25, water_point.y) * near_detail * 0.22;
 	}
-	vec2 delta = uv - wake.xy;
-	float along = -dot(delta, wake.zw);
-	float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
-	float wake_line = exp(-max(along, 0.0)*0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
-	foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
-	float shallows = 0.0;
+	if (wake_strength > 0.0 && near_detail > 0.0) {
+		vec2 delta = uv - wake.xy;
+		float along = -dot(delta, wake.zw);
+		float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
+		float wake_line = exp(-max(along, 0.0)*0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
+		foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
+	}
+	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
+	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
+	float angle = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+	vec3 water = deep.rgb;
 	if (coast_area.w > 0.5 && distance_m < 2200.0) {
 		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
 		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
 		if (edge > 0.0) {
 			float sea_floor = texture(coast_depth, shore_uv).r * 63.75 - 32.0;
-			shallows = smoothstep(-23.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * smoothstep(0.0, 0.11, edge);
+			float shore_weight = smoothstep(0.0, 0.11, edge);
+			float shallows = smoothstep(-20.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * shore_weight;
+			float immersion = max(0.3, -sea_floor) / max(0.72, angle);
+			water += scatter_color.rgb * exp(-vec3(0.32, 0.137, 0.063) * immersion) * (0.62 * shore_weight);
 			float breaker = 0.5 + 0.5 * sin(sea_floor * 0.72 + TIME * 1.55 + fine.x * 12.0);
 			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
 		}
 	}
-	float zenith_blend = pow(grazing, 3.5);
-	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
-	NORMAL = normalize((VIEW_MATRIX * vec4(normal_world, 0.0)).xyz);
-	ALBEDO = mix(mix(deep.rgb, scatter_color.rgb, smoothstep(-0.15, 1.45, water_point.y) * 0.36 + shallows * 0.37), vec3(0.44, 0.62, 0.64), clamp(foam, 0.0, 0.80));
-	ROUGHNESS = mix(0.28 + zenith_blend * 0.065, 0.55, foam);
-	METALLIC = 0.025;
-	SPECULAR = 0.29 + 0.19 * zenith_blend;
+	float fresnel = pow(1.0 - angle, 5.0);
+	ALBEDO = mix(water, vec3(0.49, 0.61, 0.62), clamp(foam, 0.0, 0.82));
+	ROUGHNESS = mix(0.30 + fresnel * 0.14, 0.54, foam);
+	METALLIC = 0.0;
+	SPECULAR = (0.23 + 0.24 * fresnel) * (1.0 - foam * 0.58);
 }

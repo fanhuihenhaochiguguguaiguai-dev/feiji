@@ -322,7 +322,8 @@ func tick(dt: float, shots: Array[Dictionary], camera: Camera3D) -> void:
 		item.vel *= drag
 		item.node.scale = Vector3.ONE * item.size * (1.0 + t * (0.4 if item.spark else 1.65))
 		var fading: Color = item.tint
-		fading.a *= pow(1.0 - t, 0.9)
+		var rise := 1.0 if item.spark else smoothstep(0.0, 0.13 if item.fire else 0.24, t + 0.026)
+		fading.a *= rise * pow(1.0 - t, 0.9)
 		item.node.set_instance_shader_parameter("life", t + item.uv_shift)
 		item.node.set_instance_shader_parameter("tint", fading)
 	for slot in active_impacts.keys():

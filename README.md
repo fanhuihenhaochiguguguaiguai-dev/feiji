@@ -1,6 +1,6 @@
-# 苍穹锋刃 V18.2
+# 苍穹锋刃 V18.3
 
-独立的安卓原生空战工程，自 V18.1 Native 的 `e170fc88a34d9dd6d98c6ef1c95c299f5edecdec` 派生。`v18.1-native` 保留为回退基线。
+独立的安卓原生空战工程，自 V18.2 Native 的 `4940dc6990c305fb751bb4bcdc2034a82d91525a` 派生。`v18.2-native` 保留为回退基线。
 
 ## 运行
 
@@ -10,7 +10,7 @@
 
 手机在 HUD 空白区滑动飞行，双击可掉头。动力自动保持额定推力，使用「加速」短时提升推力。桌面可用 WASD 或方向键，空格发射航炮，F 发射导弹，Q 反制，E 躲避，R 掉头，Shift 加速，G 收放起落架。未锁定时仍可发射导弹。
 
-安卓包名沿用 `com.skyblade.nativegame`。同签名覆盖安装后，V18.2 在首次读取时迁移已有 V18.1 档案。新存档使用校验及备份文件。主动退出计入独立退出统计，无结算奖励。
+安卓包名沿用 `com.skyblade.nativegame`，存档格式沿用 V18.2。首次读取 V18.1 档案仍会迁移。存档使用校验及备份文件。主动退出计入独立退出统计，无结算奖励。
 
 ## 本地核对
 
@@ -25,3 +25,11 @@ godot --headless --script res://qa/endurance.gd -- --matches=3
 ```
 
 桌面录制可用 `--rendering-method mobile --rendering-driver vulkan --write-movie out.avi --fixed-fps 30 --script res://qa/desktop.gd -- --output=/absolute/output --pause`。记录中的硬件、帧时间与测试边界见 [替换记录](MIGRATION.md)。
+
+大厅及海岸战区的同机位画面和渲染计时可用下列命令采集。路径应指向工程之外。
+
+```sh
+godot --rendering-method mobile --rendering-driver vulkan --resolution 960x432 --disable-vsync --audio-driver Dummy --fixed-fps 30 -s res://qa/environment.gd -- --output=/tmp/skyblade-environment
+```
+
+构建直接使用仓库中的已烘焙资源。重新制作时，将原始扫描图和高程文件按脚本中的文件名放在同一目录，以 `python tools/build_scenery.py <原图目录>` 重制地形和岩层，以 `godot --headless -s res://tools/bake_sky.gd -- <原图目录>` 重制天空。地形制作需要 GDAL、NumPy、SciPy 和 Pillow。原图及授权见 [场景素材来源](assets/licenses/scenery.txt)。
