@@ -1,6 +1,10 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
-uniform sampler2D flipbook : source_color, filter_linear_mipmap;
+uniform sampler2D flipbook : source_color, repeat_disable, filter_linear_mipmap;
+uniform sampler2D opposite_light : source_color, repeat_disable, filter_linear_mipmap;
+uniform bool relight_smoke = false;
+uniform vec3 sun_direction = vec3(0.0, 1.0, 0.0);
+uniform vec4 sun_color : source_color = vec4(1.0);
 uniform sampler2D depth_tex : hint_depth_texture, repeat_disable, filter_nearest;
 instance uniform float life = 0.0;
 instance uniform vec4 tint : source_color = vec4(1.0);
@@ -10,6 +14,7 @@ instance uniform bool atlas = false;
 instance uniform float roll = 0.0;
 instance uniform float soft_depth = 1.0;
 varying vec3 camera_position;
+varying vec3 local_sun;
 
 void vertex() {
 	float scale_x = length(MODEL_MATRIX[0].xyz);
@@ -21,20 +26,30 @@ void vertex() {
 	VERTEX.xy = mat2(vec2(c, s), vec2(-s, c)) * VERTEX.xy;
 	MODELVIEW_MATRIX = VIEW_MATRIX * aligned;
 	camera_position = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	if (relight_smoke && atlas) {
+		vec3 light = mat3(VIEW_MATRIX) * sun_direction;
+		local_sun = vec3(mat2(vec2(c, -s), vec2(s, c)) * light.xy, light.z);
+	}
 }
 
 void fragment() {
 	vec2 uv = UV;
 	if (atlas) {
-		float f = floor(clamp(life * 15.0, 0.0, 15.0));
+		float f = min(15.0, floor(clamp(life, 0.0, 1.0) * 16.0));
 		uv = (uv + vec2(mod(f, 4.0), floor(f / 4.0))) * 0.25;
 	}
 	vec4 texel = texture(flipbook, uv);
-	float mask = texel.a * smoothstep(0.52, 0.23, length(UV - vec2(0.5)));
+	float mask = texel.a * (1.0 - smoothstep(0.23, 0.52, length(UV - vec2(0.5))));
 	float depth = texture(depth_tex, SCREEN_UV).x;
 	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
 	float soft = smoothstep(0.0, soft_depth, (-behind.z / behind.w) + camera_position.z);
-	ALBEDO = mix(texel.rgb, vec3(0.65, 0.65, 0.67), hidden) * tint.rgb;
+	vec3 shade = mix(texel.rgb, vec3(0.65, 0.65, 0.67), hidden);
+	if (relight_smoke && atlas) {
+		float lit = dot(texel.rgb, max(local_sun, vec3(0.0)))
+			+ dot(texture(opposite_light, uv).rgb, max(-local_sun, vec3(0.0)));
+		shade = vec3(0.27, 0.31, 0.38) + sun_color.rgb * lit * 0.94;
+	}
+	ALBEDO = shade * tint.rgb;
 	EMISSION = ALBEDO * emission_gain;
 	ALPHA = mask * soft * tint.a;
 }

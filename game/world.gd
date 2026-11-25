@@ -88,12 +88,13 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
 	terrain.assets.set_texture_asset(0, _surface("积雪" if snow else "砂砾地表", Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")), 0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45))
 	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#a8b6ca") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.155, ROCK, NORMAL_ROCK))
-	# Terrain3D's automatic overlay weight rises on flatter surfaces. Alpine rock exposure is baked.
-	terrain.material.set_shader_param("auto_base_texture", 1 if coast else 0)
-	terrain.material.set_shader_param("auto_overlay_texture", 0 if snow or coast else 1)
-	if coast:
-		terrain.material.set_shader_param("auto_slope", 2.7)
-		terrain.material.set_shader_param("auto_height_reduction", 0.026)
+	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
+	var exposed_rock := coast or snow
+	terrain.material.set_shader_param("auto_base_texture", 1 if exposed_rock else 0)
+	terrain.material.set_shader_param("auto_overlay_texture", 0 if exposed_rock else 1)
+	if exposed_rock:
+		terrain.material.set_shader_param("auto_slope", 3.55 if snow else 2.7)
+		terrain.material.set_shader_param("auto_height_reduction", 0.0 if snow else 0.026)
 	terrain.set_clipmap_target(rider)
 	for coord in opening_tiles(start):
 		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else bake_tile(coord, seed_value)
@@ -175,8 +176,8 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	sun.look_at_from_position(bearing * 100.0, Vector3.ZERO)
 	if studio:
 		var fill := DirectionalLight3D.new()
-		fill.light_color = Color("#b9d7fa")
-		fill.light_energy = 0.59
+		fill.light_color = Color("#d5e4f2")
+		fill.light_energy = 0.76
 		host.add_child(fill)
 		fill.rotation_degrees = Vector3(-31, -42, 0)
 	return env
@@ -268,7 +269,7 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 		if Rect2i(Vector2i.ZERO, relief_color.get_size()).encloses(source):
 			var colors := relief_color.get_region(source)
 			colors.resize(SIZE + 8, SIZE + 8, Image.INTERPOLATE_BILINEAR)
-			region.color_map = colors.get_region(Rect2i(2, 2, SIZE, SIZE))
+			region.color_map = colors.get_region(Rect2i(6, 6, SIZE, SIZE))
 	region.calc_height_range()
 	terrain.data.add_region(region, false)
 	current[coord] = region

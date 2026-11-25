@@ -36,18 +36,23 @@ vec2 nearby_cloud(vec3 ray, vec3 camera_at, float phase) {
 	if (enter >= leave) { return vec2(0.0); }
 	float step_m = (leave - enter) / float(cloud_samples);
 	float transmit = 1.0;
-	float light = 0.0;
+	float centre = 0.0;
 	for (int i = 0; i < 4; ++i) {
 		if (i >= cloud_samples || transmit < 0.08) { break; }
 		float t = enter + step_m * (float(i) + 0.5);
 		vec3 p = camera_at + ray * t;
 		float fill = shape_at(p, bottom, thickness);
-		float top_light = smoothstep(bottom, bottom + thickness * 0.74, p.y + phase * 145.0);
 		float opacity = 1.0 - exp(-fill * step_m * 0.0019 * (1.0 - smoothstep(4400.0, 6600.0, t)));
-		light += top_light * opacity * transmit;
+		centre += t * opacity * transmit;
 		transmit *= 1.0 - opacity;
 	}
-	return vec2(1.0 - transmit, light);
+	float coverage = 1.0 - transmit;
+	if (coverage < 0.004) { return vec2(0.0); }
+	vec3 centre_point = camera_at + ray * (centre / coverage);
+	// One short sunward lookup shades only the nearby cloud visible to the player.
+	float blocker = shape_at(centre_point + sun_direction * thickness * 0.44, bottom, thickness);
+	float light = exp(-blocker * (2.1 + storm * 0.8)) * (0.66 + phase * 0.34);
+	return vec2(coverage, coverage * light);
 }
 
 void sky() {
@@ -59,8 +64,7 @@ void sky() {
 		COLOR = vec3(AT_CUBEMAP_PASS ? vec2(0.0) : nearby_cloud(ray, POSITION, phase), 0.0);
 	} else {
 		vec2 uv = panorama_uv(ray);
-		// Place the photographed cloud band over the valley without adding distant volume samples.
-		uv.y -= 0.066 * (1.0 - storm) * smoothstep(0.025, 0.23, ray.y) * (1.0 - smoothstep(0.62, 1.0, ray.y));
+		// Keep the original panorama's horizon, cloud shapes and photographed sun on the same rays.
 		vec3 photo = texture(panorama, uv).rgb * panorama_range;
 		vec3 scatter = texture(scattering, vec2(angle * 0.5 + 0.5, clamp(ray.y, 0.0, 1.0))).rgb;
 		vec3 base = photo * mix(0.51, 0.44, storm);
@@ -68,11 +72,12 @@ void sky() {
 		base *= mix(vec3(1.0), vec3(0.60, 0.87, 1.13), clear_air);
 		base = mix(base, vec3(dot(base, vec3(0.21, 0.72, 0.07))) * vec3(0.87, 0.96, 1.12), storm * 0.57);
 		base += scatter * air_color.rgb * (0.17 + phase * 0.11);
-		base = mix(base, air_color.rgb * 0.78, 1.0 - smoothstep(-0.012, 0.073, ray.y));
+		float haze = exp(-max(0.0, ray.y) * 31.0);
+		base = mix(base, air_color.rgb * 0.78, haze * 0.83);
 		if (!AT_CUBEMAP_PASS) {
 			vec2 cloud = clamp(HALF_RES_COLOR.rg, vec2(0.0), vec2(1.0));
-			vec3 shade = air_color.rgb * 0.58;
-			vec3 sunlit = mix(vec3(0.66, 0.74, 0.83), sun_color.rgb * 0.85, 0.25 + phase * 0.3);
+			vec3 shade = air_color.rgb * mix(0.48, 0.36, storm);
+			vec3 sunlit = mix(vec3(0.66, 0.74, 0.83), sun_color.rgb * 0.85, 0.26 + phase * 0.30);
 			base = base * (1.0 - cloud.x) + cloud.x * shade + cloud.y * (sunlit - shade);
 		}
 		COLOR = base;

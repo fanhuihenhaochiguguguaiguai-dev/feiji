@@ -30,7 +30,16 @@ var task := {}
 var mode := ""
 var player: Airframe
 var fleet: Array[Airframe] = []
-var target: Airframe
+var target_life := -1
+var target: Airframe:
+	get:
+		return target if target and target.hp > 0.0 and target.life_id == target_life else null
+	set(contact):
+		var life := contact.life_id if contact else -1
+		if target != contact or target_life != life:
+			target = contact
+			target_life = life
+			locked_time = 0.0
 var locked_time := 0.0
 var queued_missile_target: Airframe
 var queued_missile_life := -1
@@ -108,7 +117,6 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 		1.0 - profile.level_of("armor") * Data.UPGRADE_GAINS.armor)
 	add_child(world)
 	add_child(effects)
-	effects.pool()
 	add_child(audio)
 	audio.mute = profile.state.settings.mute
 	add_child(camera)
@@ -118,6 +126,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	camera.current = true
 	var absolute_start := start_position(selected_mode, operation, use_runway)
 	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, prepared)
+	effects.pool(world.cloud_material)
 	var p := world.local_position(absolute_start)
 	player = _make_plane(str(profile.state.selected), 0)
 	p.y = world.height(p) + player.type.gearClearance + 0.12 if use_runway else maxf(p.y, world.height(p) + 175.0)
@@ -200,6 +209,7 @@ func _exhaust_meshes(span: float) -> Array:
 		for k in 2:
 			var flame := ShaderMaterial.new()
 			flame.shader = ExhaustShader
+			flame.set_shader_parameter("flame_flipbook", Effects.SUSTAINED_FIRE)
 			flame.set_shader_parameter("tint", Color("#6688fb") if k == 0 else Color("#ffd694"))
 			flame.set_shader_parameter("intensity", 1.18 if k == 0 else 2.65)
 			flame.set_shader_parameter("bias", 0.13 if k == 0 else 0.55)
@@ -367,36 +377,36 @@ func _departure_course(at: Vector3) -> Vector3:
 
 func _targeting(dt: float) -> void:
 	var was_locked := is_locked()
-	if target and (target.hp <= 0.0 or player.forward.dot((target.position - player.position).normalized()) < cos(LOCK_ANGLE * 1.34)):
+	var held := target
+	if held and player.forward.dot((held.position - player.position).normalized()) < cos(LOCK_ANGLE * (1.34 if was_locked else 1.19)):
 		target = null
-		locked_time = 0.0
+		held = null
 		seek_due = time
 	if time >= seek_due:
 		seek_due = time + 0.085
-		var best: Airframe
-		var score := -INF
 		var range_m: float = float(missile.range) + profile.level_of("radar") * Data.UPGRADE_GAINS.radar
-		for jet in fleet:
-			if jet == player or jet.hp <= 0.0:
-				continue
-			var offset: Vector3 = jet.position - player.position
-			var distance := offset.length()
-			if distance < 1.0 or distance > range_m:
-				continue
-			var held := jet == target
-			var align := player.forward.dot(offset / distance)
-			if align < cos(LOCK_ANGLE * (1.25 if held else 1.0)):
-				continue
-			var rank := align * 2.7 - distance / 6300.0 + (0.28 if held else 0.0)
-			if (rank > score or (held and was_locked)) and not world.obstruction(player.position, jet.position):
-				score = rank
-				best = jet
-				if held and was_locked:
-					break
-		if best != target:
-			locked_time = 0.0
+		if held and (player.position.distance_to(held.position) > range_m or world.obstruction(player.position, held.position)):
+			target = null
+			held = null
+		if not held:
+			var best: Airframe
+			var score := -INF
+			for jet in fleet:
+				if jet.side == player.side or jet.hp <= 0.0:
+					continue
+				var offset: Vector3 = jet.position - player.position
+				var distance := offset.length()
+				if distance < 1.0 or distance > range_m:
+					continue
+				var align := player.forward.dot(offset / distance)
+				if align < cos(LOCK_ANGLE):
+					continue
+				var rank := align * 2.7 - distance / 6300.0
+				if rank > score and not world.obstruction(player.position, jet.position):
+					best = jet
+					score = rank
 			target = best
-	_refresh_lead(dt, was_locked)
+	_refresh_lead(dt, was_locked and target == held)
 
 func _refresh_lead(dt: float, was_locked: bool) -> void:
 	if target:
@@ -577,7 +587,7 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 		velocity = n * float(gun[1]) + originator.velocity * 0.60
 		power = gun[3] * originator.type.gunPower * (damage_modifiers.x if originator == player else 0.6)
 		originator.shot_at = time + (float(gun[0]) if originator == player else 0.30)
-		effects.puff(start + n * 1.8, n * 22.0, 1.35, 0.09, 1)
+		effects.puff(start + n * 1.8, n * 22.0, 1.35, 0.09, Effects.BURNING)
 	else:
 		if intended and originator == player and start.distance_squared_to(intended.position) > 420.0 * 420.0:
 			# Clear the side of the airframe on launch, then settle into autonomous tracking.
@@ -649,7 +659,7 @@ func _update_shots(dt: float) -> void:
 				if cast.trail.size() > 62:
 					cast.trail.pop_front()
 				if cast.sample_count == 1:
-					effects.puff(at - direction * 2.1, -direction * 18.0, 1.8, 0.15, 1)
+					effects.puff(at - direction * 2.1, -direction * 18.0, 1.25, 0.15, Effects.BURNING)
 					effects.puff(at - direction * 4.0, -direction * 14.0, 2.6, 0.82, 0, 0.62)
 		elif not guided:
 			velocity.y -= 9.81 * dt
@@ -962,7 +972,7 @@ func _render_pose(dt: float) -> void:
 				var wound: Vector3 = jet.position + jet.attitude * Vector3(hit.x, hit.y, hit.z)
 				effects.puff(wound, jet.velocity * 0.15 + Vector3.UP * 8.0, 0.72 + hit.w * 1.7, 1.4, 4 if hit.w > 0.44 else 0, 0.77)
 				if hit.w > 0.48:
-					effects.puff(wound, jet.velocity * 0.35, 0.60 + hit.w * 0.66, 0.31, 1)
+					effects.puff(wound, jet.velocity * 0.35, 0.60 + hit.w * 0.66, 0.40, Effects.BURNING)
 			if jet.load_g > 2.1 or jet.position.y > 1950.0 and speed > 210.0:
 				for sign_side in [-1, 1]:
 					var tip: Vector3 = at + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46 * sign_side

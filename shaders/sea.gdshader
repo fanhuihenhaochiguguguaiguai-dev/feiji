@@ -14,15 +14,11 @@ uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
 uniform sampler2DArray spectral_normals : repeat_enable, filter_linear;
 uniform bool spectral_enabled = false;
 varying vec3 water_point;
-varying vec2 long_slope;
 
-void swell(vec2 axis, float length_m, float amplitude, float phase, vec2 point, inout vec3 displacement, inout vec2 slope) {
-	float k = TAU / length_m;
-	float angle = dot(axis, point) * k + phase;
-	displacement.xz += axis * cos(angle) * amplitude * 0.5;
-	displacement.y += sin(angle) * amplitude;
-	slope += axis * cos(angle) * amplitude * k;
-}
+const vec2 SWELL_AXIS = vec2(0.863, -0.505);
+const float SWELL_K = TAU / 93.0;
+const float OUTER_GAIN = 0.62;
+const float INNER_GAIN = 0.40;
 
 void vertex() {
 	vec2 local = VERTEX.xz;
@@ -32,44 +28,58 @@ void vertex() {
 	float factor = 1.0 + 46.0 * pow(ring, 4.8) + 144.0 * pow(ring, 15.0);
 	VERTEX.xz *= factor;
 	vec2 surface = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz + world_offset;
+	float radius_m = length(VERTEX.xz);
+	float swell_geometry = 1.0 - smoothstep(120.0, 680.0, radius_m);
+	float ripple_geometry = 1.0 - smoothstep(42.0, 155.0, radius_m);
 	vec3 displacement = vec3(0.0);
-	vec2 slope = vec2(0.0);
-	float detail = 1.0 - smoothstep(125.0, 720.0, radial);
-	swell(vec2(0.863, -0.505), 154.0, 0.94, TIME * 0.61, surface, displacement, slope);
-	swell(vec2(0.33, 0.944), 61.0, 0.42, -TIME * 1.04, surface, displacement, slope);
-	if (spectral_enabled) {
-		displacement += texture(spectral_displacement, vec3(surface / 160.0, 0)).xyz * 0.84 * detail;
-		displacement += texture(spectral_displacement, vec3(surface / 39.0, 1)).xyz * 0.46 * detail;
+	if (spectral_enabled && swell_geometry > 0.0) {
+		// The retained FFT packs the result of its last pass in transposed order.
+		displacement = textureLod(spectral_displacement, vec3(surface.yx / 160.0, 0), 0.0).xyz * (OUTER_GAIN * swell_geometry);
+		if (ripple_geometry > 0.0) {
+			displacement += textureLod(spectral_displacement, vec3(surface.yx / 39.0, 1), 0.0).xyz * (INNER_GAIN * ripple_geometry);
+		}
+	} else if (!spectral_enabled) {
+		displacement.y = 0.65 * sin(dot(SWELL_AXIS, surface) * SWELL_K + TIME * 0.79) * swell_geometry;
 	}
-	VERTEX += displacement * detail;
+	VERTEX += displacement;
 	water_point = vec3(surface.x, displacement.y, surface.y);
-	long_slope = slope;
 }
 
 void fragment() {
 	float distance_m = length(VERTEX);
 	vec2 uv = water_point.xz;
-	float near_detail = 1.0 - smoothstep(390.0, 1700.0, distance_m);
+	// Migrate the subpixel slope energy to the reflection lobe using the pixel's world footprint.
+	float footprint = max(length(dFdx(uv)), length(dFdy(uv)));
+	float outer_resolved = 1.0 - smoothstep(1.2, 11.0, footprint);
+	float inner_resolved = 1.0 - smoothstep(0.34, 2.5, footprint);
+	float near_detail = 1.0 - smoothstep(550.0, 1850.0, distance_m);
 	vec2 flow = vec2(0.014, -0.009) * TIME;
 	vec2 fine = vec2(0.0);
-	if (near_detail > 0.0) {
-		fine = (texture(shore_noise, uv * 0.087 + flow).rg - texture(shore_noise, uv * 0.047 - flow * 0.7).gr) * 0.135;
+	if (inner_resolved > 0.0 && near_detail > 0.0) {
+		fine = (texture(shore_noise, uv * 0.17 + flow).rg - vec2(0.5)) * (0.094 * inner_resolved * near_detail);
 	}
-	vec2 gradient = long_slope * 0.73 + fine * near_detail;
+	vec2 gradient = fine;
 	float foam = 0.0;
-	if (spectral_enabled && near_detail > 0.0) {
-		vec4 outer = texture(spectral_normals, vec3(uv / 160.0, 0));
-		vec4 inner = texture(spectral_normals, vec3(uv / 39.0, 1));
-		gradient += (outer.xy * 0.8 + inner.xy * 0.65) * near_detail;
-		foam = smoothstep(0.12, 1.2, outer.w * 0.60 + inner.w * 0.45) * near_detail;
-	} else {
-		foam = smoothstep(0.76, 1.25, water_point.y) * near_detail * 0.22;
+	if (spectral_enabled) {
+		if (outer_resolved > 0.0) {
+			vec4 outer = textureLod(spectral_normals, vec3(uv.yx / 160.0, 0), 0.0);
+			gradient += outer.xy * (OUTER_GAIN * outer_resolved);
+			foam = outer.w * outer_resolved * 0.68;
+		}
+		if (inner_resolved > 0.0) {
+			vec4 inner = textureLod(spectral_normals, vec3(uv.yx / 39.0, 1), 0.0);
+			gradient += inner.xy * (INNER_GAIN * inner_resolved);
+			foam += inner.w * inner_resolved * 0.47;
+		}
+		foam = smoothstep(0.26, 0.84, foam);
+	} else if (outer_resolved > 0.0) {
+		gradient += SWELL_AXIS * cos(dot(SWELL_AXIS, uv) * SWELL_K + TIME * 0.79) * (0.65 * SWELL_K * outer_resolved);
 	}
 	if (wake_strength > 0.0 && near_detail > 0.0) {
 		vec2 delta = uv - wake.xy;
-		float along = -dot(delta, wake.zw);
+		float along = max(0.0, -dot(delta, wake.zw));
 		float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
-		float wake_line = exp(-max(along, 0.0)*0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
+		float wake_line = exp(-along * 0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
 		foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
 	}
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
@@ -89,10 +99,14 @@ void fragment() {
 			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
 		}
 	}
-	float fresnel = pow(1.0 - angle, 5.0);
 	ALBEDO = mix(water, vec3(0.49, 0.61, 0.62), clamp(foam, 0.0, 0.82));
-	ROUGHNESS = mix(0.30 + fresnel * 0.14, 0.54, foam);
+	float unresolved = 0.066 * (1.0 - outer_resolved) + 0.049 * (1.0 - inner_resolved);
+	ROUGHNESS = mix(sqrt(0.068 + unresolved), 0.59, clamp(foam, 0.0, 1.0));
 	METALLIC = 0.0;
-	SPECULAR = (0.23 + 0.24 * fresnel) * (1.0 - foam * 0.58);
+	float broad_lobe = 1.0 - outer_resolved;
+	float grazing = 1.0 - clamp(dot(VIEW, VIEW_MATRIX[1].xyz), 0.0, 1.0);
+	// After the sampled normal is subpixel, approximate its sky convolution with the shared horizon radiance.
+	EMISSION = air_color.rgb * (broad_lobe * (0.043 + 0.19 * grazing * grazing * grazing));
+	SPECULAR = 0.255 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.38);
 	FOG = vec4(air_color.rgb * 0.78, smoothstep(1800.0, 16600.0, distance_m));
 }

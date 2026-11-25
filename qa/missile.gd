@@ -23,6 +23,7 @@ func run() -> void:
 	results.append(_check_touch_lock(fight))
 	results.append(_check_contact(fight))
 	results.append(_check_lock_camera(fight))
+	results.append(_check_target_continuity(fight))
 	fight.queue_free()
 	await process_frame
 	print(JSON.stringify({"scenarios":results,"failures":failed}, "\t"))
@@ -194,3 +195,30 @@ func _check_lock_camera(fight: Node) -> Dictionary:
 	if not ok:
 		failed += 1
 	return {"scenario":"lock_camera", "normal_fov":normal_fov,"locked_fov":locked_fov,"tracking_error_degrees":rad_to_deg(tracked_angle),"input_has_priority":input_priority,"recovers_after_unlock":recovered,"passed":ok}
+
+func _check_target_continuity(fight: Node) -> Dictionary:
+	var at: Vector3 = fight.world.local_position(Vector3(11450.0, 1900.0, 5150.0))
+	var original = fight.fleet[1]
+	var entrant = fight._make_plane("j10", 1)
+	fight.player.reset(at, Vector3.FORWARD, 240.0, 4200.0)
+	original.reset(at + Vector3(106, 10, -960), Vector3.LEFT, 210.0, 3000.0)
+	entrant.reset(at + Vector3(450, -20, -610), Vector3.LEFT, 210.0, 3000.0)
+	fight._reset_player_spawn()
+	fight.seek_due = 0.0
+	fight._targeting(STEP)
+	var acquired: bool = fight.target == original and not fight.is_locked()
+	entrant.position = at + Vector3(2, -2, -490)
+	for i in 120:
+		fight.time += STEP
+		fight._targeting(STEP)
+	var held: bool = fight.target == original and fight.is_locked()
+	original.reset(at + Vector3(350, 10, -510), Vector3.LEFT, 210.0, 3000.0)
+	var dropped: bool = fight.target == null and not fight.is_locked()
+	fight.time += 0.09
+	fight._targeting(STEP)
+	var reacquired: bool = fight.target == entrant and not fight.is_locked()
+	var ok := acquired and held and dropped and reacquired
+	if not ok:
+		failed += 1
+	return {"scenario":"target_continuity", "captures_original":acquired,"resists_switching":held,
+		"rejects_reused_airframe":dropped,"starts_new_capture":reacquired,"passed":ok}

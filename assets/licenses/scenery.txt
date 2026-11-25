@@ -4,6 +4,8 @@ Relief for the coastal and alpine areas and hangar ridge geometry adapted from t
 https://www.usgs.gov/3d-elevation-program/about-3dep-products-services
 https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
 Source survey request bbox -136.62,58.43,-135.87,58.82 (EPSG:4326). The service adjusted the delivered raster to -136.62,58.25,-135.87,59.00 to preserve its square pixels. Fetched on 2026-11-25, 1281 x 1281 float GeoTIFF with bilinear sampling.
+The alpine sample uses a separate 1100 x 1100 float GeoTIFF fetched from the same service
+on 2026-11-25 at -136.515,58.82525,-136.2525,58.9535 (EPSG:4326), over the same terrain footprint.
 
 Sky photography by Poly Haven, CC0 1.0. Original HDR files resampled to 1024 x 512 and packed with an exposure shoulder into sRGB PNG. Sky shaders and probes restore the stored linear exposure range. The sky and sun use the same panorama alignment.
 https://polyhaven.com/a/qwantani_sunset_puresky
@@ -13,3 +15,14 @@ https://polyhaven.com/license
 
 Rock 04 and Gravelly Sand textures by Poly Haven, CC0 1.0. The existing 1K diffuse and GL normal are packed with the original 1K displacement and roughness maps. See PolyHaven-CC0.txt for asset links.
 The alpine snow texture uses the CC0 gravel color and displacement as its grain source.
+
+Volumetric smoke and sustained flame: Small Campfire by JangaFX, generated in
+EmberGen and released under CC0 1.0. Adapted to a pair of RGB light-response
+atlases with opacity in alpha, and a separate rendered emission atlas.
+https://jangafx.com/software/embergen/download/free-vdb-animations
+
+Short impact fireball: adapted from the Lave Blob sequence in Photo Realistic
+Explosions by fscopel, Creative Commons Attribution 3.0. Changes include frame
+selection, black background removal, color grading and atlas packing.
+https://opengameart.org/content/photo-realistic-explosions
+https://creativecommons.org/licenses/by/3.0/

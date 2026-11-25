@@ -6,6 +6,9 @@ const PRESSURE = preload("res://shaders/pressure.gdshader")
 const TRAIL = preload("res://shaders/trail.gdshader")
 const FIRE = preload("res://assets/surface/combustion.webp")
 const SMOKE = preload("res://assets/surface/soot.webp")
+const SMOKE_OPPOSITE = preload("res://assets/surface/soot-negative.webp")
+const SUSTAINED_FIRE = preload("res://assets/surface/flame-volume.webp")
+const BURNING := 7
 const SPARK = preload("res://assets/surface/spark.webp")
 
 const MISSILE_VISUALS := 28
@@ -45,12 +48,12 @@ func emissive(color: Color, strength: float) -> StandardMaterial3D:
 	m.emission_energy_multiplier = strength
 	return m
 
-func pool() -> void:
+func pool(sky: ShaderMaterial) -> void:
 	tracer = emissive(Color(1.0, 0.74, 0.34), 6.0)
 	glow = emissive(Color(0.38, 0.59, 1.0), 5.8)
 	var ribbon_material := ShaderMaterial.new()
 	ribbon_material.shader = TRAIL
-	ribbon_material.set_shader_parameter("grain", preload("res://assets/surface/cloud-density.png"))
+	ribbon_material.set_shader_parameter("smoke_volume", SMOKE)
 	var stream := MeshInstance3D.new()
 	stream.mesh = ribbon_mesh
 	stream.material_override = ribbon_material
@@ -59,11 +62,16 @@ func pool() -> void:
 	puff_quad.size = Vector2(2, 2)
 	_prepare_projectiles()
 	_prepare_impacts()
-	for atlas in [SMOKE, FIRE, SPARK]:
+	for atlas in [SMOKE, FIRE, SPARK, SUSTAINED_FIRE]:
 		var material := ShaderMaterial.new()
 		material.shader = PARTICLE
 		material.set_shader_parameter("flipbook", atlas)
 		puff_materials.append(material)
+	var smoke := puff_materials[0]
+	smoke.set_shader_parameter("opposite_light", SMOKE_OPPOSITE)
+	smoke.set_shader_parameter("relight_smoke", true)
+	smoke.set_shader_parameter("sun_direction", sky.get_shader_parameter("sun_direction"))
+	smoke.set_shader_parameter("sun_color", sky.get_shader_parameter("sun_color"))
 	for i in 104:
 		var puff := MeshInstance3D.new()
 		puff.mesh = puff_quad
@@ -133,7 +141,8 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	active_puffs[cursor] = true
 	cursor = (cursor + 1) % puffs.size()
 	var flash := kind == 6
-	var fire := kind == 1 or flash
+	var burning := kind == BURNING
+	var fire := kind == 1 or flash or burning
 	var spark := kind == 2
 	var water := kind == 3
 	var tint := Color(1.0, 0.66, 0.36, opacity) if fire else (Color(1.0, 0.86, 0.57, opacity) if spark else Color(0.68, 0.74, 0.8, opacity))
@@ -143,10 +152,12 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 		tint = Color(0.19, 0.17, 0.16, opacity)
 	elif flash:
 		tint = Color(1.0, 0.96, 0.85, opacity)
+	elif burning:
+		tint = Color(1.0, 0.89, 0.76, opacity)
 	item.node.position = at
 	item.node.scale = Vector3.ONE * size
 	item.node.visible = delay == 0.0
-	var material := 1 if fire else (2 if spark else 0)
+	var material := 3 if burning else (1 if fire else (2 if spark else 0))
 	if item.kind != material:
 		item.kind = material
 		item.node.material_override = puff_materials[material]
@@ -156,7 +167,7 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 	item.node.set_instance_shader_parameter("life", 0.0)
 	item.node.set_instance_shader_parameter("soft_depth", clampf(size * 0.26, 0.42, 5.0))
 	item.node.set_instance_shader_parameter("roll", randf_range(-PI, PI))
-	item.node.set_instance_shader_parameter("emission_gain", 8.0 if flash else (5.5 if fire else (6.0 if spark else 0.0)))
+	item.node.set_instance_shader_parameter("emission_gain", 5.8 if flash else (3.6 if burning else (3.4 if fire else (6.0 if spark else 0.0))))
 	item.left = span
 	item.total = span
 	item.delay = delay
@@ -175,6 +186,8 @@ func prime(at: Vector3) -> void:
 	tracers.set_instance_transform(0, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 0.003), at))
 	tracers.visible_instance_count = 1
 	puff(at, Vector3.ZERO, 0.12, 0.05, 1)
+	puff(at, Vector3.ZERO, 0.12, 0.05, BURNING)
+	puff(at, Vector3.ZERO, 0.12, 0.05, 0)
 	update_heat(at, Quaternion.IDENTITY, true)
 	heat_wake.scale = Vector3.ONE * 0.055
 
@@ -252,7 +265,13 @@ func _prepare_projectiles() -> void:
 	flame.height = 4.7
 	flame.radial_segments = 5
 	flame.rings = 0
-	flame.material = emissive(Color("#ffc36b"), 7.0)
+	var plume_material := ShaderMaterial.new()
+	plume_material.shader = preload("res://shaders/exhaust.gdshader")
+	plume_material.set_shader_parameter("flame_flipbook", SUSTAINED_FIRE)
+	plume_material.set_shader_parameter("tint", Color("#ff9750"))
+	plume_material.set_shader_parameter("intensity", 4.8)
+	plume_material.set_shader_parameter("bias", 0.45)
+	flame.material = plume_material
 	for i in MISSILE_VISUALS:
 		var shell := MeshInstance3D.new()
 		shell.mesh = body
