@@ -9,8 +9,8 @@ const Landscape = preload("res://game/world.gd")
 const FlightAudio = preload("res://game/flight_audio.gd")
 const Effects = preload("res://game/effects.gd")
 const MISSILE_CYCLE := 0.96
-const COUNTER_CYCLE := 4.4
-const EVADE_CYCLE := 3.6
+const COUNTER_CYCLE := 1.0
+const EVADE_CYCLE := 1.0
 const LOCK_ANGLE := 0.195
 const CONTACT_DISTANCE := [100.0,200.0,300.0,500.0,750.0,1000.0,1500.0,2000.0,3000.0,4000.0,5000.0,6000.0]
 const CONTACT_PIXELS := [80.0,60.0,52.0,44.0,38.0,32.0,28.0,24.0,20.0,16.0,14.0,12.0]
@@ -735,13 +735,10 @@ func _update_shots(dt: float) -> void:
 				first_hit = hit
 				victim = jet
 				surface = start.lerp(end, hit)
-		var clearance := toward.y - maxf(0.0, world.height(toward))
-		if clearance < 0.0:
-			var from_clearance := maxf(0.0, at.y - maxf(0.0, world.height(at)))
-			var ground_hit := from_clearance / (from_clearance - clearance)
-			if ground_hit < first_hit:
-				first_hit = ground_hit
-				victim = null
+		var ground_hit := world.first_surface_contact(at, toward)
+		if ground_hit < first_hit:
+			first_hit = ground_hit
+			victim = null
 		if first_hit <= 1.0:
 			var contact := at.lerp(toward, first_hit)
 			# Keep the authoritative sweep contact for visuals when the projectile leaves the active set.
@@ -750,7 +747,8 @@ func _update_shots(dt: float) -> void:
 				_apply_hit(cast, victim, contact, surface)
 			else:
 				if guided:
-					effects.impact(contact, 1, contact.y <= 1.0)
+					var water := contact.y <= 1.0 and world.height(contact) <= 0.0
+					effects.impact(contact, 1, water, Vector3.ZERO, Vector3.UP if water else world.surface_normal(contact))
 				_expire(cast, contact)
 			continue
 		cast.previous = at

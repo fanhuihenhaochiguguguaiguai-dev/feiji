@@ -373,13 +373,15 @@ func _draw_action(item: Dictionary) -> void:
 		_panel(Rect2(at - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), 9.0, Color("#153249e0") if active else Color("#0e1e30bf"), Color(color, 0.43))
 	_symbol(at + Vector2(0, -10), item.icon, color)
 	_center_text(at + Vector2(0, 21), item.label, 16, label)
-	if cool > 0.0:
-		var step_count := ceili(clampf(cool, 0, 1) * 42.0)
+	cool = clampf(cool, 0.0, 1.0)
+	if cool >= 0.99999:
+		draw_circle(at, radius - 1.0, Color("#050d19d9"), true, -1, true)
+	elif cool > 0.0001:
+		var step_count := ceili(cool * 42.0)
 		var wedge := PackedVector2Array([at])
 		for i in range(step_count + 1):
-			wedge.append(at + Vector2.UP.rotated(TAU * minf(cool, i / 42.0)) * (radius - 1.0))
-		if wedge.size() >= 3:
-			draw_colored_polygon(wedge, Color("#050d19d9"))
+			wedge.append(at + Vector2.UP.rotated(TAU * cool * i / step_count) * (radius - 1.0))
+		draw_colored_polygon(wedge, Color("#050d19d9"))
 
 func _symbol(at: Vector2, icon: String, color: Color) -> void:
 	match icon:

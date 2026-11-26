@@ -14,9 +14,11 @@ const SUSTAINED_FIRE = preload("res://assets/surface/flame-volume.webp")
 const BURNING := 7
 const SPARK = preload("res://assets/surface/spark.webp")
 const COMBUSTION_GRID = preload("res://assets/surface/combustion-volume.png")
+const WRECK_SMOKE_GRID = preload("res://assets/surface/wreck-smoke.png")
 const COMBUSTION_SHADER = preload("res://shaders/combustion_volume.gdshader")
 const PLUME_SHADER = preload("res://shaders/exhaust.gdshader")
 const MISSILE_MODEL = preload("res://assets/surface/projectile.glb")
+const MISSILE_NOZZLE := 1.65
 const MISSILE_PLUME := Vector3(0.79, 4.7, 0.79)
 
 const MISSILE_VISUALS := 28
@@ -45,6 +47,7 @@ var puff_materials: Array[ShaderMaterial] = []
 var debris_cursor := 0
 var pressure_material := ShaderMaterial.new()
 static var combustion_field: ImageTexture3D
+static var wreck_smoke_field: ImageTexture3D
 var heat_wake := MeshInstance3D.new()
 var cursor := 0
 var impact_slot := 0
@@ -68,8 +71,9 @@ func jet_plume(extent: Vector3, missile := false) -> MeshInstance3D:
 	if not plume_materials.has(missile):
 		var material := ShaderMaterial.new()
 		material.shader = PLUME_SHADER
-		material.set_shader_parameter("tint", Color("#ff8652") if missile else Color("#496ee5"))
-		material.set_shader_parameter("intensity", 4.15 if missile else 2.65)
+		material.set_shader_parameter("tint", Color("#ff7542") if missile else Color("#496ee5"))
+		material.set_shader_parameter("intensity", 4.61 if missile else 2.65)
+		material.set_shader_parameter("missile_exhaust", missile)
 		plume_materials[missile] = material
 	var plume := MeshInstance3D.new()
 	plume.mesh = plume_mesh
@@ -112,7 +116,12 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 	if DisplayServer.get_name() != "headless":
 		var combustion_material := ShaderMaterial.new()
 		combustion_material.shader = COMBUSTION_SHADER
-		combustion_material.set_shader_parameter("combustion", _load_combustion())
+		if not combustion_field:
+			combustion_field = _load_volume_atlas(COMBUSTION_GRID, 32, 6, 8, Image.FORMAT_RGBA8)
+		if not wreck_smoke_field:
+			wreck_smoke_field = _load_volume_atlas(WRECK_SMOKE_GRID, 48, 11, 12, Image.FORMAT_RG8)
+		combustion_material.set_shader_parameter("combustion", combustion_field)
+		combustion_material.set_shader_parameter("wreck_smoke_field", wreck_smoke_field)
 		combustion_material.set_shader_parameter("daylight", sky.get_shader_parameter("sun_color"))
 		var volume_shape := BoxMesh.new()
 		for i in 10:
@@ -150,20 +159,19 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 		add_child(fragment)
 		fragments.append({"node":fragment, "left":0.0})
 
-static func _load_combustion() -> ImageTexture3D:
-	if combustion_field:
-		return combustion_field
-	var atlas := COMBUSTION_GRID.get_image()
-	atlas.convert(Image.FORMAT_RGBA8)
+static func _load_volume_atlas(source: Texture2D, edge: int, frames: int, columns: int, format: Image.Format) -> ImageTexture3D:
+	var atlas := source.get_image()
+	atlas.convert(format)
 	var slices: Array[Image] = []
-	for layer in 192:
-		slices.append(atlas.get_region(Rect2i(layer % 8 * 32, layer / 8 * 32, 32, 32)))
-	combustion_field = ImageTexture3D.new()
-	combustion_field.create(Image.FORMAT_RGBA8, 32, 32, slices.size(), false, slices)
-	return combustion_field
+	for layer in edge * frames:
+		var row := floori(float(layer) / columns)
+		slices.append(atlas.get_region(Rect2i(layer % columns * edge, row * edge, edge, edge)))
+	var field := ImageTexture3D.new()
+	var result := field.create(format, edge, edge, slices.size(), false, slices)
+	return field if result == OK else null
 
-func _emit_volume(at: Vector3, drift: Vector3, extent: Vector3, span: float, heat: float, density: float, priority: int) -> bool:
-	if volume_pool.is_empty():
+func _emit_volume(at: Vector3, drift: Vector3, extent: Vector3, span: float, heat: float, density: float, priority: int, wreck_smoke := false) -> bool:
+	if volume_pool.is_empty() or (wreck_smoke and not wreck_smoke_field):
 		return false
 	var distance := maxf(1.0, view.position.distance_to(at))
 	var screen_span := extent[extent.max_axis_index()] * view.get_viewport().get_visible_rect().size.y / (
@@ -186,14 +194,17 @@ func _emit_volume(at: Vector3, drift: Vector3, extent: Vector3, span: float, hea
 		return false
 	var node := volume_pool[slot]
 	var steps := 5.0 if screen_span < 36.0 else (7.0 if screen_span < 125.0 else 9.0)
+	if wreck_smoke:
+		steps = 6.0 if screen_span < 85.0 else (9.0 if screen_span < 200.0 else 12.0)
 	var state := Vector4(0.0, heat, density, steps)
 	node.position = at
 	node.rotation.y = fposmod(at.x * 0.21 + at.z * 0.17, TAU)
 	node.scale = extent
 	node.set_instance_shader_parameter("volume_state", state)
+	node.set_instance_shader_parameter("wreck_smoke", wreck_smoke)
 	node.visible = true
 	active_volumes[slot] = {"state":state, "extent":extent, "span":span, "left":span,
-		"drift":drift, "priority":priority}
+		"drift":drift, "priority":priority, "wreck_smoke":wreck_smoke}
 	return true
 
 func damaged_plume(at: Vector3, velocity: Vector3, severity: float) -> void:
@@ -372,9 +383,9 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 	var layered_volume := (not water and _emit_volume(at + Vector3.UP * radius * 0.34,
 		carried * 0.66 + Vector3.UP * 6.5, Vector3(3.05, 1.94, 3.05) * radius,
 		1.65 if destroyed else 1.05, 1.56 if destroyed else 1.24, 1.40 if destroyed else 1.15, 2 if destroyed else 1))
-	if layered_volume and destroyed and active_volumes.size() < 5:
-		_emit_volume(at + Vector3.UP * radius * 0.38, carried * 0.43 + Vector3.UP * 13.0,
-			Vector3(1.65, 2.10, 1.65) * radius, 2.25, 0.0, 1.43, 1)
+	if layered_volume and destroyed:
+		_emit_volume(at + Vector3.UP * radius * 0.79, carried * 0.30 + Vector3.UP * 3.0,
+			Vector3(2.20, 2.43, 2.06) * radius, 3.40, 0.0, 1.12, 2, true)
 	if water:
 		_emit_splash(at, radius, destroyed)
 		water_impact.emit(at, radius)
@@ -552,7 +563,7 @@ func projectile(slot: int, at: Vector3, direction: Vector3, missile: bool) -> vo
 
 func move_projectile(slot: int, at: Vector3, direction: Vector3, plume_age := -1.0) -> void:
 	if plume_age >= 0.0:
-		trails.extend(slot, at - direction * 1.65, Trails.Style.MISSILE, 1.02)
+		trails.extend(slot, at - direction * MISSILE_NOZZLE, Trails.Style.MISSILE, 1.02)
 	var body: MeshInstance3D = missile_visuals.get(slot)
 	if body:
 		body.position = at
@@ -562,7 +573,7 @@ func move_projectile(slot: int, at: Vector3, direction: Vector3, plume_age := -1
 		if plume.visible:
 			var flare := 1.0 - smoothstep(0.04, 0.36, plume_age)
 			plume.scale = MISSILE_PLUME * Vector3(1.0 + flare * 0.65, 1.0 + flare * 0.38, 1.0 + flare * 0.65)
-			plume.position.y = -1.65 - plume.scale.y * 0.5
+			plume.position.y = -MISSILE_NOZZLE - plume.scale.y * 0.5
 
 func release_projectile(slot: int, contact := Vector3.INF) -> void:
 	var body: MeshInstance3D = missile_visuals.get(slot)
@@ -661,7 +672,8 @@ func tick(dt: float, landscape: Node3D = null) -> void:
 		var age := 1.0 - float(item.left) / float(item.span)
 		volume.position += item.drift * dt
 		item.drift *= drag
-		volume.scale = item.extent * (1.0 + 1.30 * pow(age, 0.74))
+		var growth := 1.0 + 0.21 * age if item.wreck_smoke else 1.0 + 1.30 * pow(age, 0.74)
+		volume.scale = item.extent * growth
 		var state: Vector4 = item.state
 		state.x = age
 		volume.set_instance_shader_parameter("volume_state", state)

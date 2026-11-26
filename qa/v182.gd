@@ -62,8 +62,10 @@ func run() -> void:
 	var wake = battle.effects.trails.emitters[int(missile.slot)]
 	battle._expire(missile)
 	check(wake.closed and battle.effects.trails.slots[wake.row] == wake, "Missile trail survives projectile retirement")
-	battle.effects.trails.advance(3.2)
-	check(battle.effects.trails.slots[wake.row] == null, "Finished volumetric trail returns its slot")
+	battle.effects.trails.advance(2.59)
+	check(battle.effects.trails.slots[wake.row] == wake, "Missile smoke remains until the end of its decay")
+	battle.effects.trails.advance(0.04)
+	check(battle.effects.trails.slots[wake.row] == null, "Expired missile smoke returns its slot at the next trail update")
 	check(battle.player.throttle == 1.0, "Fixed full power")
 	battle.queue_free()
 	await process_frame

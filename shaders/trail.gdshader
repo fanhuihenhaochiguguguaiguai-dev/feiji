@@ -6,6 +6,7 @@ uniform sampler3D density_field : filter_linear, repeat_enable;
 uniform sampler2D scene_depth : hint_depth_texture, filter_nearest, repeat_disable;
 uniform vec3 world_shift;
 uniform float wake_clock;
+uniform vec3 wake_span;
 uniform vec4 daylight : source_color = vec4(1.0);
 uniform vec3 sun_direction = vec3(0.7, 0.6, 0.3);
 
@@ -15,10 +16,13 @@ varying flat vec3 tangent;
 varying flat vec4 dimensions;
 varying flat vec4 state;
 
-float wake_width(float age, int style) {
+float wake_width(float age, int style, float sample_time, float settled) {
 	if (style == 2) { return mix(0.24, 1.65, 1.0 - exp(-age * 2.1)); }
 	if (style == 1) { return mix(0.95, 7.0, 1.0 - exp(-age * 1.45)); }
-	return mix(0.60, 7.8, 1.0 - exp(-age * 1.70));
+	// Carry over the 3b76018 expansion in metres and retain the volume's 3D density.
+	float billow = 0.5 + 0.5 * sin(sample_time * (0.22 * 1.63 / 0.030) + age * 2.7);
+	float spread = smoothstep(0.02, 1.65, age);
+	return 0.55 + (3.10 + billow * 2.1) * spread + settled * (0.73 + billow * 0.46);
 }
 
 vec3 wake_origin(vec4 point, float age, int style) {
@@ -34,8 +38,8 @@ void vertex() {
 	vec4 header = texelFetch(wake_points, ivec2(64, lane), 0);
 	int count = int(header.y);
 	int style = int(header.z);
-	float span = style == 2 ? 0.92 : (style == 1 ? 2.65 : 3.10);
-	state = vec4(float(style), header.w, span, 0.0);
+	float span = wake_span[style];
+	state = vec4(float(style), abs(header.w), span, 0.0);
 	entry = vec3(0.0);
 	tangent = vec3(1.0, 0.0, 0.0);
 	dimensions = vec4(0.0);
@@ -58,8 +62,10 @@ void vertex() {
 		} else {
 			entry = a;
 			tangent = chord / length_m;
-			float width0 = wake_width(age0, style);
-			float width1 = wake_width(age1, style);
+			float settled = header.w < 0.0 && style == 0
+				? max(0.0, wake_clock - texelFetch(wake_points, ivec2(65, lane), 0).w) : 0.0;
+			float width0 = wake_width(age0, style, p.w, settled);
+			float width1 = wake_width(age1, style, q.w, settled);
 			float padding = min(max(width0, width1) * 0.63, length_m * 0.41);
 			dimensions = vec4(length_m, width0, width1, padding);
 			state.w = age0;

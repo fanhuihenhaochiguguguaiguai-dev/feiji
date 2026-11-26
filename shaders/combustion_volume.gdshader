@@ -2,8 +2,10 @@ shader_type spatial;
 render_mode unshaded, blend_mix, cull_front, depth_draw_never, depth_test_disabled, shadows_disabled;
 
 uniform sampler3D combustion : repeat_disable, filter_linear;
+uniform sampler3D wreck_smoke_field : repeat_disable, filter_linear;
 uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
 uniform vec4 daylight : source_color;
+instance uniform bool wreck_smoke = false;
 instance uniform vec4 volume_state = vec4(0.0, 1.0, 1.0, 7.0);
 varying vec3 local_eye;
 varying vec3 local_point;
@@ -17,6 +19,12 @@ vec3 lookup(vec3 point, float frame) {
 	vec3 voxel = clamp(point + 0.5, vec3(0.0), vec3(1.0)) * 31.0 + 0.5;
 	voxel.z = (voxel.z + frame * 32.0) / 6.0;
 	return textureLod(combustion, voxel / 32.0, 0.0).rgb;
+}
+
+vec2 smoke_lookup(vec3 point, float frame) {
+	vec3 voxel = clamp(point + 0.5, vec3(0.0), vec3(1.0)) * 47.0 + 0.5;
+	voxel.z = (voxel.z + frame * 48.0) / 11.0;
+	return textureLod(wreck_smoke_field, voxel / 48.0, 0.0).rg;
 }
 
 void fragment() {
@@ -44,9 +52,23 @@ void fragment() {
 	float life = (1.0 - smoothstep(0.56, 1.0, progress)) * smoothstep(0.0, 0.085, progress + 0.025);
 	float transmit = 1.0;
 	vec3 result = vec3(0.0);
-	for (int i = 0; i < 9; ++i) {
+	float smoke_frame = progress * 10.0;
+	float smoke_start = floor(smoke_frame);
+	float smoke_next = min(10.0, smoke_start + 1.0);
+	float smoke_life = smoothstep(0.0, 0.11, progress + 0.035) * (1.0 - smoothstep(0.64, 1.0, progress));
+	for (int i = 0; i < 12; ++i) {
 		if (i >= samples) { break; }
-		vec3 p = local_eye + ray * (first + (float(i) + jitter) * stride);
+		vec3 p = local_eye + ray * (first + (float(i) + (wreck_smoke ? mix(0.36, 0.64, jitter) : jitter)) * stride);
+		if (wreck_smoke) {
+			vec2 smoke = mix(smoke_lookup(p, smoke_start), smoke_lookup(p, smoke_next), fract(smoke_frame));
+			float density = smoke.r * smoke_life * volume_state.z * 18.0;
+			float opacity = 1.0 - exp(-density * stride);
+			vec3 soot = daylight.rgb * mix(vec3(0.009, 0.011, 0.014), vec3(0.132, 0.123, 0.111), pow(smoke.g, 1.5));
+			result += soot * (opacity * transmit);
+			transmit *= 1.0 - opacity;
+			if (transmit < 0.035) { break; }
+			continue;
+		}
 		vec3 matter = mix(lookup(p, begin_frame), lookup(p, next_frame), fract(time_frame));
 		float flame = matter.g * (1.0 - smoothstep(0.14, 0.49, progress)) * volume_state.y;
 		float density = (matter.r * 8.7 * volume_state.z + flame * 3.1) * life;

@@ -76,6 +76,28 @@ func check_boost(fight: Battle, hud: Control) -> void:
 	switched.move(1.0 / 90.0, Vector3.ZERO, 1.0, false, 0.0, false)
 	check(switched.velocity.is_equal_approx(normal.velocity) and switched.boost > 0.0, "Release left residual thrust or snapped the visual transition")
 
+func check_defensive_cooldowns(fight: Battle) -> void:
+	var started := fight.time
+	fight.action.evade = true
+	fight.action.counter = true
+	fight._update_player(1.0 / 90.0)
+	check(is_equal_approx(fight.player.evade_at - started, 1.0)
+		and is_equal_approx(fight.player.counter_at - started, 1.0), "Defensive cooldowns differ from one second")
+	check(is_equal_approx(fight.player.evade_until - started, 0.78)
+		and is_equal_approx(fight.player.counter_until - started, 0.83), "Defensive effect lengths changed")
+	fight.time = started + 0.99
+	fight.action.evade = true
+	fight.action.counter = true
+	fight._update_player(1.0 / 90.0)
+	check(is_equal_approx(fight.player.evade_at, started + 1.0)
+		and is_equal_approx(fight.player.counter_at, started + 1.0), "A defensive action restarted during its cooldown")
+	fight.time = started + 1.0
+	fight.action.evade = true
+	fight.action.counter = true
+	fight._update_player(1.0 / 90.0)
+	check(is_equal_approx(fight.player.evade_at, started + 2.0)
+		and is_equal_approx(fight.player.counter_at, started + 2.0), "A defensive action missed its one-second restart")
+
 func run() -> void:
 	var data := Data.new()
 	var plane := Flight.new()
@@ -196,6 +218,7 @@ func run() -> void:
 	check(not hud.steer_touch, "Normal drag release did not clear touch ownership")
 	hud.clear_input()
 	check_boost(fight, hud)
+	check_defensive_cooldowns(fight)
 	touch(hud, 4, hud.artifacts[1].button.get_global_rect().get_center(), true)
 	shell.active_hud.input_actions.pause.pressed.emit()
 	check(not fight.action.has("boost"), "Pausing left boost held")

@@ -7,6 +7,10 @@ const HUD = preload("res://game/hud.gd")
 const STEP := 1.0 / 90.0
 var failed := 0
 
+class SurfaceFixture extends "res://game/world.gd":
+	func height(point: Vector3) -> float:
+		return maxf(-4.0, 7.0 - absf(point.x - 6.0) * 2.0)
+
 func _initialize() -> void:
 	run.call_deferred()
 
@@ -22,6 +26,14 @@ func run() -> void:
 		results.append(_check(fight, scenario))
 	results.append(_check_touch_lock(fight))
 	results.append(_check_contact(fight))
+	var surface_fixture := SurfaceFixture.new()
+	var ridge := surface_fixture.first_surface_contact(Vector3(0, 2, 0), Vector3(12, 2, 0))
+	var sea := surface_fixture.first_surface_contact(Vector3(-12, 3, 0), Vector3(-12, -3, 0))
+	var clear := surface_fixture.first_surface_contact(Vector3(0, 10, 0), Vector3(12, 10, 0))
+	var terrain_trace := absf(ridge - (3.5 / 12.0)) < 0.002 and absf(sea - 0.5) < 0.002 and is_inf(clear)
+	results.append({"scenario":"terrain_trace","narrow_ridge":ridge,"sea_crossing":sea,"overflight_clear":is_inf(clear),"passed":terrain_trace})
+	failed += int(not terrain_trace)
+	surface_fixture.free()
 	results.append(_check_lock_camera(fight))
 	results.append(_check_target_continuity(fight))
 	results.append(_check_hidden_contact(fight))

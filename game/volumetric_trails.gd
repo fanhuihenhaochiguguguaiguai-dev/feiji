@@ -4,8 +4,8 @@ enum Style { MISSILE, SOOT, VAPOUR }
 
 const SLOTS := 72
 const POINTS := 64
-const LIFETIME := [3.10, 2.65, 0.92]
-const SAMPLE_INTERVAL := [0.039, 0.058, 0.044]
+const LIFETIME := [2.60, 2.65, 0.92]
+const SAMPLE_INTERVAL := [0.042, 0.058, 0.044]
 const SHADER = preload("res://shaders/trail.gdshader")
 
 class Trail:
@@ -48,6 +48,7 @@ func setup(density: Texture3D, daylight: Color, sun: Vector3) -> void:
 	material.set_shader_parameter("density_field", density)
 	material.set_shader_parameter("daylight", daylight)
 	material.set_shader_parameter("sun_direction", sun)
+	material.set_shader_parameter("wake_span", Vector3(LIFETIME[0], LIFETIME[1], LIFETIME[2]))
 	instances = MultiMesh.new()
 	instances.transform_format = MultiMesh.TRANSFORM_3D
 	instances.mesh = BoxMesh.new()
@@ -136,7 +137,8 @@ func advance(dt: float) -> void:
 			continue
 		if point_image and trail.count > 0:
 			if pending:
-				point_image.set_pixel(POINTS, trail.row, Color(trail.first, trail.count, trail.style, trail.pressure))
+				var strength := -trail.pressure if trail.closed else trail.pressure
+				point_image.set_pixel(POINTS, trail.row, Color(trail.first, trail.count, trail.style, strength))
 				var p := trail.tip
 				point_image.set_pixel(POINTS + 1, trail.row, Color(p.x, p.y, p.z, trail.touched))
 				point_image.set_pixel(POINTS + 2, dense, Color(trail.row, 0, 0, 0))

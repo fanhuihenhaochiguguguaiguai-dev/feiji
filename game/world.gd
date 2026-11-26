@@ -112,8 +112,14 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var coast := seed_value == 413
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
 	terrain.assets.set_texture_asset(0, _surface("积雪" if snow else "砂砾地表", Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")), 0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45))
-	# Let the baked geology carry distant structure. The alpine scan repeats at the scale of individual rocks.
-	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.57 if snow else 0.155, ROCK, NORMAL_ROCK))
+	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")),
+		0.57 if snow else 0.155, ROCK, NORMAL_ROCK)
+	if snow:
+		# Break the period of the scan and avoid stretching it across the exposed face.
+		rock.set_detiling_rotation(0.16)
+		rock.set_detiling_shift(0.29)
+		terrain.material.projection_enabled = true
+	terrain.assets.set_texture_asset(1, rock)
 	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
 	if not snow:
 		terrain.material.set_shader_param("auto_base_texture", 1 if coast else 0)
@@ -310,6 +316,45 @@ func height(local_point: Vector3) -> float:
 		if is_finite(loaded):
 			return loaded
 	return float(ClassDB.class_call_static("SkyTerrainKernel", "height_m", origin.x * TILE + local_point.x, origin.y * TILE + local_point.z, seed_value))
+
+# Trace the same heightfield the aircraft use. Subdivide near the surface so an intervening
+# ridge can stop a projectile even when both ends of the physics step are above ground.
+func first_surface_contact(start: Vector3, end: Vector3) -> float:
+	var end_clearance := end.y - maxf(0.0, height(end))
+	var horizontal := Vector2(end.x - start.x, end.z - start.z).length()
+	if end_clearance > maxf(24.0, horizontal * 4.0 + absf(end.y - start.y)):
+		return INF
+	var start_clearance := start.y - maxf(0.0, height(start))
+	if start_clearance <= 0.0:
+		return 0.0
+	var intervals := clampi(ceili(horizontal / (STEP * 0.5)), 1, 16)
+	var lower := 0.0
+	var above := start_clearance
+	for i in range(1, intervals + 1):
+		var upper := float(i) / intervals
+		var point := start.lerp(end, upper)
+		var below := end_clearance if i == intervals else point.y - maxf(0.0, height(point))
+		if below > 0.0:
+			lower = upper
+			above = below
+			continue
+		for refine in 5:
+			var t := (lower + upper) * 0.5
+			point = start.lerp(end, t)
+			var clearance := point.y - maxf(0.0, height(point))
+			if clearance > 0.0:
+				lower = t
+				above = clearance
+			else:
+				upper = t
+				below = clearance
+		return lerpf(lower, upper, above / (above - below))
+	return INF
+
+func surface_normal(at: Vector3) -> Vector3:
+	var dx := Vector3(STEP * 0.5, 0.0, 0.0)
+	var dz := Vector3(0.0, 0.0, STEP * 0.5)
+	return Vector3(height(at - dx) - height(at + dx), STEP, height(at - dz) - height(at + dz)).normalized()
 
 func is_runway(p: Vector3) -> bool:
 	return absf(p.x + origin.x * TILE + 340.0) < 27.0 and absf(p.z + origin.y * TILE - 350.0) < 430.0

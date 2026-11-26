@@ -54,6 +54,25 @@ vec2 nearby_cloud(vec3 ray, vec3 camera_at, float phase) {
 	return vec2(coverage, coverage * light);
 }
 
+vec3 solar_disc(vec3 ray, float alignment) {
+	if (alignment < 0.987) { return vec3(0.0); }
+	// Mean solar angular diameter is 0.533 degrees. Chord distance is stable at the limb.
+	const float angular_radius = 0.0046513;
+	float chord = length(ray - sun_direction);
+	float pixel = max(0.00012, fwidth(chord) * 0.74);
+	float mask = 1.0 - smoothstep(angular_radius - pixel, angular_radius + pixel, chord);
+	float mu = sqrt(max(0.0, 1.0 - (chord * chord) / (angular_radius * angular_radius)));
+	float limb = 0.42 + 0.58 * mu;
+	float transmission = exp(-0.095 / max(0.05, sun_direction.y));
+	float disc = mask * limb * (15.5 * mix(1.0, 0.18, storm));
+	// Normalized forward lobe, separate from the existing broad sky scattering.
+	const float anisotropy = 0.972;
+	const float peak_width = (1.0 - anisotropy) * (1.0 - anisotropy);
+	float forward = pow(peak_width / (peak_width + anisotropy * chord * chord), 1.5);
+	float halo = forward * (1.0 - smoothstep(0.10, 0.16, chord)) * mix(0.52, 0.18, storm);
+	return sun_color.rgb * transmission * (disc + halo);
+}
+
 void sky() {
 	vec3 ray = normalize(EYEDIR);
 	float angle = dot(ray, sun_direction);
@@ -63,7 +82,7 @@ void sky() {
 		COLOR = vec3(AT_CUBEMAP_PASS ? vec2(0.0) : nearby_cloud(ray, POSITION, phase), 0.0);
 	} else {
 		vec2 uv = panorama_uv(ray);
-		// Keep the original panorama's horizon, cloud shapes and photographed sun on the same rays.
+		// The panorama contributes photographed clouds and horizon. Direct solar light uses the shared bearing.
 		vec3 photo = texture(panorama, uv).rgb * panorama_range;
 		vec3 scatter = texture(scattering, vec2(angle * 0.5 + 0.5, clamp(ray.y, 0.0, 1.0))).rgb;
 		vec3 base = photo * mix(0.51, 0.44, storm);
@@ -78,6 +97,8 @@ void sky() {
 		}
 		base = mix(base, air_color.rgb * 0.78, haze * altitude_haze);
 		if (!AT_CUBEMAP_PASS) {
+			// The existing directional light supplies direct illumination and reflection highlights.
+			base += solar_disc(ray, angle);
 			vec2 cloud = clamp(HALF_RES_COLOR.rg, vec2(0.0), vec2(1.0));
 			vec3 shade = air_color.rgb * mix(0.48, 0.36, storm);
 			vec3 sunlit = mix(vec3(0.66, 0.74, 0.83), sun_color.rgb * 0.85, 0.26 + phase * 0.30);

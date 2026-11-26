@@ -3,6 +3,7 @@ render_mode unshaded, cull_front, blend_add, depth_draw_never, depth_test_disabl
 
 uniform vec4 tint : source_color = vec4(0.28, 0.47, 1.0, 1.0);
 uniform float intensity = 4.4;
+uniform bool missile_exhaust = false;
 uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
 
 varying vec3 local_eye;
@@ -44,7 +45,13 @@ void fragment() {
 		float envelope = (1.0 - smoothstep(0.58, 1.0, tail)) * smoothstep(0.0, 0.035, tail);
 		float density = (1.0 - smoothstep(0.08, 1.0, radial)) * envelope * exp(-1.27 * tail);
 		float core = (1.0 - smoothstep(0.02, 0.40, radial)) * (0.19 + 0.75 * shock + 0.26 * (1.0 - tail));
-		radiance += mix(tint.rgb, vec3(1.0, 0.93, 0.76), clamp(core, 0.0, 1.0)) * density * stride;
+		vec3 hot = vec3(1.0, 0.93, 0.76);
+		if (missile_exhaust) {
+			float jet_core = exp(-radial * 8.6) * (1.0 - smoothstep(0.33, 0.78, tail));
+			core = max(core, jet_core * (0.48 + shock * 0.38));
+			hot = vec3(1.0, 0.90, 0.69);
+		}
+		radiance += mix(tint.rgb, hot, clamp(core, 0.0, 1.0)) * density * stride;
 		optical += density * stride;
 	}
 	ALBEDO = radiance * (intensity / max(0.001, optical));
