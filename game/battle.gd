@@ -21,6 +21,7 @@ const FREE_LENGTH := 600.0
 const FREE_RESPAWN := 3.0
 const CAMPAIGN_CAPACITY := 6
 const AUTO_TRACK_GAIN := 0.85
+const CONTACT_GRACE := 0.30
 const MISSILE_ARM_TIME := 0.085
 const TRAIL_SAMPLE_TIME := 0.03
 
@@ -31,6 +32,7 @@ var mode := ""
 var player: Airframe
 var fleet: Array[Airframe] = []
 var target_life := -1
+var contact_lost_at := -INF
 var target: Airframe:
 	get:
 		return target if target and target.hp > 0.0 and target.life_id == target_life else null
@@ -40,6 +42,7 @@ var target: Airframe:
 			target = contact
 			target_life = life
 			locked_time = 0.0
+			contact_lost_at = -INF
 var locked_time := 0.0
 var queued_missile_target: Airframe
 var queued_missile_life := -1
@@ -126,7 +129,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	camera.current = true
 	var absolute_start := start_position(selected_mode, operation, use_runway)
 	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, prepared)
-	effects.pool(world.cloud_material)
+	effects.pool(world.cloud_material, camera)
 	var p := world.local_position(absolute_start)
 	player = _make_plane(str(profile.state.selected), 0)
 	p.y = world.height(p) + player.type.gearClearance + 0.12 if use_runway else maxf(p.y, world.height(p) + 175.0)
@@ -376,18 +379,27 @@ func _departure_course(at: Vector3) -> Vector3:
 	return course
 
 func _targeting(dt: float) -> void:
-	var was_locked := is_locked()
 	var held := target
-	if held and player.forward.dot((held.position - player.position).normalized()) < cos(LOCK_ANGLE * (1.34 if was_locked else 1.19)):
+	var was_locked: bool = held != null and locked_time >= float(missile.acquire)
+	var alignment := player.forward.dot((held.position - player.position).normalized()) if held else 1.0
+	var retention := cos(LOCK_ANGLE * (1.90 if was_locked else 1.38))
+	if held and steering_amount > 0.54 and alignment < retention:
 		target = null
 		held = null
 		seek_due = time
 	if time >= seek_due:
 		seek_due = time + 0.085
 		var range_m: float = float(missile.range) + profile.level_of("radar") * Data.UPGRADE_GAINS.radar
-		if held and (player.position.distance_to(held.position) > range_m or world.obstruction(player.position, held.position)):
-			target = null
-			held = null
+		if held:
+			var clear := alignment >= retention and player.position.distance_to(held.position) <= range_m
+			clear = clear and not world.obstruction(player.position, held.position)
+			if clear:
+				contact_lost_at = -INF
+			elif contact_lost_at == -INF:
+				contact_lost_at = time
+			elif time - contact_lost_at >= CONTACT_GRACE:
+				target = null
+				held = null
 		if not held:
 			var best: Airframe
 			var score := -INF
@@ -409,7 +421,7 @@ func _targeting(dt: float) -> void:
 	_refresh_lead(dt, was_locked and target == held)
 
 func _refresh_lead(dt: float, was_locked: bool) -> void:
-	if target:
+	if target and contact_lost_at == -INF:
 		locked_time = minf(missile.acquire, locked_time + dt)
 		if not was_locked and is_locked():
 			audio.play_at("lock", player.position)
@@ -453,7 +465,7 @@ func _reset_player_spawn() -> void:
 	stick = Vector2.ZERO
 
 func is_locked() -> bool:
-	return target != null and target.hp > 0.0 and locked_time >= missile.acquire
+	return target != null and contact_lost_at == -INF and locked_time >= missile.acquire
 
 static func flight_input(raw: Vector2) -> Vector2:
 	var amount := raw.length()
@@ -468,9 +480,14 @@ func _update_player(dt: float) -> void:
 	var response := flight_input(steering)
 	var control := Vector3(response.y, response.x, 0.0)
 	if is_locked() and not player.grounded and time >= player.evade_until:
-		var follow_gain := AUTO_TRACK_GAIN * (1.0 - smoothstep(0.015, 0.095, steering_amount))
-		var vector: Vector3 = player.attitude.inverse() * (target.position + target.velocity * 0.23 - player.position).normalized()
-		control += Vector3(clampf(vector.y * 0.48, -0.17, 0.17), clampf(vector.x * 0.47, -0.17, 0.17), 0.0) * follow_gain
+		var follow_gain := AUTO_TRACK_GAIN * (1.0 - smoothstep(0.055, 0.43, steering_amount))
+		var offset := target.position - player.position
+		var direction := offset.normalized()
+		var relative := target.velocity - player.velocity
+		var crossing := relative - direction * relative.dot(direction)
+		var aim := (offset + crossing * clampf(offset.length() * 0.00066, 0.16, 0.46)).normalized()
+		var bearing := player.attitude.inverse() * aim
+		control += Vector3(clampf(bearing.y * 0.82, -0.23, 0.23), clampf(bearing.x * 0.84, -0.25, 0.25), 0.0) * follow_gain
 	if action.get("evade", false):
 		action.erase("evade")
 		if time >= player.evade_at:
@@ -524,7 +541,7 @@ func _update_player(dt: float) -> void:
 			return
 	if _trigger_held("gun", KEY_SPACE) and time >= player.shot_at:
 		action.erase("gun_queued")
-		_fire(player, false, target)
+		_fire(player, false, target if contact_lost_at == -INF else null)
 	if _trigger_held("missile", KEY_F) and time >= player.missile_at:
 		var intended := target if is_locked() else null
 		if time <= float(action.get("missile_queued", -1.0)) and queued_missile_target:
@@ -547,13 +564,22 @@ func _update_bot(jet: Airframe, dt: float) -> void:
 		if task.lesson in ["counter", "evade"] and time >= jet.missile_at and player.hp > 0.0:
 			_fire(jet, true, player)
 	else:
-		var order := Pilot.command(jet, fleet, free_centre if mode == "free" else player.position, world, ground, time, dt)
-		controls = order.control
-		power = order.throttle
-		if order.gun:
-			_fire(jet, false, jet.target)
-		if order.missile and _fire(jet, true, jet.target):
-			jet.ai_lock = 0.0
+		jet.ai_order_elapsed += dt
+		var close := jet.target and jet.position.distance_squared_to(jet.target.position) < 2600.0 * 2600.0
+		var safety := jet.position.y < ground + 260.0 or time < jet.evade_until
+		if close or safety or time >= jet.ai_order_at:
+			var order := Pilot.command(jet, fleet, free_centre if mode == "free" else player.position,
+				world, ground, time, jet.ai_order_elapsed)
+			jet.ai_controls = order.control
+			jet.ai_throttle = order.throttle
+			jet.ai_order_at = time + 0.056 + (jet.index % 4) * 0.009
+			jet.ai_order_elapsed = 0.0
+			if order.gun:
+				_fire(jet, false, jet.target)
+			if order.missile and _fire(jet, true, jet.target):
+				jet.ai_lock = 0.0
+		controls = jet.ai_controls
+		power = jet.ai_throttle
 	jet.move(dt, controls, power, false, ground, false, time < jet.evade_until)
 	if jet.position.y < maxf(world.height(jet.position), 0.0) + 2.0:
 		_destroy(jet, null)
@@ -707,7 +733,7 @@ func _update_shots(dt: float) -> void:
 		cast.velocity = velocity
 		cast.nose = direction
 		if guided:
-			effects.move_projectile(int(cast.slot), toward, direction, cast.age > MISSILE_ARM_TIME)
+			effects.move_projectile(int(cast.slot), toward, direction, cast.age - MISSILE_ARM_TIME)
 	if warning and not warning_before:
 		audio.play_at("warn", player.position)
 
@@ -871,7 +897,7 @@ func _process(dt: float) -> void:
 	effects.sync_tracers(shots, Engine.get_physics_interpolation_fraction(), camera)
 	effects_phase += dt
 	if effects_phase >= 0.023 or effects.ribbon_dirty:
-		effects.tick(minf(effects_phase, 0.07), shots, camera)
+		effects.tick(minf(effects_phase, 0.07), shots)
 		effects_phase = 0.0
 
 func _render_pose(dt: float) -> void:
@@ -889,11 +915,16 @@ func _render_pose(dt: float) -> void:
 	var manual_weight := 1.0 - smoothstep(0.04, 0.46, steering_amount)
 	var zoom_request := lerpf(0.30, 1.0, manual_weight) if tracking else 0.0
 	camera_lock = 0.0 if manual_cockpit else lerpf(camera_lock, zoom_request, 1.0 - exp(-dt * 6.0))
+	var pair_fov := 0.0
 	if tracking:
 		var contact := target.previous.lerp(target.position, alpha)
 		var normal_view := focus - chase
 		var target_view := (contact - chase).normalized() * normal_view.length()
-		focus = chase + normal_view.slerp(target_view, camera_lock * manual_weight * 0.80)
+		var own_view := (origin - chase).normalized()
+		var pair_angle := own_view.angle_to(target_view.normalized())
+		var frame_weight := lerpf(0.84, 0.66, smoothstep(0.15, 0.52, pair_angle))
+		pair_fov = rad_to_deg(pair_angle) * 1.36 + 16.0
+		focus = chase + normal_view.slerp(target_view, camera_lock * manual_weight * frame_weight)
 	if manual_cockpit:
 		var eye: Array = player.type.eye
 		chase = origin + pose * Vector3(eye[0], eye[1], eye[2])
@@ -917,6 +948,7 @@ func _render_pose(dt: float) -> void:
 	camera_anchor = origin
 	camera.look_at(camera.position + look_toward, up if manual_cockpit else Vector3.UP.slerp(up, 0.24 * 0.85).normalized())
 	var view_fov := 52.0 + clampf((speed - player.type.trim) / 90.0, -1.0, 4.0) - 10.0 * camera_lock
+	view_fov = maxf(view_fov, minf(56.0, pair_fov * camera_lock))
 	camera.fov = lerpf(camera.fov, view_fov, 1.0 - exp(-dt * 7.0))
 	var projection := 2.0 * tan(deg_to_rad(camera.fov * 0.5))
 	for jet in fleet:

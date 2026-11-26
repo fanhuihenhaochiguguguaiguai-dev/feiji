@@ -3,11 +3,12 @@ render_mode use_half_res_pass;
 
 uniform sampler2D panorama : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D scattering : filter_linear, repeat_disable;
-uniform sampler2D density : filter_linear_mipmap, repeat_enable;
+uniform sampler3D density : filter_linear, repeat_enable;
 uniform vec3 sun_direction;
 uniform vec4 air_color : source_color;
 uniform vec4 sun_color : source_color;
 uniform vec2 terrain_origin;
+global uniform vec2 cloud_drift;
 uniform float panorama_offset;
 uniform float panorama_range;
 uniform float storm;
@@ -19,11 +20,9 @@ vec2 panorama_uv(vec3 ray) {
 
 float shape_at(vec3 point, float bottom, float thickness) {
 	float altitude = clamp((point.y - bottom) / thickness, 0.0, 1.0);
-	vec2 wind = vec2(8.0, 4.0) * TIME;
-	vec2 sheet = (point.xz + terrain_origin + wind) / vec2(10100.0, 7450.0);
-	vec3 fields = textureLod(density, sheet + vec2(0.18, -0.11) * altitude, 1.2).rgb;
-	float outline = smoothstep(0.47 - storm * 0.09, 0.73, fields.r * 0.73 + fields.g * 0.27);
-	return outline * smoothstep(0.0, 0.32, altitude) * (1.0 - smoothstep(0.48, 1.0, altitude));
+	vec2 sheet = (point.xz + terrain_origin + cloud_drift) / vec2(10100.0, 7450.0);
+	float fill = textureLod(density, vec3(sheet, (altitude * 31.0 + 0.5) / 32.0), 0.0).r;
+	return min(1.0, fill * (1.0 + storm * 0.34));
 }
 
 vec2 nearby_cloud(vec3 ray, vec3 camera_at, float phase) {
@@ -73,7 +72,11 @@ void sky() {
 		base = mix(base, vec3(dot(base, vec3(0.21, 0.72, 0.07))) * vec3(0.87, 0.96, 1.12), storm * 0.57);
 		base += scatter * air_color.rgb * (0.17 + phase * 0.11);
 		float haze = exp(-max(0.0, ray.y) * 31.0);
-		base = mix(base, air_color.rgb * 0.78, haze * 0.83);
+		float altitude_haze = 0.83;
+		if (!AT_CUBEMAP_PASS) {
+			altitude_haze = mix(0.83, 0.50 + storm * 0.19, smoothstep(1100.0, 4200.0, POSITION.y));
+		}
+		base = mix(base, air_color.rgb * 0.78, haze * altitude_haze);
 		if (!AT_CUBEMAP_PASS) {
 			vec2 cloud = clamp(HALF_RES_COLOR.rg, vec2(0.0), vec2(1.0));
 			vec3 shade = air_color.rgb * mix(0.48, 0.36, storm);

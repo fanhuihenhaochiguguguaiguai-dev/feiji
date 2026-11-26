@@ -50,6 +50,10 @@ var ai_lock := 0.0
 var ai_safe_altitude := -INF
 var ai_safety_at := 0.0
 var ai_avoidance := Vector3.ZERO
+var ai_order_at := 0.0
+var ai_order_elapsed := 0.0
+var ai_controls := Vector3.ZERO
+var ai_throttle := 0.7
 var target: RefCounted
 
 func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runway := false) -> void:
@@ -83,6 +87,8 @@ func reset(at: Vector3, nose: Vector3, initial_speed: float, health: float, runw
 	ai_safe_altitude = -INF
 	ai_safety_at = 0.0
 	ai_avoidance = Vector3.ZERO
+	ai_order_at = 0.0
+	ai_order_elapsed = 0.0
 	target = null
 
 func move(dt: float, command: Vector3, engine_command: float, afterburner: bool, ground: float, runway: bool, evading := false) -> void:

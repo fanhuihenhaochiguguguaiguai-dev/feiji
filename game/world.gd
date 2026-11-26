@@ -8,6 +8,9 @@ const MAX_JOBS := 3
 const STREAM_INTERVAL := 0.12
 const UPLOAD_BUDGET := 2
 const RADIUS := 2
+const RESIDENT_MIN := Vector2i(-20, -24)
+const RESIDENT_SIDE := 48
+const RESIDENT_SHADER = preload("res://shaders/terrain_resident.gdshader")
 const SKY = preload("res://shaders/sky.gdshader")
 const Ocean = preload("res://game/ocean.gd")
 const ROCK = preload("res://assets/environment/rock-height.webp")
@@ -19,7 +22,11 @@ const PANORAMA_RANGE := 2.34
 const FIELDS := {413:"bay", 704:"frost"}
 static var relief_ready := {}
 
-const DENSITY = preload("res://assets/surface/cloud-density.png")
+const CLOUD_SIZE := Vector2i(96, 64)
+const CLOUD_LAYERS := 32
+const CLOUD_PERIOD := Vector2(10100.0, 7450.0)
+static var cloud_slices: Array[Image] = []
+static var cloud_field: ImageTexture3D
 
 var terrain: Terrain3D
 var rider: Node3D
@@ -32,18 +39,29 @@ var cache: Dictionary = {}
 var jobs: Dictionary = {}
 var target := Vector2i.ZERO
 var stream_clock := 0.0
+var publish_interval := STREAM_INTERVAL
+var background_budget := UPLOAD_BUDGET
 var completed_tiles: Dictionary = {}
 var neutral_control: Image
 var neutral_color: Image
 var relief_color: Image
 var prefetch_centre := Vector2i.MAX
+var prefetch_here := Vector2i.MAX
+var prefetch_heading := Vector2i.MAX
 var candidate_tiles: Array[Vector2i] = []
+var upload_cost_usec := 0.0
 var coast_job: Thread
 var coast_cell := Vector2i.MAX
 var coast_corner := Vector2.ZERO
 var coast_enabled := false
 var cloud_material: ShaderMaterial
 var flight_environment: Environment
+var cloud_drift := Vector2.ZERO
+var local_cloud := 0.0
+var flight_view: Camera3D
+var resident: Node3D
+var residency: Image
+var detailed_regions: ImageTexture
 
 static func opening_tiles(start: Vector3) -> Array[Vector2i]:
 	var centre := Vector2i(floori(start.x / TILE), floori(start.z / TILE))
@@ -58,6 +76,8 @@ func local_position(absolute_position: Vector3) -> Vector3:
 
 func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared := {}) -> void:
 	climate = theatre
+	flight_view = camera
+	RenderingServer.global_shader_parameter_set("cloud_drift", Vector2.ZERO)
 	coast_enabled = DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
 	prepare_relief(seed_value)
@@ -103,7 +123,9 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
 	terrain.snap()
-	_make_sea()
+	if coast_enabled:
+		_add_resident_ground()
+	_make_sea(camera)
 	_make_runway()
 
 static func prepare_relief(seed_id: int) -> void:
@@ -151,7 +173,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	else:
 		var panorama := ShaderMaterial.new()
 		panorama.shader = SKY
-		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "density":DENSITY, "scattering":ATMOSPHERE,
+		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "density":_load_cloud_field(), "scattering":ATMOSPHERE,
 			"sun_direction":bearing, "sun_color":light, "air_color":air, "panorama_offset":yaw, "storm":float(storm)}
 		for key in parameters:
 			panorama.set_shader_parameter(key, parameters[key])
@@ -164,7 +186,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	env.fog_enabled = not studio
 	env.fog_light_color = air
 	env.fog_sun_scatter = 0.045
-	env.fog_density = 0.00008
+	env.fog_density = 0.000064 if storm else 0.000037
 	env.fog_aerial_perspective = 0.46
 	host.add_child(env_node)
 	var sun := DirectionalLight3D.new()
@@ -182,6 +204,34 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 		host.add_child(fill)
 		fill.rotation_degrees = Vector3(-31, -42, 0)
 	return env
+
+static func _load_cloud_field() -> ImageTexture3D:
+	if cloud_field:
+		return cloud_field
+	var atlas := (load("res://assets/environment/cloud-volume.png") as Texture2D).get_image()
+	atlas.convert(Image.FORMAT_R8)
+	for layer in CLOUD_LAYERS:
+		cloud_slices.append(atlas.get_region(Rect2i(Vector2i(layer % 8, layer / 8) * CLOUD_SIZE, CLOUD_SIZE)))
+	cloud_field = ImageTexture3D.new()
+	cloud_field.create(Image.FORMAT_R8, CLOUD_SIZE.x, CLOUD_SIZE.y, CLOUD_LAYERS, false, cloud_slices)
+	return cloud_field
+
+func _update_cloud_visibility(at: Vector3, dt: float) -> void:
+	cloud_drift += Vector2(8.0, 4.0) * dt
+	RenderingServer.global_shader_parameter_set("cloud_drift", cloud_drift)
+	var storm := seed_value == 116
+	var height := (at.y - (680.0 if storm else 1080.0)) / (1260.0 if storm else 820.0)
+	var sample_density := 0.0
+	if height > 0.0 and height < 1.0:
+		var point := (Vector2(at.x, at.z) + Vector2(origin) * TILE + cloud_drift) / CLOUD_PERIOD
+		var coords := Vector2i((point.posmodv(Vector2.ONE) * Vector2(CLOUD_SIZE)).floor())
+		var level := height * (CLOUD_LAYERS - 1)
+		var index := floori(level)
+		var raw := lerpf(cloud_slices[index].get_pixelv(coords).r, cloud_slices[index + 1].get_pixelv(coords).r, level - index)
+		sample_density = smoothstep(0.20, 0.66, raw * (1.34 if storm else 1.0))
+	local_cloud = lerpf(local_cloud, sample_density, 1.0 - exp(-dt * 4.5))
+	var clear_fog := 0.000064 if storm else 0.000037
+	flight_environment.fog_density = clear_fog * lerpf(1.0, 0.58, smoothstep(1800.0, 4500.0, at.y)) + local_cloud * 0.00135
 
 func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D, normal_strength := 0.45) -> Terrain3DTextureAsset:
 	var asset := Terrain3DTextureAsset.new()
@@ -244,12 +294,38 @@ func _make_runway() -> void:
 		line.position = Vector3(0.0, 0.03, n * 39.0)
 		strip.add_child(line)
 
-func _make_sea() -> void:
+func _make_sea(camera: Camera3D) -> void:
 	ocean = Ocean.new()
 	add_child(ocean)
-	ocean.setup(climate)
+	ocean.setup(climate, camera)
 	ocean.material.set_shader_parameter("air_color", flight_environment.fog_light_color)
 	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
+
+func _add_resident_ground() -> void:
+	var compiled := load("res://assets/environment/world-%d.scn" % seed_value) as PackedScene
+	resident = compiled.instantiate() as Node3D
+	var material := ShaderMaterial.new()
+	material.shader = RESIDENT_SHADER
+	material.set_shader_parameter("first_region", Vector2(RESIDENT_MIN))
+	material.set_shader_parameter("region_span", TILE)
+	residency = Image.create_empty(RESIDENT_SIDE, RESIDENT_SIDE, false, Image.FORMAT_R8)
+	detailed_regions = ImageTexture.create_from_image(residency)
+	material.set_shader_parameter("detailed_regions", detailed_regions)
+	for chunk: MeshInstance3D in resident.get_children():
+		chunk.material_override = material
+	add_child(resident)
+	_sync_resident_ground()
+
+func _sync_resident_ground() -> void:
+	if not resident:
+		return
+	resident.position = Vector3(-origin.x * TILE, 0.0, -origin.y * TILE)
+	residency.fill(Color.BLACK)
+	for tile: Vector2i in current:
+		var index := tile - RESIDENT_MIN
+		if index.x >= 0 and index.y >= 0 and index.x < RESIDENT_SIDE and index.y < RESIDENT_SIDE:
+			residency.set_pixelv(index, Color.RED)
+	detailed_regions.update(residency)
 
 func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 	var region := Terrain3DRegion.new()
@@ -278,7 +354,9 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 
 func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	var here := cell(p)
-	target = cell(p + velocity.limit_length(420.0) * 4.4)
+	var runway_time := lerpf(3.3, 5.0, smoothstep(130.0, 415.0, velocity.length()))
+	var load_margin := minf(1.8, upload_cost_usec * 0.00032)
+	target = cell(p + velocity.limit_length(510.0) * (runway_time + load_margin))
 	var delta := Vector3.ZERO
 	if absi(here.x - origin.x) >= 4 or absi(here.y - origin.y) >= 4:
 		var shift := here - origin
@@ -300,18 +378,18 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 			get_node("Runway").position -= delta
 		terrain.data.update_maps()
 		terrain.snap()
+		_sync_resident_ground()
+		ocean.defer_compute = true
 	rider.position = p - delta
 	ocean.track(rider.position, Vector2(origin) * TILE, velocity, true)
 	stream_clock += dt
-	if stream_clock >= STREAM_INTERVAL:
+	if stream_clock >= publish_interval:
+		var update_span := stream_clock
 		stream_clock = 0.0
 		_publish_and_prefetch(here)
 		if coast_enabled:
 			_update_shallows(rider.position)
-		var low := 640.0 if seed_value == 116 else 1150.0
-		var high := low + (1180.0 if seed_value == 116 else 780.0)
-		var in_cloud := smoothstep(low, low + 170.0, p.y) * (1.0 - smoothstep(high - 215.0, high, p.y))
-		flight_environment.fog_density = 0.00008 + 0.00017 * in_cloud
+		_update_cloud_visibility(rider.position, update_span)
 	return delta
 
 func _update_shallows(at: Vector3) -> void:
@@ -346,8 +424,13 @@ func set_quality(scale_value: float) -> void:
 	cloud_material.set_shader_parameter("cloud_samples", 3 if scale_value < 0.74 else 4)
 	ocean.set_quality(scale_value)
 
+func set_background_budget(over_budget: bool, hot: bool) -> void:
+	publish_interval = 0.18 if hot else (0.15 if over_budget else STREAM_INTERVAL)
+	background_budget = 1 if hot or over_budget else UPLOAD_BUDGET
+
 func _publish_and_prefetch(here: Vector2i) -> void:
 	var changed := false
+	var upload_started := Time.get_ticks_usec()
 	for coord in jobs.keys():
 		var thread: Thread = jobs[coord]
 		if thread.is_alive():
@@ -361,20 +444,31 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 		if Vector2i(coord - here).length_squared() > 21:
 			completed_tiles.erase(coord)
 			continue
-		if published >= UPLOAD_BUDGET:
+		if published >= (1 if upload_cost_usec > 3000.0 else background_budget):
 			break
 		if not current.has(coord):
 			_activate(coord, completed_tiles[coord])
 			published += 1
 			changed = true
 		completed_tiles.erase(coord)
-	if target != prefetch_centre:
+	var direction := Vector2(-flight_view.basis.z.x, -flight_view.basis.z.z).normalized()
+	var heading_bucket := Vector2i((direction * 2.0).round())
+	if target != prefetch_centre or here != prefetch_here or heading_bucket != prefetch_heading:
 		prefetch_centre = target
+		prefetch_here = here
+		prefetch_heading = heading_bucket
 		candidate_tiles.clear()
 		for z in range(-RADIUS, RADIUS + 1):
 			for x in range(-RADIUS, RADIUS + 1):
-				candidate_tiles.append(target + Vector2i(x, z))
-		candidate_tiles.sort_custom(func(a: Vector2i, b: Vector2i): return (a - target).length_squared() < (b - target).length_squared())
+				var relative := Vector2i(x, z)
+				for centre: Vector2i in [here, target]:
+					var tile := centre + relative
+					if not candidate_tiles.has(tile):
+						candidate_tiles.append(tile)
+		candidate_tiles.sort_custom(func(a: Vector2i, b: Vector2i):
+			var ascore := minf((a - here).length_squared(), 1.2 + (a - target).length_squared()) - Vector2(a - here).dot(direction) * 0.62
+			var bscore := minf((b - here).length_squared(), 1.2 + (b - target).length_squared()) - Vector2(b - here).dot(direction) * 0.62
+			return ascore < bscore)
 	for key in candidate_tiles:
 		if jobs.size() + completed_tiles.size() >= MAX_JOBS:
 			break
@@ -401,6 +495,10 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 				cache.erase(key)
 	if changed:
 		terrain.data.update_maps()
+		_sync_resident_ground()
+		ocean.defer_compute = true
+		var upload_usec := float(Time.get_ticks_usec() - upload_started) / maxf(1.0, published)
+		upload_cost_usec = lerpf(upload_cost_usec, upload_usec, 0.20)
 
 func _exit_tree() -> void:
 	for task in jobs.values():

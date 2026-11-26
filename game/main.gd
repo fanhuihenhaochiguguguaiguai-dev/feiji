@@ -520,7 +520,7 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 		var camera := current_battle.camera
 		current_battle.effects.prime(camera.position - camera.global_basis.z * 13.0)
 		await RenderingServer.frame_post_draw
-		current_battle.effects.end_prime(camera)
+		current_battle.effects.end_prime()
 	await get_tree().process_frame
 	var fade := create_tween()
 	fade.tween_property(view, "modulate:a", 0.0, 0.23)
@@ -801,6 +801,7 @@ func _adapt_resolution(dt: float) -> void:
 	var scale := viewport.scaling_3d_scale
 	slow_windows = slow_windows + 1 if frame_average > budget * 1.19 else 0
 	fast_windows = fast_windows + 1 if frame_average < budget * 0.91 else 0
+	current_battle.world.set_background_budget(slow_windows >= 2, thermal_limited)
 	if slow_windows >= 2:
 		scale = maxf(0.71, scale - 0.05)
 		slow_windows = 0

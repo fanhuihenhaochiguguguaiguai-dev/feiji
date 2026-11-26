@@ -46,7 +46,7 @@ func _match(catalogue: RefCounted, profile: RefCounted) -> Dictionary:
 		fight._physics_process(STEP)
 		timings.append(Time.get_ticks_usec() - started)
 		if step % 90 == 0:
-			fight.effects.tick(0.08, fight.shots, fight.camera)
+			fight.effects.tick(0.08, fight.shots)
 			await process_frame
 		if step > 360 and step % 900 == 0:
 			samples.append(Performance.get_monitor(Performance.MEMORY_STATIC))

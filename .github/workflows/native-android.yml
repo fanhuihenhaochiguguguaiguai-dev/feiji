@@ -66,6 +66,7 @@ jobs:
           godot --headless --script res://qa/refinement.gd
           godot --headless --script res://qa/campaign.gd
           godot --headless --script res://qa/missile.gd
+          godot --headless --script res://qa/world_coverage.gd
       - name: Gradle export and signature verification
         if: env.CUSTOM_RELEASE != 'true'
         env:
@@ -154,7 +155,7 @@ jobs:
             dist/build-comparison.json
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: env.CUSTOM_RELEASE == 'true'
+        if: always() && env.CUSTOM_RELEASE == 'true'
         with:
           name: skyblade-v18.3-engine-template
           path: ${{ runner.temp }}/sky-release-template/android_release.apk

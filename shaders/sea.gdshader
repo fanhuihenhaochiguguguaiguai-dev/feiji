@@ -13,6 +13,7 @@ uniform vec4 coast_area = vec4(0.0);
 uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
 uniform sampler2DArray spectral_normals : repeat_enable, filter_linear;
 uniform bool spectral_enabled = false;
+uniform float spectral_weight = 0.0;
 varying vec3 water_point;
 
 const vec2 SWELL_AXIS = vec2(0.863, -0.505);
@@ -32,14 +33,16 @@ void vertex() {
 	float swell_geometry = 1.0 - smoothstep(120.0, 680.0, radius_m);
 	float ripple_geometry = 1.0 - smoothstep(42.0, 155.0, radius_m);
 	vec3 displacement = vec3(0.0);
-	if (spectral_enabled && swell_geometry > 0.0) {
+	if (spectral_enabled && spectral_weight > 0.0 && swell_geometry > 0.0) {
 		// The retained FFT packs the result of its last pass in transposed order.
 		displacement = textureLod(spectral_displacement, vec3(surface.yx / 160.0, 0), 0.0).xyz * (OUTER_GAIN * swell_geometry);
 		if (ripple_geometry > 0.0) {
 			displacement += textureLod(spectral_displacement, vec3(surface.yx / 39.0, 1), 0.0).xyz * (INNER_GAIN * ripple_geometry);
 		}
-	} else if (!spectral_enabled) {
-		displacement.y = 0.65 * sin(dot(SWELL_AXIS, surface) * SWELL_K + TIME * 0.79) * swell_geometry;
+	}
+	if (spectral_weight < 1.0 && swell_geometry > 0.0) {
+		float swell = sin(dot(SWELL_AXIS, surface) * SWELL_K + TIME * 0.79) * (0.65 * swell_geometry);
+		displacement = mix(vec3(0.0, swell, 0.0), displacement, spectral_weight);
 	}
 	VERTEX += displacement;
 	water_point = vec3(surface.x, displacement.y, surface.y);
@@ -60,20 +63,22 @@ void fragment() {
 	}
 	vec2 gradient = fine;
 	float foam = 0.0;
-	if (spectral_enabled) {
+	if (spectral_enabled && spectral_weight > 0.0) {
 		if (outer_resolved > 0.0) {
 			vec4 outer = textureLod(spectral_normals, vec3(uv.yx / 160.0, 0), 0.0);
-			gradient += outer.xy * (OUTER_GAIN * outer_resolved);
+			gradient += outer.xy * (OUTER_GAIN * outer_resolved * spectral_weight);
 			foam = outer.w * outer_resolved * 0.68;
 		}
 		if (inner_resolved > 0.0) {
 			vec4 inner = textureLod(spectral_normals, vec3(uv.yx / 39.0, 1), 0.0);
-			gradient += inner.xy * (INNER_GAIN * inner_resolved);
+			gradient += inner.xy * (INNER_GAIN * inner_resolved * spectral_weight);
 			foam += inner.w * inner_resolved * 0.47;
 		}
-		foam = smoothstep(0.26, 0.84, foam);
-	} else if (outer_resolved > 0.0) {
-		gradient += SWELL_AXIS * cos(dot(SWELL_AXIS, uv) * SWELL_K + TIME * 0.79) * (0.65 * SWELL_K * outer_resolved);
+		foam = smoothstep(0.26, 0.84, foam) * spectral_weight;
+	}
+	if (spectral_weight < 1.0 && outer_resolved > 0.0) {
+		gradient += SWELL_AXIS * cos(dot(SWELL_AXIS, uv) * SWELL_K + TIME * 0.79) *
+			(0.65 * SWELL_K * outer_resolved * (1.0 - spectral_weight));
 	}
 	if (wake_strength > 0.0 && near_detail > 0.0) {
 		vec2 delta = uv - wake.xy;
@@ -85,7 +90,12 @@ void fragment() {
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
 	float angle = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	vec3 water = deep.rgb + air_color.rgb * 0.045;
+	float sea_state = 0.5;
+	if (outer_resolved < 0.86) {
+		float broad = textureLod(shore_noise, uv / 11800.0 + flow * 0.012, 2.0).r;
+		sea_state = mix(broad, 0.5, smoothstep(0.55, 0.86, outer_resolved));
+	}
+	vec3 water = deep.rgb * mix(0.88, 1.14, sea_state) + air_color.rgb * 0.045;
 	if (coast_area.w > 0.5 && distance_m < 2200.0) {
 		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
 		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));

@@ -32,3 +32,10 @@ rendering_device/driver.android="vulkan"
 anti_aliasing/quality/msaa_3d=1
 scaling_3d/scale=0.85
 lights_and_shadows/directional_shadow/size=2048
+
+[shader_globals]
+
+cloud_drift={
+"type": "vec2",
+"value": Vector2(0, 0)
+}

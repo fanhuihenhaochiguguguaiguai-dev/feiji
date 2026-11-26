@@ -22,8 +22,8 @@ with ZipFile(args.stock) as stock, ZipFile(args.built) as built, ZipFile(args.te
     assert "assets/assets/boot/splash.png" in built.namelist()
     assert {"lib/arm64-v8a/libskyterrain.android.arm64.so",
             "lib/arm64-v8a/libterrain.android.release.arm64.so"}.issubset(built.namelist())
-    for entry in ("assets/assets/environment/world-116.res", "assets/assets/environment/world-413.res",
-                  "assets/assets/environment/world-704.res"):
+    for entry in ("assets/assets/environment/world-116.scn", "assets/assets/environment/world-413.scn",
+                  "assets/assets/environment/world-704.scn"):
         if entry in stock.namelist():
             assert entry in built.namelist()
     print(json.dumps({

@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bi63sivgkt2vd"
-path="res://.godot/imported/cloud-density.png-837ca8d6e708b5617d65c5911fea05e3.ctex"
+uid="uid://bn8dnkealeguu"
+path="res://.godot/imported/j20_Nozzle material mask.png-deab6d84622988dc42b6606ba1266029.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "ae5eb01230c3fddb3a536cc816c45bb9"
 }
 
 [deps]
 
-source_file="res://assets/surface/cloud-density.png"
-dest_files=["res://.godot/imported/cloud-density.png-837ca8d6e708b5617d65c5911fea05e3.ctex"]
+source_file="res://assets/fleet/j20_Nozzle material mask.png"
+dest_files=["res://.godot/imported/j20_Nozzle material mask.png-deab6d84622988dc42b6606ba1266029.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

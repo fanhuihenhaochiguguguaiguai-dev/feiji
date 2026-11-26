@@ -232,7 +232,7 @@ func _draw() -> void:
 		if edge.length_squared() > 0.0001:
 			var p := aim + edge * (radius + 12.0)
 			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
-	var reticle: Vector2 = _aim_at(fight.lead) if fight.target else aim
+	var reticle: Vector2 = _aim_at(fight.lead) if fight.target and fight.contact_lost_at == -INF else aim
 	draw_arc(reticle, 17, 0.0, TAU, 36, Color(cyan, 0.69), 1.0, true)
 	for n in 4:
 		var a := Vector2.RIGHT.rotated(n * PI * 0.5)
