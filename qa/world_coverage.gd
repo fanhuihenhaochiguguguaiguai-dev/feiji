@@ -33,6 +33,7 @@ func run() -> void:
 		map.configure(sector, eye, start)
 		if not map.resident:
 			map._add_resident_ground()
+		var seam_error := _coverage_seams(map.resident)
 		var position := map.local_position(start)
 		var stride := Vector3(397, 0, -267)
 		var coverage_gaps := 0
@@ -60,14 +61,48 @@ func run() -> void:
 			if index.x >= 0 and index.y >= 0 and index.x < WORLD.RESIDENT_SIDE and index.y < WORLD.RESIDENT_SIDE:
 				aligned = aligned and map.residency.get_pixelv(index).r > 0.5
 		var success := aligned and rebases > 0 and coverage_gaps == 0 and map.resident.get_child_count() == 16
-		success = success and fine_index.size() == 50 and error_m <= 0.03125
+		success = success and fine_index.size() == 50 and error_m <= 0.03125 and seam_error <= 0.001
 		failures += int(not success)
 		summary.append({"theatre": sector.id, "speed_mps": stride.length(), "distance_m": stride.length() * 2400.0 / 90.0,
 			"coverage_gaps":coverage_gaps, "rebases":rebases, "mask_matches_fine_tiles":aligned,
-			"offline_tiles":fine_index.size(), "max_codec_error_m":error_m, "decode_ms":float(decode_us) * 0.001 / maxi(1, fine_index.size()),
+			"max_coverage_seam_error_m":seam_error, "offline_tiles":fine_index.size(),
+			"max_codec_error_m":error_m, "decode_ms":float(decode_us) * 0.001 / maxi(1, fine_index.size()),
 			"generate_ms":float(generate_us) * 0.001 / maxi(1, fine_index.size()), "max_follow_ms":worst_usec * 0.001})
 		map.queue_free()
 		eye.queue_free()
 		await process_frame
 	print(JSON.stringify({"terrain":summary,"failures":failures}))
 	quit(int(failures > 0))
+
+func _coverage_seams(ground: Node3D) -> float:
+	var error := 0.0
+	for row in [1, 2]:
+		for x in [0, 2]:
+			error = maxf(error, _edge_error(ground.get_child(row * 4 + x).mesh, ground.get_child(row * 4 + x + 1).mesh, true))
+	for column in [1, 2]:
+		for z in [0, 2]:
+			error = maxf(error, _edge_error(ground.get_child(z * 4 + column).mesh, ground.get_child((z + 1) * 4 + column).mesh, false))
+	return error
+
+func _edge_error(a: ArrayMesh, b: ArrayMesh, across_x: bool) -> float:
+	if a.get_surface_count() == 0 or b.get_surface_count() == 0:
+		return 0.0
+	var left: PackedVector3Array = a.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var right: PackedVector3Array = b.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var le := roundi(sqrt(left.size())) - 1
+	var re := roundi(sqrt(right.size())) - 1
+	var edge_steps := maxi(le, re)
+	var maximum := 0.0
+	for i in edge_steps + 1:
+		var left_step := i * float(le) / edge_steps
+		var right_step := i * float(re) / edge_steps
+		var a0 := _edge_vertex(left, le, floori(left_step), across_x, true)
+		var a1 := _edge_vertex(left, le, ceili(left_step), across_x, true)
+		var b0 := _edge_vertex(right, re, floori(right_step), across_x, false)
+		var b1 := _edge_vertex(right, re, ceili(right_step), across_x, false)
+		maximum = maxf(maximum, a0.lerp(a1, fposmod(left_step, 1.0)).distance_to(b0.lerp(b1, fposmod(right_step, 1.0))))
+	return maximum
+
+func _edge_vertex(vertices: PackedVector3Array, edge: int, i: int, across_x: bool, end: bool) -> Vector3:
+	var boundary := edge if end else 0
+	return vertices[i * (edge + 1) + boundary] if across_x else vertices[boundary * (edge + 1) + i]
