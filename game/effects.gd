@@ -174,10 +174,11 @@ func puff(at: Vector3, vel: Vector3, size: float, span: float, kind: int, opacit
 		item.kind = material
 		item.node.material_override = puff_materials[material]
 	item.node.set_instance_shader_parameter("atlas", not water)
+	item.node.set_instance_shader_parameter("contact_flash", kind == 8)
 	item.node.set_instance_shader_parameter("hidden", float(water))
 	item.node.set_instance_shader_parameter("tint", tint)
 	item.node.set_instance_shader_parameter("life", 0.0)
-	item.node.set_instance_shader_parameter("soft_depth", clampf(size * 0.26, 0.42, 5.0))
+	item.node.set_instance_shader_parameter("soft_depth", 0.10 if kind == 8 else clampf(size * 0.26, 0.42, 5.0))
 	item.node.set_instance_shader_parameter("roll", randf_range(-PI, PI))
 	item.node.set_instance_shader_parameter("emission_gain", 5.8 if flash else (3.6 if burning else (3.4 if fire else (6.0 if spark else 0.0))))
 	item.left = span
@@ -203,6 +204,7 @@ func prime(at: Vector3) -> void:
 	puff(at, Vector3.ZERO, 0.12, 0.05, 1)
 	puff(at, Vector3.ZERO, 0.12, 0.05, BURNING)
 	puff(at, Vector3.ZERO, 0.12, 0.05, 0)
+	puff(at, Vector3.ZERO, 0.12, 0.05, 8)
 	update_heat(at, Quaternion.IDENTITY, true)
 	heat_wake.scale = Vector3.ONE * 0.055
 
@@ -215,8 +217,11 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 	var direction := normal if normal != Vector3.ZERO else Vector3.UP
 	_emit_burst(at, power, water, direction)
 	if power == 0:
-		var size := clampf(view.position.distance_to(at) * 0.0036, 1.25, 4.1)
-		puff(at + direction * 0.25, carried * 0.77, size * 0.69, 0.072, 8)
+		var eye_ray := view.position - at
+		var size := clampf(eye_ray.length() * 0.0060, 1.55, 5.4)
+		# The cue still belongs to the confirmed contact. Lift the glare just off the opaque hull.
+		var flare := at + eye_ray.normalized() * minf(0.85, size * 0.38)
+		puff(flare, carried * 0.86, size * 0.82, 0.105, 8)
 		puff(at + direction * 0.38, carried * 0.58 + direction * 31.0, size, 0.21, 2)
 		return
 	var destroyed := power == 2
@@ -323,7 +328,7 @@ func _prepare_impacts() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var spark := BoxMesh.new()
-	spark.size = Vector3(0.09, 0.40, 0.07)
+	spark.size = Vector3(0.13, 0.52, 0.10)
 	spark.material = emissive(Color("#ffc280"), 3.8)
 	for index in 8:
 		var emitter := GPUParticles3D.new()
@@ -348,7 +353,10 @@ func _prepare_impacts() -> void:
 		burst_pool.append(emitter)
 
 func _emit_burst(at: Vector3, power: int, water: bool, normal: Vector3) -> void:
-	if burst_pool.is_empty() or water or view.position.distance_squared_to(at) > 3200.0 * 3200.0:
+	if burst_pool.is_empty() or water:
+		return
+	var distance := view.position.distance_to(at)
+	if distance > 3200.0:
 		return
 	var emitter := burst_pool[burst_slot]
 	burst_slot = (burst_slot + 1) % burst_pool.size()
@@ -357,6 +365,9 @@ func _emit_burst(at: Vector3, power: int, water: bool, normal: Vector3) -> void:
 	var motion := emitter.process_material as ParticleProcessMaterial
 	motion.direction = normal
 	motion.spread = 58.0 if power == 0 else 137.0
+	var perceptual_scale := clampf(distance * 0.0075, 1.0, 5.0) if power == 0 else 1.0
+	motion.scale_min = 0.39 * perceptual_scale
+	motion.scale_max = 1.16 * perceptual_scale
 	emitter.restart()
 
 func projectile(slot: int, at: Vector3, direction: Vector3, missile: bool) -> void:

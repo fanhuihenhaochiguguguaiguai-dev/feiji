@@ -13,6 +13,7 @@ instance uniform float hidden = 0.0;
 instance uniform bool atlas = false;
 instance uniform float roll = 0.0;
 instance uniform float soft_depth = 1.0;
+instance uniform bool contact_flash = false;
 varying vec3 camera_position;
 varying vec3 local_sun;
 
@@ -38,8 +39,19 @@ void fragment() {
 		float f = min(15.0, floor(clamp(life, 0.0, 1.0) * 16.0));
 		uv = (uv + vec2(mod(f, 4.0), floor(f / 4.0))) * 0.25;
 	}
-	vec4 texel = texture(flipbook, uv);
-	float mask = texel.a * (1.0 - smoothstep(0.23, 0.52, length(UV - vec2(0.5))));
+	vec2 radial = (UV - vec2(0.5)) * 2.0;
+	vec4 texel;
+	float mask;
+	if (contact_flash) {
+		float r2 = dot(radial, radial);
+		float kernel = exp(-r2 * 10.0);
+		float spikes = exp(-abs(radial.x * radial.y) * 98.0) * exp(-r2 * 5.8);
+		texel = vec4(mix(vec3(1.0, 0.47, 0.15), vec3(1.0, 0.96, 0.84), kernel), 1.0);
+		mask = (1.0 - smoothstep(0.58, 1.0, r2)) * max(kernel, spikes * 0.48);
+	} else {
+		texel = texture(flipbook, uv);
+		mask = texel.a * (1.0 - smoothstep(0.23, 0.52, length(UV - vec2(0.5))));
+	}
 	float depth = texture(depth_tex, SCREEN_UV).x;
 	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
 	float soft = smoothstep(0.0, soft_depth, (-behind.z / behind.w) + camera_position.z);
