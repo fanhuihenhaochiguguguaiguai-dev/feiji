@@ -30,3 +30,10 @@ Explosions by fscopel, Creative Commons Attribution 3.0. Changes include frame
 selection, black background removal, color grading and atlas packing.
 https://opengameart.org/content/photo-realistic-explosions
 https://creativecommons.org/licenses/by/3.0/
+
+Coastal Cliff 01 local mesh by Rico Cilliers (cleanup) and Rob Tuytel
+(photography and processing), Poly Haven, CC0 1.0. The 1K glTF was decimated
+to 6,800 triangles with the scanned UVs and PBR textures retained. The mesh
+is fitted to the fictional bay shoreline.
+https://polyhaven.com/a/coastal_cliff_01
+https://polyhaven.com/license

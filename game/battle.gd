@@ -735,9 +735,9 @@ func _update_shots(dt: float) -> void:
 				first_hit = hit
 				victim = jet
 				surface = start.lerp(end, hit)
-		var ground_hit := world.first_surface_contact(at, toward)
-		if ground_hit < first_hit:
-			first_hit = ground_hit
+		var ground_hit := world.trace_surface(at, toward)
+		if ground_hit.w < first_hit:
+			first_hit = ground_hit.w
 			victim = null
 		if first_hit <= 1.0:
 			var contact := at.lerp(toward, first_hit)
@@ -747,8 +747,9 @@ func _update_shots(dt: float) -> void:
 				_apply_hit(cast, victim, contact, surface)
 			else:
 				if guided:
-					var water := contact.y <= 1.0 and world.height(contact) <= 0.0
-					effects.impact(contact, 1, water, Vector3.ZERO, Vector3.UP if water else world.surface_normal(contact))
+					var water := contact.y <= 0.001 and world.heightfield_height(contact) <= 0.0
+					effects.impact(contact, 1, water, Vector3.ZERO, Vector3(ground_hit.x, ground_hit.y, ground_hit.z))
+					audio.play_at("water" if water else "blast", contact)
 				_expire(cast, contact)
 			continue
 		cast.previous = at

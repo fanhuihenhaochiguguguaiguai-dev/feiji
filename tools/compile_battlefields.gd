@@ -128,21 +128,24 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 			var dz := (heights[mini(EDGE - 1, z + 1) * EDGE + x] - heights[maxi(0, z - 1) * EDGE + x]) / (2.0 * SPACING)
 			var normal := Vector3(-dx, 1, -dz).normalized()
 			var powder := float((climate.decode_u32(i * 4) >> 14) & 255) / 255.0 if snow else 0.0
-			var base := rock.lerp(Color(0.56, 0.63, 0.70), powder)
-			if geology:
-				var field_origin := Vector2(6144, 6144) if snow else Vector2(6250, 6200)
-				var cell := Vector2i(((at + field_origin) / 24.0).round())
-				if Rect2i(Vector2i.ZERO, geology.get_size()).has_point(cell):
-					var tint := geology.get_pixelv(cell).srgb_to_linear()
-					base *= Color.WHITE.lerp(tint, 0.48)
-			colors.append(base * (0.59 + clampf(normal.dot(sun), 0.0, 1.0) * 0.52))
+			colors.append(_surface_color(at, normal, powder, rock, sun, geology, snow))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = points
 	arrays[Mesh.ARRAY_COLOR] = colors
 	var faces := _faces(points, row_size, 1)
+	if stride == 1 and int(theatre.seed) == 704:
+		var patch_origin := origin + Vector2(start) * SPACING
+		if Rect2(patch_origin, Vector2.ONE * PATCH * SPACING).intersects(Rect2(-6250, -6200, 24576, 24576)):
+			var adaptive := _refine_survey_patch(points, colors, row_size, patch_origin, geology, rock, sun)
+			points = adaptive.points
+			colors = adaptive.colors
+			faces = adaptive.faces
+			arrays[Mesh.ARRAY_VERTEX] = points
+			arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = faces
 	var resource := ArrayMesh.new()
+	resource.set_meta("boundary_side", row_size)
 	if not faces.is_empty():
 		var lods := {}
 		if stride == 1:
@@ -151,6 +154,87 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 				lods[_vertical_error(points, row_size)] = coarse_faces
 		resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], lods)
 	return resource
+
+func _surface_color(at: Vector2, normal: Vector3, powder: float, rock: Color, sun: Vector3, geology: Image, snow: bool) -> Color:
+	var base := rock.lerp(Color(0.56, 0.63, 0.70), powder)
+	if geology:
+		var field_origin := Vector2(6144, 6144) if snow else Vector2(6250, 6200)
+		var cell := Vector2i(((at + field_origin) / 24.0).round())
+		if Rect2i(Vector2i.ZERO, geology.get_size()).has_point(cell):
+			var tint := geology.get_pixelv(cell).srgb_to_linear()
+			base *= Color.WHITE.lerp(tint, 0.48)
+	return base * (0.59 + clampf(normal.dot(sun), 0.0, 1.0) * 0.52)
+
+func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, side: int,
+		patch_origin: Vector2, geology: Image, rock: Color, sun: Vector3) -> Dictionary:
+	const MID := SPACING * 0.5
+	const EDGE_ERROR := 7.0
+	const INTERIOR_ERROR := 9.0
+	var dense_side := (side - 1) * 2 + 1
+	var dense: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "height_tile",
+		patch_origin.x, patch_origin.y, dense_side, MID, 704)
+	var survey := Rect2(-6250, -6200, 24576, 24576)
+	var survey_margin := survey.grow(SPACING)
+	var climate := WORLD.snow_controls(patch_origin, dense_side, MID, dense)
+	var tint := func(index: int, at: Vector2) -> Color:
+		var normal := Vector3(dense[index - 1] - dense[index + 1], SPACING,
+			dense[index - dense_side] - dense[index + dense_side]).normalized()
+		var powder := float((climate.decode_u32(index * 4) >> 14) & 255) / 255.0
+		return _surface_color(at, normal, powder, rock, sun, geology, true)
+	var middle_vertices := {}
+	var faces := PackedInt32Array()
+	var refined := 0
+	for z in side - 1:
+		for x in side - 1:
+			var a := z * side + x
+			var b := a + 1
+			var c := a + side
+			var d := c + 1
+			var dense_a := z * 2 * dense_side + x * 2
+			var centre := dense_a + dense_side + 1
+			var centre_at := patch_origin + Vector2(x * 2 + 1, z * 2 + 1) * MID
+			var centre_error := absf(dense[centre] - (points[b].y + points[c].y) * 0.5)
+			if not survey_margin.has_point(centre_at):
+				_push_face(faces, points, a, c, b)
+				_push_face(faces, points, b, c, d)
+				continue
+			var corners := [a, c, d, b]
+			var probes := [dense_a + dense_side, dense_a + dense_side * 2 + 1, dense_a + dense_side + 2, dense_a + 1]
+			var bounds := [x == 0, z == side - 2, x == side - 2, z == 0]
+			var contour := PackedInt32Array()
+			for i in 4:
+				var start: int = corners[i]
+				var next: int = corners[(i + 1) % 4]
+				var probe: int = probes[i]
+				contour.append(start)
+				var at := patch_origin + Vector2(probe % dense_side, floori(float(probe) / dense_side)) * MID
+				if bounds[i] or not survey.has_point(at):
+					continue
+				if absf(dense[probe] - (points[start].y + points[next].y) * 0.5) <= EDGE_ERROR:
+					continue
+				if not middle_vertices.has(probe):
+					middle_vertices[probe] = points.size()
+					points.append(Vector3(at.x, dense[probe], at.y))
+					colors.append(tint.call(probe, at))
+				contour.append(middle_vertices[probe])
+			if contour.size() == 4 and (centre_error <= INTERIOR_ERROR or not survey.has_point(centre_at)):
+				_push_face(faces, points, a, c, b)
+				_push_face(faces, points, b, c, d)
+				continue
+			refined += 1
+			var centre_vertex := points.size()
+			points.append(Vector3(centre_at.x, dense[centre], centre_at.y))
+			colors.append(tint.call(centre, centre_at))
+			for i in contour.size():
+				_push_face(faces, points, centre_vertex, contour[i], contour[(i + 1) % contour.size()])
+	print("Refined survey cells: ", refined, ", new vertices: ", points.size() - side * side)
+	return {"points":points, "colors":colors, "faces":faces}
+
+func _push_face(faces: PackedInt32Array, points: PackedVector3Array, a: int, b: int, c: int) -> void:
+	if maxf(points[a].y, maxf(points[b].y, points[c].y)) > -4.0:
+		faces.append(a)
+		faces.append(b)
+		faces.append(c)
 
 func _faces(points: PackedVector3Array, row_size: int, stride: int) -> PackedInt32Array:
 	var faces := PackedInt32Array()

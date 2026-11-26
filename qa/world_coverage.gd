@@ -37,6 +37,7 @@ func run() -> void:
 		if not map.resident:
 			map._add_resident_ground()
 		var seam_error := _coverage_seams(map.resident)
+		var cliff_probe := _cliff_probe(map) if seed_id == 413 else {}
 		var position := map.local_position(start)
 		var stride := Vector3(397, 0, -267)
 		var coverage_gaps := 0
@@ -67,18 +68,60 @@ func run() -> void:
 		success = success and fine_index.size() == 50 and error_m <= 0.03125 and seam_error <= 0.001
 		if seed_id == 704:
 			success = success and alpine.valley < 0.04 and alpine.summit > 0.47 and alpine.cliff < alpine.summit
+		if seed_id == 413:
+			if cliff_probe.has("start"):
+				var start_local := map.local_position(cliff_probe.start)
+				var end_local := map.local_position(cliff_probe.end)
+				var after := map.trace_surface(start_local, end_local)
+				cliff_probe.rebase_error_m = start_local.lerp(end_local, after.w).distance_to(map.local_position(cliff_probe.contact))
+			success = (success and cliff_probe.get("exact_hit", false) and cliff_probe.get("underhang_passage", false)
+				and cliff_probe.get("rebase_error_m", INF) < 0.004)
+			for key in ["start", "end", "contact"]:
+				cliff_probe.erase(key)
 		failures += int(not success)
 		summary.append({"theatre": sector.id, "speed_mps": stride.length(), "distance_m": stride.length() * 2400.0 / 90.0,
 			"coverage_gaps":coverage_gaps, "rebases":rebases, "mask_matches_fine_tiles":aligned,
 			"max_coverage_seam_error_m":seam_error, "offline_tiles":fine_index.size(),
 			"max_codec_error_m":error_m, "decode_ms":float(decode_us) * 0.001 / maxi(1, fine_index.size()),
 			"generate_ms":float(generate_us) * 0.001 / maxi(1, fine_index.size()), "max_follow_ms":worst_usec * 0.001,
-			"alpine_profile":alpine})
+			"alpine_profile":alpine, "cliff_probe":cliff_probe})
 		map.queue_free()
 		eye.queue_free()
 		await process_frame
 	print(JSON.stringify({"terrain":summary,"failures":failures}))
 	quit(int(failures > 0))
+
+func _cliff_probe(map: Node3D) -> Dictionary:
+	if not map.cliff or not map.cliff_collision:
+		return {"loaded":false}
+	var result := {"loaded":true, "exact_hit":false, "underhang_passage":false}
+	var cliff: MeshInstance3D = map.cliff
+	var shift := Vector3(map.origin.x * WORLD.TILE, 0.0, map.origin.y * WORLD.TILE)
+	for x in range(-39, 40, 2):
+		for level in range(2, 9):
+			var start := cliff.to_global(Vector3(x, level, 7.0))
+			var end := cliff.to_global(Vector3(x, level, -1.0))
+			if not is_inf(map._heightfield_contact(start, end)):
+				continue
+			var geometric: Dictionary = map.cliff_collision.intersect_segment(cliff.to_local(start), cliff.to_local(end))
+			var contact: Vector4 = map.trace_surface(start, end)
+			if not geometric.is_empty() and not result.exact_hit:
+				var actual := cliff.to_global(geometric.position)
+				result.exact_hit = (
+					start.lerp(end, contact.w).distance_to(actual) < 0.004 and map.obstruction(start, end)
+					and Vector3(contact.x, contact.y, contact.z).dot(end - start) <= 0.0)
+				result.start = start + shift
+				result.end = end + shift
+				result.contact = actual + shift
+			if geometric.is_empty() and is_inf(contact.w) and not result.underhang_passage:
+				for i in range(1, 7):
+					var point := start.lerp(end, i / 7.0)
+					if map.height(point) > point.y + 0.5:
+						result.underhang_passage = true
+						break
+			if result.exact_hit and result.underhang_passage:
+				return result
+	return result
 
 func _alpine_profile(index: Dictionary) -> Dictionary:
 	var sum := Vector3.ZERO
@@ -89,7 +132,7 @@ func _alpine_profile(index: Dictionary) -> Dictionary:
 		var data := WORLD.read_region(coord, 704, index)
 		preparation += Time.get_ticks_usec() - start
 		var bytes: PackedByteArray = data.control.get_data()
-		var heights: PackedFloat32Array = data.heights
+		var heights: PackedFloat32Array = data.height_map.get_data().to_float32_array()
 		for z in range(4, WORLD.SIZE - 4, 8):
 			for x in range(4, WORLD.SIZE - 4, 8):
 				var i := z * WORLD.SIZE + x
@@ -119,8 +162,8 @@ func _edge_error(a: ArrayMesh, b: ArrayMesh, across_x: bool) -> float:
 		return 0.0
 	var left: PackedVector3Array = a.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	var right: PackedVector3Array = b.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var le := roundi(sqrt(left.size())) - 1
-	var re := roundi(sqrt(right.size())) - 1
+	var le := int(a.get_meta("boundary_side", roundi(sqrt(left.size())))) - 1
+	var re := int(b.get_meta("boundary_side", roundi(sqrt(right.size())))) - 1
 	var edge_steps := maxi(le, re)
 	var maximum := 0.0
 	for i in edge_steps + 1:

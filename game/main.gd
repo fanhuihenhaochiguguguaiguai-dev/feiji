@@ -561,6 +561,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 	var seed_value := int(catalogue.source.theatres[int(operation.get("region", 0))].seed)
 	Landscape.prepare_relief(seed_value)
 	var fine_tiles := Landscape.fine_tile_index(seed_value)
+	var relief_color := Landscape.load_relief_color(seed_value)
 	var ids := [str(profile.state.selected)]
 	if mode == "free":
 		ids.append_array(Battle.FREE_ROSTER)
@@ -581,6 +582,11 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
 			return {}
 		requests[id] = path
+	if seed_value == 413:
+		var path := Landscape.COASTAL_CLIFF
+		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
+			return {}
+		requests[path] = path
 	var total := tiles.size() + requests.size() + 1
 	load_meter.max_value = total
 	var ready := {}
@@ -592,7 +598,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 			if not job.is_alive():
 				var data: Dictionary = job.wait_to_finish()
 				workers.erase(coord)
-				if data.heights.size() != Landscape.SIZE * Landscape.SIZE:
+				if data.is_empty():
 					failure = true
 				ready[coord] = data
 				load_meter.value += 1
@@ -602,7 +608,11 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 			if state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
 				continue
 			if state == ResourceLoader.THREAD_LOAD_LOADED:
-				catalogue.scenes[id] = ResourceLoader.load_threaded_get(path)
+				var resource := ResourceLoader.load_threaded_get(path)
+				if id == Landscape.COASTAL_CLIFF:
+					ready[id] = resource
+				else:
+					catalogue.scenes[id] = resource
 			else:
 				failure = true
 			requests.erase(id)
@@ -610,12 +620,14 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 		while workers.size() < 3 and not tiles.is_empty():
 			var coord: Vector2i = tiles.pop_front()
 			var job := Thread.new()
-			if job.start(Landscape.read_region.bind(coord, seed_value, fine_tiles)) == OK:
+			if job.start(Landscape.read_region.bind(coord, seed_value, fine_tiles, relief_color)) == OK:
 				workers[coord] = job
 			else:
 				failure = true
 		light_load_label.text = "已准备 %d / %d 项" % [int(load_meter.value), total]
 		await get_tree().process_frame
+	if not failure and relief_color:
+		ready["relief_color"] = relief_color
 	return {} if failure else ready
 
 func show_pause(show: bool) -> void:

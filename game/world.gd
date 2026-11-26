@@ -4,6 +4,10 @@ const SIZE := 256
 const STEP := 6.0
 const TILE := SIZE * STEP
 const APRON_HEIGHT := 150.0
+const COASTAL_CLIFF := "res://assets/environment/coastal-cliff.glb"
+const CLIFF_SITE := Vector3(9244.0, 2.5, 6688.0)
+const CLIFF_YAW := -2.4156
+const CLIFF_SCALE := 2.0
 const MAX_JOBS := 3
 const STREAM_INTERVAL := 0.12
 const UPLOAD_BUDGET := 2
@@ -66,6 +70,10 @@ var flight_view: Camera3D
 var resident: Node3D
 var residency: Image
 var detailed_regions: ImageTexture
+var cliff: MeshInstance3D
+var cliff_collision: TriangleMesh
+var cliff_bounds: AABB
+var cliff_world_bounds: AABB
 
 static func opening_tiles(start: Vector3) -> Array[Vector2i]:
 	var centre := Vector2i(floori(start.x / TILE), floori(start.z / TILE))
@@ -86,8 +94,9 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	seed_value = int(theatre.seed)
 	prepare_relief(seed_value)
 	fine_tiles = fine_tile_index(seed_value)
-	if FIELDS.has(seed_value):
-		relief_color = (load("res://assets/environment/%s-color.png" % FIELDS[seed_value]) as Texture2D).get_image()
+	relief_color = prepared.get("relief_color")
+	if not relief_color:
+		relief_color = load_relief_color(seed_value)
 	flight_environment = add_environment(self, theatre)
 	cloud_material = flight_environment.sky.sky_material
 	rider = Node3D.new()
@@ -111,10 +120,16 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var snow: bool = theatre.snow
 	var coast := seed_value == 413
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
-	terrain.assets.set_texture_asset(0, _surface("积雪" if snow else "砂砾地表", Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")), 0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45))
+	var lowland := _surface("积雪" if snow else "砂砾地表",
+		Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")),
+		0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45)
+	if coast:
+		lowland.set_detiling_rotation(0.09)
+		lowland.set_detiling_shift(0.27)
+	terrain.assets.set_texture_asset(0, lowland)
 	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")),
 		0.57 if snow else 0.155, ROCK, NORMAL_ROCK)
-	if snow:
+	if snow or coast:
 		# Break the period of the scan and avoid stretching it across the exposed face.
 		rock.set_detiling_rotation(0.16)
 		rock.set_detiling_shift(0.29)
@@ -129,7 +144,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 		terrain.material.set_shader_param("auto_height_reduction", 0.026)
 	terrain.set_clipmap_target(rider)
 	for coord in opening_tiles(start):
-		var data: Dictionary = prepared[coord] if prepared.has(coord) else read_region(coord, seed_value, fine_tiles)
+		var data: Dictionary = prepared[coord] if prepared.has(coord) else read_region(coord, seed_value, fine_tiles, relief_color)
 		_activate(coord, data)
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
@@ -138,6 +153,8 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 		_add_resident_ground()
 	_make_sea(camera)
 	_make_runway()
+	if coast:
+		_add_coastal_cliff(prepared.get(COASTAL_CLIFF))
 
 static func prepare_relief(seed_id: int) -> void:
 	if relief_ready.has(seed_id) or not FIELDS.has(seed_id):
@@ -292,12 +309,27 @@ static func read_tile(coord: Vector2i, seed_id: int, index: Dictionary) -> Packe
 				return ClassDB.class_call_static("SkyTerrainKernel", "decode_tile", data, SIZE, data.size())
 	return bake_tile(coord, seed_id)
 
-static func read_region(coord: Vector2i, seed_id: int, index: Dictionary) -> Dictionary:
+static func load_relief_color(seed_id: int) -> Image:
+	if not FIELDS.has(seed_id):
+		return null
+	var texture := load("res://assets/environment/%s-color.png" % FIELDS[seed_id]) as Texture2D
+	return texture.get_image()
+
+static func read_region(coord: Vector2i, seed_id: int, index: Dictionary, color_source: Image = null) -> Dictionary:
 	var heights := read_tile(coord, seed_id, index)
-	var data := {"heights": heights}
-	if seed_id == 704 and heights.size() == SIZE * SIZE:
+	if heights.size() != SIZE * SIZE:
+		return {}
+	var data := {"height_map": Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, heights.to_byte_array())}
+	if seed_id == 704:
 		var controls := snow_controls(Vector2(coord) * TILE, SIZE, STEP, heights)
 		data.control = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, controls)
+	if color_source:
+		const SAMPLES := SIZE / 4
+		var source := Rect2i(coord * SAMPLES + Vector2i(255, 255), Vector2i.ONE * (SAMPLES + 2))
+		if Rect2i(Vector2i.ZERO, color_source.get_size()).encloses(source):
+			var colors := color_source.get_region(source)
+			colors.resize(SIZE + 8, SIZE + 8, Image.INTERPOLATE_BILINEAR)
+			data.color = colors.get_region(Rect2i(6, 6, SIZE, SIZE))
 	return data
 
 static func snow_controls(corner: Vector2, samples: int, spacing: float, heights: PackedFloat32Array) -> PackedByteArray:
@@ -308,7 +340,50 @@ static func snow_controls(corner: Vector2, samples: int, spacing: float, heights
 func cell(local_point: Vector3) -> Vector2i:
 	return origin + Vector2i(floori(local_point.x / TILE), floori(local_point.z / TILE))
 
+func _add_coastal_cliff(prepared: PackedScene) -> void:
+	var asset := prepared if prepared else load(COASTAL_CLIFF) as PackedScene
+	if not asset:
+		return
+	var root := asset.instantiate()
+	var mesh := root as MeshInstance3D if root is MeshInstance3D else root.find_child("CoastalCliff") as MeshInstance3D
+	if not mesh or not mesh.mesh:
+		root.free()
+		return
+	if mesh != root:
+		root.remove_child(mesh)
+		root.free()
+	cliff = mesh
+	cliff.name = "CoastalCliff"
+	cliff.transform = Transform3D(Basis(Vector3.UP, CLIFF_YAW).scaled(Vector3.ONE * CLIFF_SCALE), local_position(CLIFF_SITE))
+	add_child(cliff)
+	cliff_bounds = cliff.mesh.get_aabb().grow(0.02)
+	cliff_collision = cliff.mesh.generate_triangle_mesh()
+	cliff_world_bounds = cliff.transform * cliff_bounds
+
+func _cliff_hit(start: Vector3, end: Vector3) -> Dictionary:
+	if cliff_collision and cliff_world_bounds.intersects_segment(start, end):
+		var from_local := cliff.to_local(start)
+		var to_local := cliff.to_local(end)
+		if from_local.distance_squared_to(to_local) > 0.00000001 and cliff_bounds.intersects_segment(from_local, to_local):
+			return cliff_collision.intersect_segment(from_local, to_local)
+	return {}
+
 func height(local_point: Vector3) -> float:
+	var ground := heightfield_height(local_point)
+	if (cliff_collision and local_point.x >= cliff_world_bounds.position.x and local_point.x <= cliff_world_bounds.end.x
+			and local_point.z >= cliff_world_bounds.position.z and local_point.z <= cliff_world_bounds.end.z
+			and ground < cliff_world_bounds.end.y):
+		var local := cliff.to_local(local_point)
+		if (local.x >= cliff_bounds.position.x and local.x <= cliff_bounds.end.x
+				and local.z >= cliff_bounds.position.z and local.z <= cliff_bounds.end.z):
+			var impact := cliff_collision.intersect_segment(
+				Vector3(local.x, cliff_bounds.end.y, local.z),
+				Vector3(local.x, cliff_bounds.position.y, local.z))
+			if not impact.is_empty():
+				return maxf(ground, cliff.to_global(impact.position).y)
+	return ground
+
+func heightfield_height(local_point: Vector3) -> float:
 	if is_runway(local_point):
 		return 26.2
 	if terrain:
@@ -319,12 +394,12 @@ func height(local_point: Vector3) -> float:
 
 # Trace the same heightfield the aircraft use. Subdivide near the surface so an intervening
 # ridge can stop a projectile even when both ends of the physics step are above ground.
-func first_surface_contact(start: Vector3, end: Vector3) -> float:
-	var end_clearance := end.y - maxf(0.0, height(end))
+func _heightfield_contact(start: Vector3, end: Vector3) -> float:
+	var end_clearance := end.y - maxf(0.0, heightfield_height(end))
 	var horizontal := Vector2(end.x - start.x, end.z - start.z).length()
 	if end_clearance > maxf(24.0, horizontal * 4.0 + absf(end.y - start.y)):
 		return INF
-	var start_clearance := start.y - maxf(0.0, height(start))
+	var start_clearance := start.y - maxf(0.0, heightfield_height(start))
 	if start_clearance <= 0.0:
 		return 0.0
 	var intervals := clampi(ceili(horizontal / (STEP * 0.5)), 1, 16)
@@ -333,7 +408,7 @@ func first_surface_contact(start: Vector3, end: Vector3) -> float:
 	for i in range(1, intervals + 1):
 		var upper := float(i) / intervals
 		var point := start.lerp(end, upper)
-		var below := end_clearance if i == intervals else point.y - maxf(0.0, height(point))
+		var below := end_clearance if i == intervals else point.y - maxf(0.0, heightfield_height(point))
 		if below > 0.0:
 			lower = upper
 			above = below
@@ -341,7 +416,7 @@ func first_surface_contact(start: Vector3, end: Vector3) -> float:
 		for refine in 5:
 			var t := (lower + upper) * 0.5
 			point = start.lerp(end, t)
-			var clearance := point.y - maxf(0.0, height(point))
+			var clearance := point.y - maxf(0.0, heightfield_height(point))
 			if clearance > 0.0:
 				lower = t
 				above = clearance
@@ -351,18 +426,37 @@ func first_surface_contact(start: Vector3, end: Vector3) -> float:
 		return lerpf(lower, upper, above / (above - below))
 	return INF
 
-func surface_normal(at: Vector3) -> Vector3:
+func trace_surface(start: Vector3, end: Vector3) -> Vector4:
+	var ground := _heightfield_contact(start, end)
+	var mesh_hit := _cliff_hit(start, start.lerp(end, minf(1.0, ground)))
+	if not mesh_hit.is_empty():
+		var position := cliff.to_global(mesh_hit.position)
+		var direction := end - start
+		var fraction := clampf((position - start).dot(direction) / maxf(0.000001, direction.length_squared()), 0.0, 1.0)
+		var normal := (cliff.basis * Vector3(mesh_hit.normal)).normalized()
+		if normal.dot(direction) > 0.0:
+			normal = -normal
+		return Vector4(normal.x, normal.y, normal.z, fraction)
+	if is_inf(ground):
+		return Vector4(0.0, 1.0, 0.0, INF)
+	var contact := start.lerp(end, ground)
+	var normal := Vector3.UP if contact.y <= 0.001 and heightfield_height(contact) <= 0.0 else _heightfield_normal(contact)
+	return Vector4(normal.x, normal.y, normal.z, ground)
+
+func _heightfield_normal(at: Vector3) -> Vector3:
 	var dx := Vector3(STEP * 0.5, 0.0, 0.0)
 	var dz := Vector3(0.0, 0.0, STEP * 0.5)
-	return Vector3(height(at - dx) - height(at + dx), STEP, height(at - dz) - height(at + dz)).normalized()
+	return Vector3(heightfield_height(at - dx) - heightfield_height(at + dx), STEP, heightfield_height(at - dz) - heightfield_height(at + dz)).normalized()
 
 func is_runway(p: Vector3) -> bool:
 	return absf(p.x + origin.x * TILE + 340.0) < 27.0 and absf(p.z + origin.y * TILE - 350.0) < 430.0
 
 func obstruction(from: Vector3, to: Vector3) -> bool:
+	if not _cliff_hit(from, to).is_empty():
+		return true
 	for i in range(1, 8):
 		var p := from.lerp(to, i / 8.0)
-		if height(p) + 4.0 > p.y:
+		if heightfield_height(p) + 4.0 > p.y:
 			return true
 	return false
 
@@ -432,12 +526,13 @@ func _sync_resident_ground() -> void:
 	detailed_regions.update(residency)
 
 func _activate(coord: Vector2i, data: Dictionary) -> void:
+	if data.is_empty():
+		return
 	var region := Terrain3DRegion.new()
 	region.region_size = SIZE
 	region.vertex_spacing = STEP
 	region.location = coord - origin
-	var heights: PackedFloat32Array = data.heights
-	region.height_map = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, heights.to_byte_array())
+	region.height_map = data.height_map
 	if neutral_control:
 		region.control_map = neutral_control
 		region.color_map = neutral_color
@@ -447,13 +542,8 @@ func _activate(coord: Vector2i, data: Dictionary) -> void:
 		neutral_color = region.color_map
 	if data.has("control"):
 		region.control_map = data.control
-	if relief_color:
-		const SAMPLES := SIZE / 4
-		var source := Rect2i(coord * SAMPLES + Vector2i(255, 255), Vector2i.ONE * (SAMPLES + 2))
-		if Rect2i(Vector2i.ZERO, relief_color.get_size()).encloses(source):
-			var colors := relief_color.get_region(source)
-			colors.resize(SIZE + 8, SIZE + 8, Image.INTERPOLATE_BILINEAR)
-			region.color_map = colors.get_region(Rect2i(6, 6, SIZE, SIZE))
+	if data.has("color"):
+		region.color_map = data.color
 	region.calc_height_range()
 	terrain.data.add_region(region, false)
 	current[coord] = region
@@ -473,6 +563,9 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 		for coord in previous:
 			terrain.data.remove_regionl(coord - origin, false)
 		origin = here
+		if cliff:
+			cliff.position = local_position(CLIFF_SITE)
+			cliff_world_bounds = cliff.transform * cliff_bounds
 		cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
 		for coord in previous:
 			if Vector2i(coord - here).length_squared() <= 20:
@@ -545,7 +638,7 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			continue
 		var data: Dictionary = thread.wait_to_finish()
 		jobs.erase(coord)
-		if Vector2i(coord - here).length_squared() <= 21 and not current.has(coord):
+		if not data.is_empty() and Vector2i(coord - here).length_squared() <= 21 and not current.has(coord):
 			completed_tiles[coord] = data
 	var published := 0
 	for coord in completed_tiles.keys():
@@ -586,7 +679,7 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			completed_tiles[key] = cache[key]
 		else:
 			var task := Thread.new()
-			if task.start(read_region.bind(key, seed_value, fine_tiles)) == OK:
+			if task.start(read_region.bind(key, seed_value, fine_tiles, relief_color)) == OK:
 				jobs[key] = task
 	for key in current.keys():
 		if (key - here).length_squared() > 20:
