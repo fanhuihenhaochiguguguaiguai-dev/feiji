@@ -6,6 +6,14 @@ import bpy
 import numpy as np
 
 
+def diffuse(field, passes):
+    for _ in range(passes):
+        for axis in range(3):
+            padded = np.moveaxis(np.pad(field, [(1, 1) if i == axis else (0, 0) for i in range(3)]), axis, 0)
+            field = np.moveaxis((padded[:-2] + 2.0 * padded[1:-1] + padded[2:]) * 0.25, 0, axis)
+    return field
+
+
 def sample_volume(paths, samples=32):
     bpy.ops.object.volume_import(filepath=str(paths[len(paths) // 2]))
     volume = bpy.context.object
@@ -59,7 +67,13 @@ def sample_volume(paths, samples=32):
             frame[..., channel] = values.reshape((samples,) * 3)
         evaluated.to_mesh_clear()
         # The source extinction is expressed per original VDB world unit.
-        frame[..., 0] *= radius * 2.0
+        source_density = frame[..., 0] * radius * 2.0
+        # The filtered skirt retains wisps between lattice samples. Hot regions contribute
+        # soot above the flame, with the delay and spatial support baked into the volume.
+        skirt = diffuse(source_density, 2)
+        soot = np.zeros_like(source_density)
+        soot[:, 2:, :] = diffuse(frame[..., 1], 3)[:, :-2, :] * 0.63
+        frame[..., 0] = np.maximum(source_density, skirt * 1.45) + soot
         # Hemispherical visibility toward the upper layer, integrated offline.
         above = np.flip(np.cumsum(np.flip(frame[..., 0], axis=1), axis=1), axis=1)
         frame[..., 2] = np.exp(-above * 0.45)

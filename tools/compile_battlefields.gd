@@ -14,6 +14,8 @@ func _initialize() -> void:
 func compile() -> void:
 	for theatre in DATA.new().source.theatres:
 		var seed_id := int(theatre.seed)
+		if "--frost-only" in OS.get_cmdline_user_args() and seed_id != 704:
+			continue
 		WORLD.prepare_relief(seed_id)
 		if not "--coverage-only" in OS.get_cmdline_user_args() and not _compile_detail(seed_id):
 			push_error("Could not save fine terrain for %d" % seed_id)
@@ -24,6 +26,7 @@ func compile() -> void:
 		var origin := Vector2(WORLD.RESIDENT_MIN) * WORLD.TILE
 		var heights: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "height_tile",
 			origin.x, origin.y, EDGE, SPACING, seed_id)
+		var climate := WORLD.snow_controls(origin, EDGE, SPACING, heights) if bool(theatre.snow) else PackedByteArray()
 		var ground := Node3D.new()
 		var geology: Image
 		if WORLD.FIELDS.has(seed_id):
@@ -33,7 +36,7 @@ func compile() -> void:
 			for x in range(0, EDGE - 1, PATCH):
 				var chunk := MeshInstance3D.new()
 				var inner := x in [PATCH, PATCH * 2] and z in [PATCH, PATCH * 2]
-				chunk.mesh = _patch(heights, origin, Vector2i(x, z), 1 if inner else 2, theatre, geology)
+				chunk.mesh = _patch(heights, origin, Vector2i(x, z), 1 if inner else 2, theatre, geology, climate)
 				chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				ground.add_child(chunk)
 				chunk.owner = ground
@@ -101,14 +104,14 @@ func _encode_tile(heights: PackedFloat32Array) -> PackedByteArray:
 			northwest = north
 	return encoded
 
-func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, stride: int, theatre: Dictionary, geology: Image) -> ArrayMesh:
+func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, stride: int, theatre: Dictionary, geology: Image, climate: PackedByteArray) -> ArrayMesh:
 	var points := PackedVector3Array()
 	var colors := PackedColorArray()
 	var snow: bool = theatre.snow
 	var storm: bool = int(theatre.seed) == 116
 	var row_size := PATCH / stride + 1
 	var sun := Vector3(-0.74, 0.59, 0.33) if snow else (Vector3(0.50, 0.218, -0.84) if storm else Vector3(-0.88, 0.31, -0.36))
-	var rock := Color(0.17, 0.187, 0.205) if snow else (Color(0.102, 0.115, 0.115) if storm else Color(0.145, 0.161, 0.157))
+	var rock := Color(0.18, 0.16, 0.143) if snow else (Color(0.102, 0.115, 0.115) if storm else Color(0.145, 0.161, 0.157))
 	for z in range(start.y, start.y + PATCH + 1, stride):
 		for x in range(start.x, start.x + PATCH + 1, stride):
 			var i := z * EDGE + x
@@ -124,10 +127,11 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 			var dx := (heights[z * EDGE + mini(EDGE - 1, x + 1)] - heights[z * EDGE + maxi(0, x - 1)]) / (2.0 * SPACING)
 			var dz := (heights[mini(EDGE - 1, z + 1) * EDGE + x] - heights[maxi(0, z - 1) * EDGE + x]) / (2.0 * SPACING)
 			var normal := Vector3(-dx, 1, -dz).normalized()
-			var powder := smoothstep(220.0, 630.0, y) * smoothstep(0.73, 0.97, normal.y) if snow else 0.0
-			var base := rock.lerp(Color(0.50, 0.57, 0.63), powder)
+			var powder := float((climate.decode_u32(i * 4) >> 14) & 255) / 255.0 if snow else 0.0
+			var base := rock.lerp(Color(0.56, 0.63, 0.70), powder)
 			if geology:
-				var cell := Vector2i(((at + Vector2(6250.0, 6200.0)) * (1024.0 / 24576.0)).round())
+				var field_origin := Vector2(6144, 6144) if snow else Vector2(6250, 6200)
+				var cell := Vector2i(((at + field_origin) / 24.0).round())
 				if Rect2i(Vector2i.ZERO, geology.get_size()).has_point(cell):
 					var tint := geology.get_pixelv(cell).srgb_to_linear()
 					base *= Color.WHITE.lerp(tint, 0.48)

@@ -590,9 +590,9 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 		for coord in workers.keys():
 			var job: Thread = workers[coord]
 			if not job.is_alive():
-				var data: PackedFloat32Array = job.wait_to_finish()
+				var data: Dictionary = job.wait_to_finish()
 				workers.erase(coord)
-				if data.size() != Landscape.SIZE * Landscape.SIZE:
+				if data.heights.size() != Landscape.SIZE * Landscape.SIZE:
 					failure = true
 				ready[coord] = data
 				load_meter.value += 1
@@ -610,7 +610,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 		while workers.size() < 3 and not tiles.is_empty():
 			var coord: Vector2i = tiles.pop_front()
 			var job := Thread.new()
-			if job.start(Landscape.read_tile.bind(coord, seed_value, fine_tiles)) == OK:
+			if job.start(Landscape.read_region.bind(coord, seed_value, fine_tiles)) == OK:
 				workers[coord] = job
 			else:
 				failure = true

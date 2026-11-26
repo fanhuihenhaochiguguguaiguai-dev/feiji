@@ -36,17 +36,22 @@ func _check_wreck(fight: Node) -> Dictionary:
 	var at := Vector3(730.0, 1950.0, 550.0)
 	opponent.reset(at, Vector3.FORWARD, 220.0, 50.0)
 	var kills: int = fight.player.kills
+	var shown: Array[Vector3] = []
+	var on_breakup := func(point: Vector3, _wet: bool) -> void: shown.append(point)
+	fight.effects.wreck_breakup.connect(on_breakup)
 	fight._destroy(opponent, fight.player, at + Vector3(0.5, 0.3, -2.0))
 	var immediate: bool = opponent.hp == 0.0 and fight.player.kills == kills + 1
 	var retained: bool = opponent.model.visible and fight.effects.wrecks.has(opponent.model)
 	fight.effects.tick(0.2, fight.shots, fight.world)
-	var drifted: bool = opponent.model.position.distance_to(at) > 20.0 and opponent.model.visible
+	var drifted: bool = opponent.model.position.distance_to(at) > 20.0 and opponent.model.visible and shown.is_empty()
 	fight.effects.tick(0.6, fight.shots, fight.world)
 	var detached: bool = not opponent.model.visible and not fight.effects.wrecks.has(opponent.model) and not fight.effects.active_fragments.is_empty()
-	var ok := immediate and retained and drifted and detached
+	var event_at_wreck: bool = shown.size() == 1 and shown[0].is_equal_approx(opponent.model.position)
+	fight.effects.wreck_breakup.disconnect(on_breakup)
+	var ok := immediate and retained and drifted and detached and event_at_wreck
 	failed += int(not ok)
 	return {"scenario":"wreck_lifecycle", "counts_immediately":immediate, "visible_after_kill":retained,
-		"moves_before_breakup":drifted, "releases_components":detached, "passed":ok}
+		"moves_before_breakup":drifted, "releases_components":detached, "breakup_event_at_wreck":event_at_wreck, "passed":ok}
 
 func _check(fight: Node, scenario: String) -> Dictionary:
 	while not fight.shots.is_empty():

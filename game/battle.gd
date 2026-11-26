@@ -125,6 +125,8 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	add_child(world)
 	add_child(effects)
 	add_child(audio)
+	effects.wreck_breakup.connect(func(at: Vector3, wet: bool):
+		audio.play_at("water" if wet else "fracture", at))
 	audio.mute = profile.state.settings.mute
 	add_child(camera)
 	camera.far = 20000.0
@@ -798,12 +800,12 @@ func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector
 		var panel := (0 if local.x < 0.0 else 1) if absf(local.x) > jet.hit_extent.x * 0.38 else 2
 		var previous_mark: Vector4 = jet.surface_hits.get(panel, Vector4.ZERO)
 		jet.surface_hits[panel] = Vector4(local.x, local.y, local.z, minf(1.0, previous_mark.w + hit_power / jet.max_hp))
-		var normal: Vector3 = jet.attitude * (local / (jet.hit_extent * jet.hit_extent)).normalized()
-		effects.impact(closest, int(guided), false, jet.velocity, normal)
+	var normal: Vector3 = jet.attitude * (local / (jet.hit_extent * jet.hit_extent)).normalized()
+	effects.impact(closest, int(guided), false, jet.velocity, normal)
 	audio.play_at("blast" if guided else "scrape", closest)
 	_expire(cast)
 	if jet.hp <= 0.0:
-		_destroy(jet, cast.owner, closest)
+		_destroy(jet, cast.owner, closest, true)
 	if mode == "training" and cast.owner == player and task.lesson == ("missile" if guided else "gun"):
 		finish(true)
 
@@ -820,7 +822,7 @@ func _expire(cast: Dictionary) -> void:
 	if cast.missile:
 		effects.release_projectile(int(cast.slot), cast.trail, int(cast.sample_count))
 
-func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF) -> void:
+func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF, contact_shown := false) -> void:
 	var followed := jet == target
 	jet.hp = 0.0
 	jet.deaths += 1
@@ -838,11 +840,10 @@ func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF) -> void:
 		plume.visible = false
 	var wet := jet.position.y < 8.0
 	effects.start_wreck(jet.model, structure, contact if contact.is_finite() else jet.position, jet.velocity,
-		1.6 if jet.index % 2 == 0 else -1.6, wet)
+		1.6 if jet.index % 2 == 0 else -1.6, wet, contact_shown)
 	if who == player and followed:
 		wreck_focus = jet.model
 		wreck_focus_until = time + 0.93
-	audio.play_at("water" if wet else "fracture", jet.position)
 	if who and who != jet:
 		who.kills += 1
 	if jet == player:
@@ -1033,9 +1034,7 @@ func _render_pose(dt: float) -> void:
 				if hit.w < 0.21:
 					continue
 				var wound: Vector3 = jet.position + jet.attitude * Vector3(hit.x, hit.y, hit.z)
-				effects.puff(wound, jet.velocity * 0.15 + Vector3.UP * 8.0, 0.72 + hit.w * 1.7, 1.4, 4 if hit.w > 0.44 else 0, 0.77)
-				if hit.w > 0.48:
-					effects.puff(wound, jet.velocity * 0.35, 0.60 + hit.w * 0.66, 0.40, Effects.BURNING)
+				effects.damaged_plume(wound, jet.velocity, hit.w)
 			if jet.load_g > 2.1 or jet.position.y > 1950.0 and speed > 210.0:
 				for sign_side in [-1, 1]:
 					var tip: Vector3 = at + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46 * sign_side

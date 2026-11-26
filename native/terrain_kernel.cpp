@@ -50,6 +50,8 @@ constexpr double relief_x = -6250.0;
 constexpr double relief_z = -6200.0;
 int16_t relief[2][relief_side * relief_side];
 bool has_relief[2]{};
+uint8_t alpine_ground[relief_side * relief_side];
+bool has_alpine_ground = false;
 
 int field_for(int64_t seed) { return seed == 413 ? 0 : (seed == 704 ? 1 : -1); }
 
@@ -143,16 +145,56 @@ GDExtensionInterfaceVariantDestroy destroy;
 GDExtensionInterfaceVariantConstruct construct;
 GDExtensionInterfaceVariantCall invoke;
 GDExtensionInterfacePackedFloat32ArrayOperatorIndex float_index;
+GDExtensionInterfacePackedFloat32ArrayOperatorIndexConst float_read;
 GDExtensionInterfacePackedByteArrayOperatorIndexConst byte_index;
 GDExtensionTypeFromVariantConstructorFunc to_bytes;
 GDExtensionVariantFromTypeConstructorFunc from_int,from_float,from_array;
 GDExtensionTypeFromVariantConstructorFunc to_float,to_int,to_array;
 struct alignas(16) Slot { unsigned char opaque[64]; };
-Slot klass, base, sample_name, tile_name, resize_name, relief_name, decode_name;
+Slot klass, base, sample_name, tile_name, resize_name, relief_name, decode_name, alpine_name, snow_tile_name, size_name;
 
 template<class T> T fn(const char *name) { return reinterpret_cast<T>(proc(name)); }
 int64_t integer(GDExtensionConstVariantPtr v) { int64_t n=0; to_int(&n,const_cast<void *>(v)); return n; }
 double number(GDExtensionConstVariantPtr v) { double n=0; to_float(&n,const_cast<void *>(v)); return n; }
+
+int64_t packed_size(GDExtensionConstVariantPtr value) {
+    Slot ret;
+    GDExtensionCallError result{};
+    invoke(const_cast<void *>(value), &size_name, nullptr, 0, &ret, &result);
+    const int64_t count = result.error == GDEXTENSION_CALL_OK ? integer(&ret) : 0;
+    destroy(&ret);
+    return count;
+}
+
+void load_alpine_ground(void *, GDExtensionClassInstancePtr, const GDExtensionConstVariantPtr *args,
+                        GDExtensionInt nargs, GDExtensionVariantPtr, GDExtensionCallError *err) {
+    if (nargs != 1 || packed_size(args[0]) != relief_side * relief_side) {
+        err->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
+        return;
+    }
+    if (!has_alpine_ground) {
+        Slot bytes;
+        to_bytes(&bytes, const_cast<void *>(args[0]));
+        const uint8_t *source = byte_index(&bytes, 0);
+        for (int i = 0; i < relief_side * relief_side; ++i) alpine_ground[i] = source[i];
+        get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY)(&bytes);
+        has_alpine_ground = true;
+    }
+    err->error = GDEXTENSION_CALL_OK;
+}
+
+double alpine_cover(double x, double z, double height, double grade) {
+    const double fresh = smooth((height - 450.0) / 310.0) * (1.0 - .85 * smooth((grade - .38) / .62));
+    const double gx = (x + 6144.0) / 24.0;
+    const double gz = (z + 6144.0) / 24.0;
+    if (!has_alpine_ground || gx <= 0 || gz <= 0 || gx >= 1024 || gz >= 1024) return fresh;
+    const int i = int(gx);
+    const int j = int(gz);
+    const uint8_t *row = alpine_ground + j * relief_side + i;
+    const double survey = blend(blend(row[0], row[1], gx - i),
+        blend(row[relief_side], row[relief_side + 1], gx - i), gz - j) / 255.0;
+    return blend(fresh, survey, relief_mask(x, z, 1)) * smooth((height - 300.0) / 120.0);
+}
 
 void load_relief(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
                  GDExtensionInt nargs,GDExtensionVariantPtr,GDExtensionCallError *err) {
@@ -205,6 +247,36 @@ void tile(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *a
     const int64_t size=integer(args[2]),seed=integer(args[4]);
     if(size<1||size>512||step<=0) { err->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT; return; }
     height_array(size*size, out, err, [=](float *data) { tile_heights(data, size, x, z, step, seed); });
+}
+
+void snow_control_tile(void *, GDExtensionClassInstancePtr, const GDExtensionConstVariantPtr *args,
+                       GDExtensionInt nargs, GDExtensionVariantPtr out, GDExtensionCallError *err) {
+    const int64_t side = nargs == 5 ? integer(args[2]) : 0;
+    if (side < 2 || side > 512 || packed_size(args[4]) != side * side || number(args[3]) <= 0) {
+        err->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
+        return;
+    }
+    const double x = number(args[0]), z = number(args[1]), step = number(args[3]);
+    Slot input;
+    to_array(&input, const_cast<void *>(args[4]));
+    const float *elevations = float_read(&input, 0);
+    height_array(side * side, out, err, [=](float *controls) {
+        for (int64_t row = 0; row < side; ++row) {
+            for (int64_t col = 0; col < side; ++col) {
+                const int64_t index = row * side + col;
+                const double dx = (elevations[index + (col + 1 < side)] -
+                    elevations[index - (col > 0)]) / (step * (1 + (col > 0 && col + 1 < side)));
+                const double dz = (elevations[index + (row + 1 < side ? side : 0)] -
+                    elevations[index - (row > 0 ? side : 0)]) / (step * (1 + (row > 0 && row + 1 < side)));
+                const double coverage = alpine_cover(x + col * step, z + row * step,
+                    elevations[index], __builtin_sqrt(dx * dx + dz * dz));
+                // Terrain3D 1.1 control format: base rock (1), overlay snow (0), blend, autopaint clear.
+                const uint32_t control = (1u << 27) | (uint32_t(coverage * 255.0 + .5) << 14);
+                __builtin_memcpy(controls + index, &control, sizeof(control));
+            }
+        }
+    });
+    get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY)(&input);
 }
 
 void decode_tile(void *, GDExtensionClassInstancePtr, const GDExtensionConstVariantPtr *args,
@@ -275,11 +347,15 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     invoke=fn<GDExtensionInterfaceVariantCall>("variant_call");
     get_dtor=fn<GDExtensionInterfaceVariantGetPtrDestructor>("variant_get_ptr_destructor");
     float_index=fn<GDExtensionInterfacePackedFloat32ArrayOperatorIndex>("packed_float32_array_operator_index");
+    float_read=fn<GDExtensionInterfacePackedFloat32ArrayOperatorIndexConst>("packed_float32_array_operator_index_const");
     byte_index=fn<GDExtensionInterfacePackedByteArrayOperatorIndexConst>("packed_byte_array_operator_index_const");
     name_new(&klass,"SkyTerrainKernel");name_new(&base,"RefCounted");name_new(&sample_name,"height_m");
     name_new(&tile_name,"height_tile");name_new(&resize_name,"resize");
     name_new(&relief_name,"load_relief");
     name_new(&decode_name,"decode_tile");
+    name_new(&size_name,"size");
+    name_new(&alpine_name,"load_alpine_ground");
+    name_new(&snow_tile_name,"snow_control_tile");
     GDExtensionClassCreationInfo6 ci{};
     ci.is_abstract=true;ci.is_exposed=true;
     ci.free_instance_func=[](void *,GDExtensionClassInstancePtr){};
@@ -295,11 +371,18 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     bind(relief_name,load_relief,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,relief_labels,3);
     const char *decode_labels[]{"sample_residuals","side","byte_count"};
     bind(decode_name,decode_tile,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,relief_args,decode_labels,3);
+    const char *alpine_labels[]{"accumulation"};
+    bind(alpine_name,load_alpine_ground,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,alpine_labels,1);
+    const GDExtensionVariantType snow_args[]{GDEXTENSION_VARIANT_TYPE_FLOAT,GDEXTENSION_VARIANT_TYPE_FLOAT,
+        GDEXTENSION_VARIANT_TYPE_INT,GDEXTENSION_VARIANT_TYPE_FLOAT,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY};
+    const char *snow_labels[]{"x","z","side","step","elevations"};
+    bind(snow_tile_name,snow_control_tile,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,snow_args,snow_labels,5);
 }
 void deinitialize(void *,GDExtensionInitializationLevel level) {
     if(level!=GDEXTENSION_INITIALIZATION_SCENE)return;
     fn<GDExtensionInterfaceClassdbUnregisterExtensionClass>("classdb_unregister_extension_class")(library,&klass);
     const auto dtor=get_dtor(GDEXTENSION_VARIANT_TYPE_STRING_NAME);
+    dtor(&snow_tile_name);dtor(&alpine_name);dtor(&size_name);
     dtor(&decode_name);dtor(&relief_name);
     dtor(&resize_name);dtor(&tile_name);dtor(&sample_name);dtor(&base);dtor(&klass);
 }

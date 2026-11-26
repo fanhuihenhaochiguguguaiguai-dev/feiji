@@ -89,21 +89,29 @@ def relief_colors(ground, name):
     neutral = .97 - crease * .13 - slope * (.06 + stratum * .09) + crest * .065 - occlusion * .31
     color = np.stack((neutral - crest * .05, neutral - sea_cliff * .023, neutral + crest * .049 - sea_cliff * .095), axis=-1)
     if name == "frost":
-        # Broad rock exposures sit on steep faces and concave gullies. Broad slopes hold snow.
-        exposed = np.clip((slope + crease * .42 + (stratum - .5) * .17 - .16) / .45, 0, 1)
-        exposed = (exposed * exposed * (3 - 2 * exposed))[..., None]
+        # Deposition follows shaded catchments and lee slopes. Cliffs shed snow into the gullies below.
+        aspect = np.clip((dx * -.74 + dz * .33) / np.maximum(np.hypot(dx, dz), .12), -1, 1)
+        catchment = np.clip((shoulder - height) / 54, -1, 1)
+        snowline = 570 + aspect * 93 - catchment * 85 - occlusion * 92 + (stratum - .5) * 64
+        altitude = smooth_band(snowline - 90, snowline + 130, height)
+        holding = 1 - smooth_band(.40, .98, np.hypot(dx, dz))
+        snow = altitude * (.14 + .86 * holding) * smooth_band(320, 435, height)
+        (OUTPUT / "frost.snow").write_bytes(gzip.compress(np.rint(snow * 255).astype("u1").tobytes(), mtime=0))
         fluting = np.clip(cut / 24, -.8, .8)
-        powder = np.array((.98, .99, 1.0)) * (.98 - crease * .15 + fluting * .03 - occlusion * .29)[..., None]
-        # Terrain3D multiplies this map with the scan's albedo. Keep the rock tint
-        # near neutral so the same albedo is not applied twice in shadow.
-        schist = np.array((.89, .88, .87)) * (.82 + stratum * .17 + fluting * .09 - occlusion * .19)[..., None]
-        color = powder + (schist - powder) * exposed
+        powder = np.array((.98, .99, 1.0)) * (.99 - crease * .14 + fluting * .03 - occlusion * .23)[..., None]
+        schist = np.array((.98, .95, .89)) * (.87 + stratum * .12 + fluting * .11 - occlusion * .18)[..., None]
+        color = schist + (powder - schist) * snow[..., None]
     boundary = np.minimum.reduce((x + 6144, 18432 - x, z + 6144, 18432 - z))
     weight = (np.clip((boundary - 1536) / 1700, 0, 1) * np.clip(height / 16, 0, 1))[..., None]
     rgb = 1 + (color - 1) * weight
     rgba = np.concatenate((rgb, np.full_like(height[..., None], .5)), axis=-1)
     pixels = np.rint(np.clip(rgba, 0, 1) * 255).astype(np.uint8)
     Image.fromarray(pixels).save(OUTPUT / f"{name}-color.png", optimize=True)
+
+
+def smooth_band(low, high, value):
+    t = np.clip((value - low) / (high - low), 0, 1)
+    return t * t * (3 - 2 * t)
 
 
 def hangar_ridges(ground):
@@ -208,6 +216,11 @@ def pack_surfaces():
 
 
 OUTPUT.mkdir(parents=True, exist_ok=True)
+if "--alpine-surface-only" in sys.argv:
+    heights = np.frombuffer(gzip.decompress((OUTPUT / "frost.height").read_bytes()), dtype="<i2")
+    relief_colors(heights.reshape(EDGE, EDGE) / 4.0, "frost")
+    sys.exit()
+
 hangar_ridges(relief())
 atmosphere_lut()
 pack_surfaces()

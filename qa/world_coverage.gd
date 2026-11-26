@@ -21,6 +21,7 @@ func run() -> void:
 		var decode_us := 0
 		var generate_us := 0
 		var error_m := 0.0
+		var alpine := {}
 		for coord in fine_index:
 			var started := Time.get_ticks_usec()
 			var loaded := WORLD.read_tile(coord, seed_id, fine_index)
@@ -31,6 +32,8 @@ func run() -> void:
 			for i in baked.size():
 				error_m = maxf(error_m, absf(loaded[i] - baked[i]))
 		map.configure(sector, eye, start)
+		if seed_id == 704:
+			alpine = _alpine_profile(fine_index)
 		if not map.resident:
 			map._add_resident_ground()
 		var seam_error := _coverage_seams(map.resident)
@@ -62,17 +65,44 @@ func run() -> void:
 				aligned = aligned and map.residency.get_pixelv(index).r > 0.5
 		var success := aligned and rebases > 0 and coverage_gaps == 0 and map.resident.get_child_count() == 16
 		success = success and fine_index.size() == 50 and error_m <= 0.03125 and seam_error <= 0.001
+		if seed_id == 704:
+			success = success and alpine.valley < 0.04 and alpine.summit > 0.47 and alpine.cliff < alpine.summit
 		failures += int(not success)
 		summary.append({"theatre": sector.id, "speed_mps": stride.length(), "distance_m": stride.length() * 2400.0 / 90.0,
 			"coverage_gaps":coverage_gaps, "rebases":rebases, "mask_matches_fine_tiles":aligned,
 			"max_coverage_seam_error_m":seam_error, "offline_tiles":fine_index.size(),
 			"max_codec_error_m":error_m, "decode_ms":float(decode_us) * 0.001 / maxi(1, fine_index.size()),
-			"generate_ms":float(generate_us) * 0.001 / maxi(1, fine_index.size()), "max_follow_ms":worst_usec * 0.001})
+			"generate_ms":float(generate_us) * 0.001 / maxi(1, fine_index.size()), "max_follow_ms":worst_usec * 0.001,
+			"alpine_profile":alpine})
 		map.queue_free()
 		eye.queue_free()
 		await process_frame
 	print(JSON.stringify({"terrain":summary,"failures":failures}))
 	quit(int(failures > 0))
+
+func _alpine_profile(index: Dictionary) -> Dictionary:
+	var sum := Vector3.ZERO
+	var count := Vector3i.ZERO
+	var preparation := 0
+	for coord in index:
+		var start := Time.get_ticks_usec()
+		var data := WORLD.read_region(coord, 704, index)
+		preparation += Time.get_ticks_usec() - start
+		var bytes: PackedByteArray = data.control.get_data()
+		var heights: PackedFloat32Array = data.heights
+		for z in range(4, WORLD.SIZE - 4, 8):
+			for x in range(4, WORLD.SIZE - 4, 8):
+				var i := z * WORLD.SIZE + x
+				var elevation := heights[i]
+				var dx := (heights[i + 4] - heights[i - 4]) / 48.0
+				var dz := (heights[i + 4 * WORLD.SIZE] - heights[i - 4 * WORLD.SIZE]) / 48.0
+				var grade := Vector2(dx, dz).length()
+				var band := 0 if elevation < 360.0 else (1 if elevation > 800.0 and grade < 0.38 else (2 if grade > 0.95 else -1))
+				if band >= 0:
+					sum[band] += float((bytes.decode_u32(i * 4) >> 14) & 255) / 255.0
+					count[band] += 1
+	return {"valley":sum.x / maxi(1, count.x), "summit":sum.y / maxi(1, count.y), "cliff":sum.z / maxi(1, count.z),
+		"samples":[count.x, count.y, count.z], "prepare_ms":preparation * 0.001 / maxi(1, index.size())}
 
 func _coverage_seams(ground: Node3D) -> float:
 	var error := 0.0

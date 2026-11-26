@@ -22,6 +22,7 @@ with ZipFile(args.stock) as stock, ZipFile(args.built) as built, ZipFile(args.te
     assert len(elf) < stock.getinfo(godot_library).file_size, "custom ELF is not smaller"
     assert args.built.stat().st_size < args.stock.stat().st_size, "custom APK is not smaller"
     assert "assets/assets/boot/splash.png" in entries
+    assert "assets/assets/environment/frost.snow" in entries
     assert {"lib/arm64-v8a/libskyterrain.android.arm64.so",
             "lib/arm64-v8a/libterrain.android.release.arm64.so"}.issubset(entries)
     campaign = json.loads(built.read("assets/assets/campaign.json"))

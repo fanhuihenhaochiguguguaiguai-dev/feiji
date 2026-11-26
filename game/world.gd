@@ -104,7 +104,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	terrain.free_editor_textures = false
 	add_child(terrain)
 	terrain.material.world_background = Terrain3DMaterial.NONE
-	terrain.material.set_auto_shader_enabled(true)
+	terrain.material.set_auto_shader_enabled(not bool(theatre.snow))
 	terrain.material.set_dual_scaling_enabled(false)
 	terrain.material.set_shader_param("blend_sharpness", 0.26)
 	terrain.material.texture_filtering = Terrain3DMaterial.LINEAR_ANISOTROPIC
@@ -115,16 +115,16 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	# Let the baked geology carry distant structure. The alpine scan repeats at the scale of individual rocks.
 	terrain.assets.set_texture_asset(1, _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")), 0.57 if snow else 0.155, ROCK, NORMAL_ROCK))
 	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
-	var exposed_rock := coast or snow
-	terrain.material.set_shader_param("auto_base_texture", 1 if exposed_rock else 0)
-	terrain.material.set_shader_param("auto_overlay_texture", 0 if exposed_rock else 1)
-	if exposed_rock:
-		terrain.material.set_shader_param("auto_slope", 3.55 if snow else 2.7)
-		terrain.material.set_shader_param("auto_height_reduction", 0.0 if snow else 0.026)
+	if not snow:
+		terrain.material.set_shader_param("auto_base_texture", 1 if coast else 0)
+		terrain.material.set_shader_param("auto_overlay_texture", 0 if coast else 1)
+	if coast:
+		terrain.material.set_shader_param("auto_slope", 2.7)
+		terrain.material.set_shader_param("auto_height_reduction", 0.026)
 	terrain.set_clipmap_target(rider)
 	for coord in opening_tiles(start):
-		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else read_tile(coord, seed_value, fine_tiles)
-		_activate(coord, heights)
+		var data: Dictionary = prepared[coord] if prepared.has(coord) else read_region(coord, seed_value, fine_tiles)
+		_activate(coord, data)
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
 	terrain.snap()
@@ -140,6 +140,10 @@ static func prepare_relief(seed_id: int) -> void:
 	var elevations := FileAccess.get_file_as_bytes("res://assets/environment/%s.height" % FIELDS[seed_id]).decompress(BYTES, FileAccess.COMPRESSION_GZIP)
 	if elevations.size() == BYTES:
 		ClassDB.class_call_static("SkyTerrainKernel", "load_relief", elevations, elevations.size(), seed_id)
+		if seed_id == 704:
+			var accumulation := FileAccess.get_file_as_bytes("res://assets/environment/frost.snow").decompress(BYTES / 2, FileAccess.COMPRESSION_GZIP)
+			if accumulation.size() == BYTES / 2:
+				ClassDB.class_call_static("SkyTerrainKernel", "load_alpine_ground", accumulation)
 		relief_ready[seed_id] = true
 
 static func add_environment(host: Node3D, theatre: Dictionary, studio := false) -> Environment:
@@ -282,6 +286,19 @@ static func read_tile(coord: Vector2i, seed_id: int, index: Dictionary) -> Packe
 				return ClassDB.class_call_static("SkyTerrainKernel", "decode_tile", data, SIZE, data.size())
 	return bake_tile(coord, seed_id)
 
+static func read_region(coord: Vector2i, seed_id: int, index: Dictionary) -> Dictionary:
+	var heights := read_tile(coord, seed_id, index)
+	var data := {"heights": heights}
+	if seed_id == 704 and heights.size() == SIZE * SIZE:
+		var controls := snow_controls(Vector2(coord) * TILE, SIZE, STEP, heights)
+		data.control = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, controls)
+	return data
+
+static func snow_controls(corner: Vector2, samples: int, spacing: float, heights: PackedFloat32Array) -> PackedByteArray:
+	var control: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "snow_control_tile",
+		corner.x, corner.y, samples, spacing, heights)
+	return control.to_byte_array()
+
 func cell(local_point: Vector3) -> Vector2i:
 	return origin + Vector2i(floori(local_point.x / TILE), floori(local_point.z / TILE))
 
@@ -369,11 +386,12 @@ func _sync_resident_ground() -> void:
 			residency.set_pixelv(index, Color.RED)
 	detailed_regions.update(residency)
 
-func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
+func _activate(coord: Vector2i, data: Dictionary) -> void:
 	var region := Terrain3DRegion.new()
 	region.region_size = SIZE
 	region.vertex_spacing = STEP
 	region.location = coord - origin
+	var heights: PackedFloat32Array = data.heights
 	region.height_map = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, heights.to_byte_array())
 	if neutral_control:
 		region.control_map = neutral_control
@@ -382,6 +400,8 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 		region.sanitize_maps()
 		neutral_control = region.control_map
 		neutral_color = region.color_map
+	if data.has("control"):
+		region.control_map = data.control
 	if relief_color:
 		const SAMPLES := SIZE / 4
 		var source := Rect2i(coord * SAMPLES + Vector2i(255, 255), Vector2i.ONE * (SAMPLES + 2))
@@ -392,7 +412,7 @@ func _activate(coord: Vector2i, heights: PackedFloat32Array) -> void:
 	region.calc_height_range()
 	terrain.data.add_region(region, false)
 	current[coord] = region
-	cache[coord] = heights
+	cache[coord] = data
 
 func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	var here := cell(p)
@@ -478,10 +498,10 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 		var thread: Thread = jobs[coord]
 		if thread.is_alive():
 			continue
-		var heights: PackedFloat32Array = thread.wait_to_finish()
+		var data: Dictionary = thread.wait_to_finish()
 		jobs.erase(coord)
 		if Vector2i(coord - here).length_squared() <= 21 and not current.has(coord):
-			completed_tiles[coord] = heights
+			completed_tiles[coord] = data
 	var published := 0
 	for coord in completed_tiles.keys():
 		if Vector2i(coord - here).length_squared() > 21:
@@ -521,7 +541,7 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			completed_tiles[key] = cache[key]
 		else:
 			var task := Thread.new()
-			if task.start(read_tile.bind(key, seed_value, fine_tiles)) == OK:
+			if task.start(read_region.bind(key, seed_value, fine_tiles)) == OK:
 				jobs[key] = task
 	for key in current.keys():
 		if (key - here).length_squared() > 20:

@@ -6,6 +6,8 @@ https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
 Source survey request bbox -136.62,58.43,-135.87,58.82 (EPSG:4326). The service adjusted the delivered raster to -136.62,58.25,-135.87,59.00 to preserve its square pixels. Fetched on 2026-11-25, 1281 x 1281 float GeoTIFF with bilinear sampling.
 The alpine sample uses a separate 1100 x 1100 float GeoTIFF fetched from the same service
 on 2026-11-25 at -136.515,58.82525,-136.2525,58.9535 (EPSG:4326), over the same terrain footprint.
+The half-snow accumulation field is derived from that existing relief and the licensed rock scan.
+It uses altitude, exposure, local slope, catchment curvature, and estimated horizon shelter.
 
 Sky photography by Poly Haven, CC0 1.0. Original HDR files resampled to 1024 x 512 and packed with an exposure shoulder into sRGB PNG. Sky shaders and probes restore the stored linear exposure range. The sky and sun use the same panorama alignment.
 https://polyhaven.com/a/qwantani_sunset_puresky
