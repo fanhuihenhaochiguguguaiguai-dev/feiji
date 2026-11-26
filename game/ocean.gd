@@ -23,6 +23,7 @@ var wake_strength := 0.0
 var wake_sent := Vector4.ZERO
 var strength_sent := 0.0
 var shallows: ImageTexture
+var impact_age := 4.0
 
 func setup(theatre: Dictionary, camera: Camera3D) -> void:
 	view = camera
@@ -100,7 +101,14 @@ func track(chase: Vector3, offset: Vector2, velocity: Vector3, wake_active: bool
 	wake = Vector4(chase.x + offset.x, chase.z + offset.y, heading.x, heading.y)
 	wake_strength = (1.0 - smoothstep(5.0, 32.0, chase.y)) * smoothstep(28.0, 110.0, velocity.length()) if wake_active else 0.0
 
+func add_impact(at: Vector3, radius: float) -> void:
+	impact_age = 0.0
+	material.set_shader_parameter("impact_centre", Vector3(at.x + origin.x, at.z + origin.y, clampf(radius * 0.022, 0.35, 1.4)))
+
 func _process(dt: float) -> void:
+	if impact_age < 3.8:
+		impact_age = minf(impact_age + dt, 3.8)
+		material.set_shader_parameter("impact_age", impact_age)
 	var postponed := defer_compute
 	defer_compute = false
 	if wake_strength > 0.0 and not wake_sent.is_equal_approx(wake):

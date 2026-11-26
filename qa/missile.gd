@@ -91,6 +91,9 @@ func _check_cannon(fight: BATTLE, locked: bool, evade: bool) -> Dictionary:
 
 func _check_wreck(fight: Node) -> Dictionary:
 	var opponent = fight.fleet[1]
+	var previous_id: String = opponent.type.id
+	fight._change_plane(opponent, "j20")
+	var prefractured = opponent.rig.breakup
 	var at := Vector3(730.0, 1950.0, 550.0)
 	opponent.reset(at, Vector3.FORWARD, 220.0, 50.0)
 	var kills: int = fight.player.kills
@@ -100,15 +103,17 @@ func _check_wreck(fight: Node) -> Dictionary:
 	fight._destroy(opponent, fight.player, at + Vector3(0.5, 0.3, -2.0))
 	var immediate: bool = opponent.hp == 0.0 and fight.player.kills == kills + 1
 	var retained: bool = opponent.model.visible and fight.effects.wrecks.has(opponent.model)
-	fight.effects.tick(0.2, fight.shots, fight.world)
+	fight.effects.tick(0.2, fight.world)
 	var drifted: bool = opponent.model.position.distance_to(at) > 20.0 and opponent.model.visible and shown.is_empty()
-	fight.effects.tick(0.6, fight.shots, fight.world)
+	fight.effects.tick(0.6, fight.world)
 	var detached: bool = not opponent.model.visible and not fight.effects.wrecks.has(opponent.model) and not fight.effects.active_fragments.is_empty()
 	var event_at_wreck: bool = shown.size() == 1 and shown[0].is_equal_approx(opponent.model.position)
 	fight.effects.wreck_breakup.disconnect(on_breakup)
-	var ok := immediate and retained and drifted and detached and event_at_wreck
+	var pieces_match: bool = prefractured != null and prefractured.get_child_count() == 5 and fight.effects.active_fragments.size() == 5
+	fight._change_plane(opponent, previous_id)
+	var ok := immediate and retained and drifted and detached and event_at_wreck and pieces_match
 	failed += int(not ok)
-	return {"scenario":"wreck_lifecycle", "counts_immediately":immediate, "visible_after_kill":retained,
+	return {"scenario":"wreck_lifecycle","uses_prefractured_meshes":pieces_match, "counts_immediately":immediate, "visible_after_kill":retained,
 		"moves_before_breakup":drifted, "releases_components":detached, "breakup_event_at_wreck":event_at_wreck, "passed":ok}
 
 func _check(fight: Node, scenario: String) -> Dictionary:
@@ -237,7 +242,7 @@ func _check_contact(fight: Node) -> Dictionary:
 	shot.position = mark.position + Vector3(0.0, 0.0, shape.z + 4.0)
 	shot.velocity = Vector3.FORWARD * 925.0
 	fight._update_shots(STEP)
-	var tip: Vector3 = shot.trail.back()
+	var tip: Vector3 = fight.effects.trails.closing_tip
 	var hull: float = ((tip - mark.position) / shape).length()
 	var immediate: bool = mark.hp < 3000.0 and not shot.active and fight.effects.impact_slot != impact_before and fight.hit_time == fight.time
 	var ok := clean_miss and immediate and absf(hull - 1.0) < 0.002

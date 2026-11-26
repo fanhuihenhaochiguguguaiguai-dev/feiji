@@ -97,5 +97,5 @@ func _missile_frames(shell: Node, destination: String) -> void:
 			fight.camera.position = at + Vector3(-125, 115, 108)
 			fight.camera.look_at(at + Vector3(90, 10, -475))
 			fight.camera.fov = 49.0
-			fight.effects.tick(0.065, fight.shots)
+			fight.effects.tick(0.065)
 			await _snapshot(destination.path_join("missile-%03d.png" % i))

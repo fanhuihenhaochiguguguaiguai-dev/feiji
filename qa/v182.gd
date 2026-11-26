@@ -59,8 +59,11 @@ func run() -> void:
 	for i in 25:
 		battle._physics_process(1.0 / 90.0)
 	check(missile.active and missile.nose.dot(launch) > 0.9999, "Unguided missile keeps its launch heading")
+	var wake = battle.effects.trails.emitters[int(missile.slot)]
 	battle._expire(missile)
-	check(not battle.effects.spent_ribbons.is_empty(), "Missile trail survives projectile retirement")
+	check(wake.closed and battle.effects.trails.slots[wake.row] == wake, "Missile trail survives projectile retirement")
+	battle.effects.trails.advance(3.2)
+	check(battle.effects.trails.slots[wake.row] == null, "Finished volumetric trail returns its slot")
 	check(battle.player.throttle == 1.0, "Fixed full power")
 	battle.queue_free()
 	await process_frame

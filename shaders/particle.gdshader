@@ -9,8 +9,6 @@ uniform sampler2D depth_tex : hint_depth_texture, repeat_disable, filter_nearest
 instance uniform float life = 0.0;
 instance uniform vec4 tint : source_color = vec4(1.0);
 instance uniform float emission_gain = 0.0;
-instance uniform float hidden = 0.0;
-instance uniform bool atlas = false;
 instance uniform float roll = 0.0;
 instance uniform float soft_depth = 1.0;
 instance uniform bool contact_flash = false;
@@ -27,18 +25,15 @@ void vertex() {
 	VERTEX.xy = mat2(vec2(c, s), vec2(-s, c)) * VERTEX.xy;
 	MODELVIEW_MATRIX = VIEW_MATRIX * aligned;
 	camera_position = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	if (relight_smoke && atlas) {
+	if (relight_smoke) {
 		vec3 light = mat3(VIEW_MATRIX) * sun_direction;
 		local_sun = vec3(mat2(vec2(c, -s), vec2(s, c)) * light.xy, light.z);
 	}
 }
 
 void fragment() {
-	vec2 uv = UV;
-	if (atlas) {
-		float f = min(15.0, floor(clamp(life, 0.0, 1.0) * 16.0));
-		uv = (uv + vec2(mod(f, 4.0), floor(f / 4.0))) * 0.25;
-	}
+	float f = min(15.0, floor(clamp(life, 0.0, 1.0) * 16.0));
+	vec2 uv = (UV + vec2(mod(f, 4.0), floor(f / 4.0))) * 0.25;
 	vec2 radial = (UV - vec2(0.5)) * 2.0;
 	vec4 texel;
 	float mask;
@@ -55,8 +50,8 @@ void fragment() {
 	float depth = texture(depth_tex, SCREEN_UV).x;
 	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
 	float soft = smoothstep(0.0, soft_depth, (-behind.z / behind.w) + camera_position.z);
-	vec3 shade = mix(texel.rgb, vec3(0.65, 0.65, 0.67), hidden);
-	if (relight_smoke && atlas) {
+	vec3 shade = texel.rgb;
+	if (relight_smoke) {
 		float lit = dot(texel.rgb, max(local_sun, vec3(0.0)))
 			+ dot(texture(opposite_light, uv).rgb, max(-local_sun, vec3(0.0)));
 		shade = vec3(0.27, 0.31, 0.38) + sun_color.rgb * lit * 0.94;

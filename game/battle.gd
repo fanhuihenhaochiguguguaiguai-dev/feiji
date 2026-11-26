@@ -21,12 +21,16 @@ const CAMPAIGN_CAPACITY := 6
 const AUTO_TRACK_GAIN := 0.85
 const CONTACT_GRACE := 0.30
 const MISSILE_ARM_TIME := 0.085
-const TRAIL_SAMPLE_TIME := 0.03
 const GUN_ASSIST_RANGE := 1650.0
 const GUN_LAUNCH_LIMIT := 0.14
 const GUN_CORRECTION_RATE := 0.19
 const GUN_CORRECTION_BUDGET := 0.061
 const GUN_CORRECTION_TIME := 0.60
+
+const SCORCH = preload("res://shaders/scorch.gdshader")
+const WOUND_PARAMETERS := [&"wound_port", &"wound_starboard", &"wound_hull"]
+const BEARING_PARAMETERS := [&"bearing_port", &"bearing_starboard", &"bearing_hull"]
+static var scorch_material: ShaderMaterial
 
 var catalogue: RefCounted
 var profile: RefCounted
@@ -135,6 +139,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	var absolute_start := start_position(selected_mode, operation, use_runway)
 	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, prepared)
 	effects.pool(world.cloud_material, camera)
+	effects.water_impact.connect(world.ocean.add_impact)
 	var p := world.local_position(absolute_start)
 	player = _make_plane(str(profile.state.selected), 0)
 	p.y = world.height(p) + player.type.gearClearance + 0.12 if use_runway else maxf(p.y, world.height(p) + 175.0)
@@ -195,7 +200,23 @@ func _change_plane(jet: Airframe, id: String) -> void:
 	var exterior := model.get_node_or_null("Exterior")
 	jet.rig.levels = {"Exterior":exterior, "Combat":model.get_node_or_null("Combat"), "LOD":model.get_node_or_null("LOD")}
 	jet.rig.cockpit = model.get_node_or_null("Cockpit")
+	jet.rig.breakup = model.get_node_or_null("Breakup")
 	jet.rig.last_gear = -1.0
+	var skin: Array[MeshInstance3D] = []
+	if DisplayServer.get_name() != "headless":
+		for level: Node3D in [jet.rig.levels.Exterior, jet.rig.levels.Combat]:
+			if not level:
+				continue
+			var largest := 0.0
+			var body: MeshInstance3D
+			for surface: MeshInstance3D in level.find_children("*", "MeshInstance3D", true, false):
+				var extent := surface.get_aabb().size * surface.global_basis.get_scale().abs()
+				if maxf(extent.x, extent.z) > largest:
+					largest = maxf(extent.x, extent.z)
+					body = surface
+			if body:
+				skin.append(body)
+	jet.rig.skin = skin
 	if exterior:
 		for node in exterior.find_children("*", "Node3D", true, false):
 			if str(node.name).begins_with("Aileron") or str(node.name).begins_with("Canard") or str(node.name).begins_with("Rudder"):
@@ -210,6 +231,11 @@ func _jet_exhaust(root: Node3D, span: float) -> void:
 func _spawn_aircraft(jet: Airframe, at: Vector3, heading: Vector3, airspeed: float, health: float, runway := false) -> void:
 	effects.finish_wreck(jet.model, jet.model.position.y < 8.0)
 	jet.reset(at, heading, airspeed, health, runway)
+	for skin: MeshInstance3D in jet.rig.skin:
+		if skin.material_overlay:
+			skin.material_overlay = null
+			for param: StringName in WOUND_PARAMETERS:
+				skin.set_instance_shader_parameter(param, Vector4.ZERO)
 	jet.model.visible = true
 
 func _spawn_free(jet: Airframe, opening: bool) -> void:
@@ -285,8 +311,6 @@ func _physics_process(dt: float) -> void:
 		for shot in shots:
 			shot.position -= drift
 			shot.previous -= drift
-			for n in shot.trail.size():
-				shot.trail[n] -= drift
 		camera.position -= drift
 		camera_anchor -= drift
 		observed_contact -= drift
@@ -629,7 +653,7 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 		total_fired += 1
 	shots.append({"active":true, "active_index":shots.size(), "slot":slot, "owner":originator, "target":intended, "position":start, "previous":start, "velocity":velocity, "nose":n,
 		"missile":guided, "target_life":intended.life_id if intended else -1, "profile":setup, "damage":power, "fuel":setup.life if guided else 2.1,
-		"age":0.0, "trail":[], "sample_count":0, "soon":MISSILE_ARM_TIME, "decoy":false,
+		"age":0.0, "ignited":false, "decoy":false,
 		"assist_budget":assist_budget, "scatter":scatter})
 	effects.projectile(slot, start, n, guided)
 	audio.play_at("missile" if guided else "gun", start)
@@ -682,14 +706,10 @@ func _update_shots(dt: float) -> void:
 				if not cast.decoy:
 					direction = _track_missile(cast, direction, speed, offset, mark.velocity, dt)
 			velocity = direction * minf(cast.profile.speed, speed + cast.profile.accel * dt)
-			if cast.age >= cast.soon:
-				cast.soon += TRAIL_SAMPLE_TIME
-				cast.sample_count += 1
-				cast.trail.append(at)
-				if cast.trail.size() > 62:
-					cast.trail.pop_front()
-				if cast.sample_count == 1:
-					effects.missile_ignition(at, direction)
+			if not cast.ignited:
+				cast.ignited = true
+				effects.missile_ignition(at, direction)
+				effects.move_projectile(int(cast.slot), at, direction, 0.0)
 		elif not guided:
 			if float(cast.get("assist_budget", 0.0)) > 0.0 and cast.age < GUN_CORRECTION_TIME:
 				velocity = _correct_cannon(cast, at, direction, speed, dt)
@@ -724,15 +744,14 @@ func _update_shots(dt: float) -> void:
 				victim = null
 		if first_hit <= 1.0:
 			var contact := at.lerp(toward, first_hit)
-			if guided:
-				cast.trail.append(contact)
-				cast.sample_count += 1
+			# Keep the authoritative sweep contact for visuals when the projectile leaves the active set.
+			cast.position = contact
 			if victim:
 				_apply_hit(cast, victim, contact, surface)
 			else:
 				if guided:
 					effects.impact(contact, 1, contact.y <= 1.0)
-				_expire(cast)
+				_expire(cast, contact)
 			continue
 		cast.previous = at
 		cast.position = toward
@@ -813,17 +832,37 @@ func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector
 	if jet.hp > 0.0:
 		var panel := (0 if local.x < 0.0 else 1) if absf(local.x) > jet.hit_extent.x * 0.38 else 2
 		var previous_mark: Vector4 = jet.surface_hits.get(panel, Vector4.ZERO)
-		jet.surface_hits[panel] = Vector4(local.x, local.y, local.z, minf(1.0, previous_mark.w + hit_power / jet.max_hp))
+		var severity := minf(1.0, previous_mark.w + hit_power / jet.max_hp)
+		jet.surface_hits[panel] = Vector4(local.x, local.y, local.z, severity)
+		_mark_skin(jet, panel, local, severity)
 	var normal: Vector3 = jet.attitude * (local / (jet.hit_extent * jet.hit_extent)).normalized()
 	effects.impact(closest, int(guided), false, jet.velocity, normal, _effect_span(jet))
 	audio.play_at("blast" if guided else "scrape", closest)
-	_expire(cast)
+	_expire(cast, closest)
 	if jet.hp <= 0.0:
 		_destroy(jet, cast.owner, closest, true)
 	if mode == "training" and cast.owner == player and task.lesson == ("missile" if guided else "gun"):
 		finish(true)
 
-func _expire(cast: Dictionary) -> void:
+func _mark_skin(jet: Airframe, panel: int, hit: Vector3, severity: float) -> void:
+	if jet.rig.skin.is_empty():
+		return
+	if not scorch_material:
+		scorch_material = ShaderMaterial.new()
+		scorch_material.shader = SCORCH
+	var outward := (hit / (jet.hit_extent * jet.hit_extent)).normalized()
+	var frame: Node3D = jet.rig.meshes
+	var contact := frame.to_global(hit)
+	var direction := frame.global_basis * outward
+	for skin: MeshInstance3D in jet.rig.skin:
+		var point := skin.to_local(contact)
+		var normal := (skin.global_basis.inverse() * direction).normalized()
+		var model_scale := skin.global_basis.x.length() / frame.global_basis.x.length()
+		skin.material_overlay = scorch_material
+		skin.set_instance_shader_parameter(WOUND_PARAMETERS[panel], Vector4(point.x, point.y, point.z, severity))
+		skin.set_instance_shader_parameter(BEARING_PARAMETERS[panel], Vector4(normal.x, normal.y, normal.z, model_scale))
+
+func _expire(cast: Dictionary, contact := Vector3.INF) -> void:
 	if not cast.active:
 		return
 	cast.active = false
@@ -834,7 +873,7 @@ func _expire(cast: Dictionary) -> void:
 		tail.active_index = index
 	shot_slots.append(cast.slot)
 	if cast.missile:
-		effects.release_projectile(int(cast.slot), cast.trail, int(cast.sample_count))
+		effects.release_projectile(int(cast.slot), contact)
 
 func _effect_span(jet: Airframe) -> float:
 	return maxf(float(jet.type.span), float(jet.type.length) * 0.80)
@@ -857,7 +896,7 @@ func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF, contact_show
 		plume.visible = false
 	var wet := jet.position.y < 8.0
 	effects.start_wreck(jet.model, structure, contact if contact.is_finite() else jet.position, jet.velocity,
-		1.6 if jet.index % 2 == 0 else -1.6, wet, contact_shown, _effect_span(jet))
+		1.6 if jet.index % 2 == 0 else -1.6, wet, contact_shown, _effect_span(jet), jet.index, jet.rig.breakup)
 	if who == player and followed:
 		wreck_focus = jet.model
 		wreck_focus_until = time + 0.93
@@ -937,8 +976,8 @@ func _process(dt: float) -> void:
 	_render_pose(minf(dt, 0.05))
 	effects.sync_tracers(shots, Engine.get_physics_interpolation_fraction(), camera)
 	effects_phase += dt
-	if effects_phase >= 0.023 or effects.ribbon_dirty:
-		effects.tick(minf(effects_phase, 0.07), shots, world)
+	if effects_phase >= 0.023 or effects.trails.urgent:
+		effects.tick(minf(effects_phase, 0.07), world)
 		effects_phase = 0.0
 
 func _render_pose(dt: float) -> void:
@@ -1054,10 +1093,9 @@ func _render_pose(dt: float) -> void:
 					continue
 				var wound: Vector3 = jet.position + jet.attitude * Vector3(hit.x, hit.y, hit.z)
 				effects.damaged_plume(wound, jet.velocity, hit.w)
-			if jet.load_g > 2.1 or jet.position.y > 1950.0 and speed > 210.0:
-				for sign_side in [-1, 1]:
-					var tip: Vector3 = at + (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46 * sign_side
-					effects.puff(tip, -jet.forward * 7.0, 0.67, 0.64, 3, 0.32)
+			if jet.load_g > 2.1 or jet.position.y > 1950.0 and jet.velocity.length_squared() > 210.0 * 210.0:
+				var wing: Vector3 = (jet.attitude * Vector3.RIGHT) * float(jet.type.span) * 0.46
+				effects.wing_wakes(jet.index, at, wing, 0.46 + 0.27 * smoothstep(2.1, 5.8, jet.load_g))
 
 func _exit_tree() -> void:
 	for jet in fleet:

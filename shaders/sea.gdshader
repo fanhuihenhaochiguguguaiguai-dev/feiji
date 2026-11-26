@@ -5,6 +5,8 @@ render_mode cull_disabled, shadows_disabled, diffuse_burley, specular_schlick_gg
 uniform vec2 world_offset;
 uniform vec4 wake;
 uniform float wake_strength = 0.0;
+uniform vec3 impact_centre;
+uniform float impact_age = 3.8;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
 uniform vec4 scatter_color : source_color = vec4(0.098, 0.264, 0.277, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
@@ -21,6 +23,37 @@ const vec2 SWELL_AXIS = vec2(0.863, -0.505);
 const float SWELL_K = TAU / 93.0;
 const float OUTER_GAIN = 0.62;
 const float INNER_GAIN = 0.40;
+
+// Height, transverse slope and aeration are derived from the same pressure field.
+vec3 aircraft_wake(vec2 point) {
+	vec2 delta = point - wake.xy;
+	float travel = -dot(delta, wake.zw);
+	float across = dot(delta, vec2(-wake.w, wake.z));
+	if (travel <= 0.0 || travel >= 185.0 || abs(across) > 17.0) { return vec3(0.0); }
+	float spread = 1.3 + travel * 0.075;
+	float edge = abs(across) / spread;
+	float taper = smoothstep(0.0, 6.0, travel) * (1.0 - smoothstep(35.0, 185.0, travel));
+	float mask = exp(-edge * edge * 3.9) * taper * wake_strength;
+	float crest = 1.35 * abs(across) - 0.21 * travel;
+	float amplitude = mask * 0.31;
+	return vec3(sin(crest) * amplitude, sign(across) * 1.35 * cos(crest) * amplitude,
+		smoothstep(0.22, 0.93, sin(crest)) * mask);
+}
+
+vec4 water_impact(vec2 point) {
+	vec2 delta = point - impact_centre.xy;
+	float radius_m = length(delta);
+	float envelope = radius_m - impact_age * 16.0;
+	float strength = impact_centre.z * (1.0 - smoothstep(0.05, 3.8, impact_age)) * exp(-envelope * envelope * 0.057);
+	float phase = envelope * 1.05;
+	return vec4(strength * sin(phase), delta / max(radius_m, 0.8) * strength * cos(phase),
+		strength * smoothstep(0.71, 1.0, sin(phase)));
+}
+
+float coast_crest(float terrain_height, vec2 uv) {
+	float crest = terrain_height * 0.66 + TIME * 1.6 + sin(dot(uv, vec2(0.071, -0.063))) * 0.48;
+	return 0.5 + 0.5 * sin(crest);
+}
 
 void vertex() {
 	vec2 local = VERTEX.xz;
@@ -44,6 +77,22 @@ void vertex() {
 	if (spectral_weight < 1.0 && swell_geometry > 0.0) {
 		float swell = sin(dot(SWELL_AXIS, surface) * SWELL_K + TIME * 0.79) * (0.65 * swell_geometry);
 		displacement = mix(vec3(0.0, swell, 0.0), displacement, spectral_weight);
+	}
+	if (wake_strength > 0.0 && ripple_geometry > 0.0) {
+		displacement.y += aircraft_wake(surface).x * ripple_geometry;
+	}
+	if (impact_age < 3.8 && ripple_geometry > 0.0) {
+		displacement.y += water_impact(surface).x * ripple_geometry;
+	}
+	if (coast_area.w > 0.5 && ripple_geometry > 0.0) {
+		vec2 coord = (surface - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
+		float edge = min(min(coord.x, coord.y), min(1.0 - coord.x, 1.0 - coord.y));
+		if (edge > 0.0) {
+			float elevation = textureLod(coast_depth, coord, 0.0).r * 63.75 - 32.0;
+			float shoal = smoothstep(-11.0, -3.0, elevation) * (1.0 - smoothstep(-1.0, 1.0, elevation));
+			float crest = coast_crest(elevation, surface);
+			displacement.y += (crest * crest * crest - 0.12) * 0.69 * shoal * ripple_geometry * smoothstep(0.0, 0.11, edge);
+		}
 	}
 	VERTEX += displacement;
 	water_point = vec3(surface.x, displacement.y, surface.y);
@@ -82,11 +131,14 @@ void fragment() {
 			(0.65 * SWELL_K * outer_resolved * (1.0 - spectral_weight));
 	}
 	if (wake_strength > 0.0 && near_detail > 0.0) {
-		vec2 delta = uv - wake.xy;
-		float along = max(0.0, -dot(delta, wake.zw));
-		float crosswind = abs(delta.x * wake.w - delta.y * wake.z);
-		float wake_line = exp(-along * 0.022) * (1.0 - smoothstep(0.9 + along * 0.016, 3.0 + along * 0.055, crosswind));
-		foam += wake_strength * wake_line * smoothstep(0.0, 3.0, along) * near_detail * 0.63;
+		vec3 local_wave = aircraft_wake(uv);
+		gradient += vec2(-wake.w, wake.z) * local_wave.y * near_detail * inner_resolved;
+		foam += (local_wave.z * 0.92 + abs(local_wave.x) * 0.41) * near_detail;
+	}
+	if (impact_age < 3.8 && near_detail > 0.0) {
+		vec4 ripple = water_impact(uv);
+		gradient += ripple.yz * inner_resolved * near_detail;
+		foam += ripple.w * near_detail;
 	}
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
@@ -105,7 +157,7 @@ void fragment() {
 			float shallows = smoothstep(-20.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * shore_weight;
 			float immersion = max(0.3, -sea_floor) / max(0.72, angle);
 			water += scatter_color.rgb * exp(-vec3(0.32, 0.137, 0.063) * immersion) * (0.62 * shore_weight);
-			float breaker = 0.5 + 0.5 * sin(sea_floor * 0.72 + TIME * 1.55 + fine.x * 12.0);
+			float breaker = coast_crest(sea_floor, uv) + fine.x * 0.43;
 			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
 		}
 	}
