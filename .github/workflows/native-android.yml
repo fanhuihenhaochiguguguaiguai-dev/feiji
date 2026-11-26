@@ -112,6 +112,7 @@ jobs:
           "$RUNNER_TEMP/sky-scons/bin/pip" install scons==4.9.1
           git clone --depth 1 --branch "$GODOT_RELEASE" https://github.com/godotengine/godot.git "$RUNNER_TEMP/godot-source"
           cd "$RUNNER_TEMP/godot-source"
+          python3 misc/scripts/install_swappy_android.py
           "$RUNNER_TEMP/sky-scons/bin/scons" -j"$(nproc)" platform=android target=template_release arch=arm64 production=yes lto=thin optimize=size generate_android_binaries=yes build_profile="$GITHUB_WORKSPACE/tools/release/mobile-release.gdbuild"
           mkdir -p "$RUNNER_TEMP/sky-release-template"
           cp bin/android_release.apk "$RUNNER_TEMP/sky-release-template/android_release.apk"
