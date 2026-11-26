@@ -4,6 +4,11 @@ on:
   push:
     branches: [v18.3-native]
   workflow_dispatch:
+    inputs:
+      custom_release:
+        description: Compile and verify the stripped ARM64 release template
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -11,11 +16,12 @@ permissions:
 jobs:
   arm64:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 70
     env:
       GODOT_VERSION: 4.7.2
       GODOT_RELEASE: 4.7.2-stable
       NDK_VERSION: 29.0.14206865
+      CUSTOM_RELEASE: ${{ inputs.custom_release || contains(github.event.head_commit.message, '[release-template]') }}
     steps:
       - name: Set workspace-local Godot paths
         run: |
@@ -61,6 +67,7 @@ jobs:
           godot --headless --script res://qa/campaign.gd
           godot --headless --script res://qa/missile.gd
       - name: Gradle export and signature verification
+        if: env.CUSTOM_RELEASE != 'true'
         env:
           SKYBLADE_ANDROID_KEYSTORE_B64: ${{ secrets.SKYBLADE_ANDROID_KEYSTORE_B64 }}
         run: |
@@ -86,7 +93,68 @@ jobs:
           unzip -l dist/skyblade-v18.3-arm64.apk | grep 'lib/arm64-v8a/libskyterrain'
           unzip -l dist/skyblade-v18.3-arm64.apk | grep 'lib/arm64-v8a/libterrain'
       - uses: actions/upload-artifact@v4
+        if: env.CUSTOM_RELEASE != 'true'
         with:
           name: skyblade-v18.3-arm64-debug
           path: dist/skyblade-v18.3-arm64.apk
+          if-no-files-found: error
+      - name: Cache custom release template
+        if: env.CUSTOM_RELEASE == 'true'
+        id: release_cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sky-release-template
+          key: godot-4.7.2-android-arm64-ndk29-thinlto-${{ hashFiles('tools/release/mobile-release.gdbuild') }}
+      - name: Compile Godot release from the pinned source
+        if: env.CUSTOM_RELEASE == 'true' && steps.release_cache.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sky-scons"
+          "$RUNNER_TEMP/sky-scons/bin/pip" install scons==4.9.1
+          git clone --depth 1 --branch "$GODOT_RELEASE" https://github.com/godotengine/godot.git "$RUNNER_TEMP/godot-source"
+          cd "$RUNNER_TEMP/godot-source"
+          "$RUNNER_TEMP/sky-scons/bin/scons" -j"$(nproc)" platform=android target=template_release arch=arm64 production=yes lto=thin optimize=size generate_android_binaries=yes build_profile="$GITHUB_WORKSPACE/tools/release/mobile-release.gdbuild"
+          mkdir -p "$RUNNER_TEMP/sky-release-template"
+          cp bin/android_release.apk "$RUNNER_TEMP/sky-release-template/android_release.apk"
+      - name: Verify and compare signed release APKs
+        if: env.CUSTOM_RELEASE == 'true'
+        env:
+          SKYBLADE_ANDROID_KEYSTORE_B64: ${{ secrets.SKYBLADE_ANDROID_KEYSTORE_B64 }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: android
+        run: |
+          mkdir -p "$XDG_CONFIG_HOME/godot" dist
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$RUNNER_TEMP/sky-release.keystore"
+          if [[ -n "$SKYBLADE_ANDROID_KEYSTORE_B64" ]]; then
+            printf '%s' "$SKYBLADE_ANDROID_KEYSTORE_B64" | base64 --decode > "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH"
+          else
+            keytool -genkeypair -noprompt -keystore "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" -storepass android -alias androiddebugkey -keypass android -dname 'CN=Sky Blade CI Release Test' -keyalg RSA -validity 3650
+          fi
+          cat > "$XDG_CONFIG_HOME/godot/editor_settings-4.7.tres" <<SETTINGS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          SETTINGS
+          stock="$RUNNER_TEMP/skyblade-stock-release.apk"
+          template="$RUNNER_TEMP/sky-release-template/android_release.apk"
+          godot --headless --export-release 'Android ARM64' "$stock"
+          sed -i "/^\[preset.0.options\]$/a custom_template/release=\"$template\"" export_presets.cfg
+          godot --headless --export-release 'Android ARM64' dist/skyblade-v18.3-arm64.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/skyblade-v18.3-arm64.apk > dist/signature.txt
+          python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" > dist/build-comparison.json
+      - uses: actions/upload-artifact@v4
+        if: env.CUSTOM_RELEASE == 'true'
+        with:
+          name: skyblade-v18.3-arm64-release
+          path: |
+            dist/skyblade-v18.3-arm64.apk
+            dist/signature.txt
+            dist/build-comparison.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: env.CUSTOM_RELEASE == 'true'
+        with:
+          name: skyblade-v18.3-engine-template
+          path: ${{ runner.temp }}/sky-release-template/android_release.apk
           if-no-files-found: error

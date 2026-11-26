@@ -1,0 +1,28 @@
+{
+  "type": "build_profile",
+  "disabled_build_options": {
+    "disable_physics_2d": true,
+    "disable_navigation_2d": true,
+    "disable_navigation_3d": true,
+    "module_camera_enabled": false,
+    "module_csg_enabled": false,
+    "module_gridmap_enabled": false,
+    "module_enet_enabled": false,
+    "module_multiplayer_enabled": false,
+    "module_mobile_vr_enabled": false,
+    "module_openxr_enabled": false,
+    "module_theora_enabled": false,
+    "module_webrtc_enabled": false,
+    "module_websocket_enabled": false,
+    "module_webxr_enabled": false
+  },
+  "disabled_classes": [
+    "AnimatedSprite2D",
+    "AnimatedSprite3D",
+    "Sprite2D",
+    "Sprite3D",
+    "TileMap",
+    "TileMapLayer",
+    "VideoStreamPlayer"
+  ]
+}
