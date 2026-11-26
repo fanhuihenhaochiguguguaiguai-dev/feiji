@@ -72,7 +72,7 @@ func jet_plume(extent: Vector3, missile := false) -> MeshInstance3D:
 		var material := ShaderMaterial.new()
 		material.shader = PLUME_SHADER
 		material.set_shader_parameter("tint", Color("#ff7542") if missile else Color("#496ee5"))
-		material.set_shader_parameter("intensity", 5.993 if missile else 2.65)
+		material.set_shader_parameter("intensity", 4.61 if missile else 2.65)
 		material.set_shader_parameter("missile_exhaust", missile)
 		plume_materials[missile] = material
 	var plume := MeshInstance3D.new()

@@ -4,7 +4,7 @@ enum Style { MISSILE, SOOT, VAPOUR }
 
 const SLOTS := 72
 const POINTS := 64
-const LIFETIME := [1.50, 2.65, 0.92]
+const LIFETIME := [2.60, 2.65, 0.92]
 const SAMPLE_INTERVAL := [0.042, 0.058, 0.044]
 const SHADER = preload("res://shaders/trail.gdshader")
 
