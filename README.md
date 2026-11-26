@@ -39,3 +39,17 @@ godot --rendering-method mobile --rendering-driver vulkan --resolution 960x432 -
 ```
 
 构建直接使用仓库中的已烘焙资源。重新制作时，将原始扫描图和高程文件按脚本中的文件名放在同一目录，以 `python tools/build_scenery.py <原图目录>` 重制地形和岩层，以 `godot --headless -s res://tools/bake_sky.gd -- <原图目录>` 重制天空。地形制作需要 GDAL、NumPy、SciPy 和 Pillow。原图及授权见 [场景素材来源](assets/licenses/scenery.txt)。
+
+### J-20 制作源
+
+`tools/build_j20_airframe.py` 使用 NumPy、SciPy 和 Pillow，将机身截面、座舱曲线和进气口轮廓编译为大厅、战斗及远距离网格。运行资产同时输出一张共享蒙皮贴图、部件碰撞代理、喷口挂点和五块离线碎片。继承的舵面、起落架和座舱内饰来自本仓库的 J-20 资源。
+
+```sh
+git show dcbd32c:assets/fleet/j20.glb > /tmp/j20-rig.glb
+python tools/build_j20_airframe.py /tmp/j20-rig.glb assets/fleet/j20.glb
+mkdir -p /tmp/j20-source
+cp assets/fleet/shared-{panel-normal,recess}.png /tmp/j20-source/
+python tools/build_j20_airframe.py /tmp/j20-rig.glb /tmp/j20-source/j20-master.glb --master
+```
+
+母版只用于离线编辑。将母版 GLB 导入 Blender，同目录的共享法线和遮蔽贴图可一并打包到 Blender 文件。姿态和外形的目视校核可参考公开航展照片。[2022 年珠海航展](https://english.news.cn/northamerica/20221108/b008c006943c4fb1a099f45d6cdefcf4/c.html) · [2025 年长春航空展](https://commons.wikimedia.org/wiki/File:J-20_at_China%27s_Air_Force_Aviation_Open_Activity_20250921.jpg)

@@ -38,6 +38,8 @@ func run() -> void:
 	results.append(_check_target_continuity(fight))
 	results.append(_check_hidden_contact(fight))
 	results.append(_check_wreck(fight))
+	results.append(_check_j20_geometry(fight))
+	results.append(_check_incoming_warning(fight))
 	results.append(_check_cannon(fight, true, false))
 	results.append(_check_cannon(fight, true, true))
 	results.append(_check_cannon(fight, false, false))
@@ -52,6 +54,46 @@ func run() -> void:
 	await process_frame
 	print(JSON.stringify({"scenarios":results,"failures":failed}, "\t"))
 	quit(0 if failed == 0 else 1)
+
+func _check_j20_geometry(fight: BATTLE) -> Dictionary:
+	var jet := fight.fleet[1]
+	var previous_id: String = jet.type.id
+	fight._change_plane(jet, "j20")
+	var wing := BATTLE._trace_airframe(jet, Vector3(4.9, 2.0, 4.9), Vector3(4.9, -2.0, 4.9), INF)
+	var above := BATTLE._trace_airframe(jet, Vector3(4.9, 0.8, 4.9), Vector3(4.9, 0.8, 3.7), INF)
+	var canopy := BATTLE._trace_airframe(jet, Vector3(0.0, 3.0, -4.4), Vector3(0.0, 0.0, -4.4), INF)
+	var anchor: Node3D = jet.rig.exhausts[0]
+	var fitted: bool = absf(anchor.position.z - 9.66) < 0.001 and jet.rig.gear.size() == 3
+	var ok := wing.x > 0.4 and wing.x < 0.6 and wing.z > 0.9 and is_inf(above.x) and canopy.x < 0.65 and fitted
+	fight._change_plane(jet, previous_id)
+	failed += int(not ok)
+	return {"scenario":"j20_geometry", "wing_contact":wing.x, "overwing_clear":is_inf(above.x),
+		"canopy_contact":canopy.x, "gear_and_nozzle_anchors":fitted, "passed":ok}
+
+func _check_incoming_warning(fight: BATTLE) -> Dictionary:
+	while not fight.shots.is_empty():
+		fight._expire(fight.shots.back())
+	fight.time = 90.0
+	var start := Vector3(730, 1900, 630)
+	var enemy := fight.fleet[1]
+	fight.player.reset(start, Vector3.FORWARD, 230.0, 4200.0)
+	enemy.reset(start + Vector3(-150.0, 20.0, 700.0), Vector3.FORWARD, 231.0, 3000.0)
+	if not fight._fire(enemy, true, fight.player):
+		failed += 1
+		return {"scenario":"missile_warning", "passed":false}
+	var shot: Dictionary = fight.shots.back()
+	fight._update_shots(STEP)
+	var quiet_before_arm := not fight.warning
+	shot.age = fight.MISSILE_ARM_TIME
+	fight._update_shots(STEP)
+	var threat_bound := fight.warning and fight.incoming_heading.x < 0.0 and fight.incoming_heading.z > 0.0
+	fight.player.counter_until = fight.time + 1.0
+	fight._update_shots(STEP)
+	var immediate_clear: bool = not fight.warning and not shot.active and fight.incoming_heading == Vector3.ZERO
+	var ok := quiet_before_arm and threat_bound and immediate_clear
+	failed += int(not ok)
+	return {"scenario":"missile_warning", "quiet_before_arm":quiet_before_arm, "correct_bearing":threat_bound,
+		"clears_on_interception":immediate_clear, "passed":ok}
 
 func _check_cannon(fight: BATTLE, locked: bool, evade: bool) -> Dictionary:
 	while not fight.shots.is_empty():

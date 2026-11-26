@@ -254,9 +254,7 @@ func _draw() -> void:
 	else:
 		progress = fight.task.detail
 	_center_text(Vector2(w * 0.5, 37), "%s    |    %02d:%02d" % [progress, clock / 60, clock % 60], 15, top_left)
-	if fight.warning:
-		_center_text(Vector2(w * 0.5, 78), "导弹来袭", 19, pink)
-	elif now < fight.countered_until:
+	if not fight.warning and now < fight.countered_until:
 		_center_text(Vector2(w * 0.5, 78), "反制成功", 18, Color("#77e6a3"))
 	var radar := Vector2(w - 93, 92)
 	for other in fight.fleet:
@@ -274,6 +272,8 @@ func _draw() -> void:
 	if fight.warning:
 		var bearing: Vector3 = jet.attitude.inverse() * fight.incoming_heading
 		var edge := Vector2(bearing.x, clampf(bearing.z - bearing.y, -1.0, 1.0)).normalized()
+		var blip: Vector2 = radar + Vector2(bearing.x, bearing.z) * (61.0 * fight.closest_incoming / fight.radar_range)
+		draw_arc(blip, 4.4, 0.0, TAU, 16, pink, 1.6, true)
 		if edge.length_squared() > 0.0001:
 			var p := aim + edge * (radius + 12.0)
 			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
@@ -341,10 +341,31 @@ func _draw() -> void:
 					draw_line(contact + direction * 6.0, contact + direction * 10.0, mark, 1.7, true)
 	for item in artifacts:
 		_draw_action(item)
+	if fight.warning:
+		_draw_incoming_warning(jet, now)
 	if now < 13.0:
 		_center_text(Vector2(w * 0.5, h - 28), "滑动控制方向", 15, Color(cyan, 0.75))
 	if jet.hp <= 0.0 and fight.mode == "free":
 		_center_text(Vector2(w * 0.5, h - 77), "%d 秒后复活" % ceili(maxf(0.0, jet.until_respawn - now)), 22, cream)
+
+func _draw_incoming_warning(jet: RefCounted, now: float) -> void:
+	var at := Vector2(size.x * 0.5, size.y * 0.79)
+	if not fight.manual_cockpit:
+		var tail: Vector3 = jet.model.global_transform * Vector3(0.0, -0.4, float(jet.type.length) * 0.40)
+		if not fight.camera.is_position_behind(tail):
+			at = _aim_at(tail) + Vector2(0.0, 25.0)
+	at.x = clampf(at.x, 225.0, size.x - 225.0)
+	at.y = clampf(at.y, size.y * 0.62, size.y - 62.0)
+	var urgent: float = 1.0 - smoothstep(160.0, 1150.0, fight.closest_incoming)
+	var rhythm := 0.5 + 0.5 * sin(now * lerpf(9.0, 15.0, urgent))
+	var alert := Color("#ff484e").lerp(Color("#ff9380"), rhythm * 0.42)
+	_panel(Rect2(at - Vector2(123.0, 20.0), Vector2(246.0, 40.0)), 10.0, Color("#260c16e5"), alert)
+	_center_text(at + Vector2(0.0, 7.0), "导弹来袭", 21, Color("#ffb3ab"))
+	for side in [-1.0, 1.0]:
+		var icon := at + Vector2(side * 91.0, 0.0)
+		draw_colored_polygon(PackedVector2Array([icon + Vector2(0, -11), icon + Vector2(11, 9), icon + Vector2(-11, 9)]), alert)
+		draw_line(icon + Vector2(0, -5), icon + Vector2(0, 1), Color("#290d15"), 2.0, true)
+		draw_circle(icon + Vector2(0, 5), 1.1, Color("#290d15"), true, -1.0, true)
 
 func _draw_action(item: Dictionary) -> void:
 	var name: String = item.action

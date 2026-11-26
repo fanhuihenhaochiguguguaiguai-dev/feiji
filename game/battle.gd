@@ -187,12 +187,15 @@ func _change_plane(jet: Airframe, id: String) -> void:
 	jet.rig.clear()
 	var model: Node3D = catalogue.mesh(id)
 	jet.model.add_child(model)
+	var anchors := model.get_node_or_null("J20Exhausts") as Node3D
 	var exhausts: Array[Node3D] = []
 	for mount in jet.type.engine:
 		if not jet.type.props.is_empty():
 			break
 		var root := Node3D.new()
 		root.position = Vector3(mount[0], mount[1], mount[2])
+		if anchors and exhausts.size() < anchors.get_child_count():
+			root.position = anchors.get_child(exhausts.size()).position
 		jet.model.add_child(root)
 		exhausts.append(root)
 		_jet_exhaust(root, jet.type.span)
@@ -201,6 +204,17 @@ func _change_plane(jet: Airframe, id: String) -> void:
 	jet.rig.levels = {"Exterior":exterior, "Combat":model.get_node_or_null("Combat"), "LOD":model.get_node_or_null("LOD")}
 	jet.rig.cockpit = model.get_node_or_null("Cockpit")
 	jet.rig.breakup = model.get_node_or_null("Breakup")
+	var proxies := model.get_node_or_null("J20HitProxies")
+	var hit_proxies: Array[Transform3D] = []
+	var bounds := AABB()
+	if proxies:
+		var unit_box := AABB(-Vector3.ONE, Vector3.ONE * 2.0)
+		for part: Node3D in proxies.get_children():
+			var box: AABB = part.transform * unit_box
+			bounds = box if hit_proxies.is_empty() else bounds.merge(box)
+			hit_proxies.append(part.transform.affine_inverse())
+	jet.rig.hit_proxies = hit_proxies
+	jet.rig.hit_bounds = bounds
 	jet.rig.last_gear = -1.0
 	var skin: Array[MeshInstance3D] = []
 	if DisplayServer.get_name() != "headless":
@@ -661,8 +675,8 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 
 func _update_shots(dt: float) -> void:
 	var warning_before := warning
-	warning = false
 	closest_incoming = INF
+	incoming_heading = Vector3.ZERO
 	for i in range(shots.size() - 1, -1, -1):
 		var cast := shots[i]
 		cast.age += dt
@@ -675,17 +689,13 @@ func _update_shots(dt: float) -> void:
 		var speed := velocity.length()
 		var direction := velocity / maxf(speed, 0.001)
 		var guided: bool = cast.missile
+		var threatens_player := false
 		if guided and cast.age > MISSILE_ARM_TIME:
 			var mark: Airframe = cast.target
 			if mark and mark.hp > 0.0 and mark.life_id == cast.target_life and not cast.decoy:
 				var offset: Vector3 = mark.position - at
 				var distance := offset.length()
 				var alignment := direction.dot(offset) / maxf(distance, 0.001)
-				if mark == player and distance < 1600.0:
-					warning = true
-					if distance < closest_incoming:
-						closest_incoming = distance
-						incoming_heading = (at - player.position).normalized()
 				if distance < 340.0 and mark != player and mode != "training" and time >= mark.evade_at and (mark.index + wave) % 7 == 0:
 					mark.evade_until = time + 0.71
 					mark.evade_at = time + 21.0
@@ -705,6 +715,7 @@ func _update_shots(dt: float) -> void:
 						finish(true)
 				if not cast.decoy:
 					direction = _track_missile(cast, direction, speed, offset, mark.velocity, dt)
+					threatens_player = mark == player
 			velocity = direction * minf(cast.profile.speed, speed + cast.profile.accel * dt)
 			if not cast.ignited:
 				cast.ignited = true
@@ -721,6 +732,7 @@ func _update_shots(dt: float) -> void:
 		var first_hit := INF
 		var victim: Airframe
 		var surface := Vector3.ZERO
+		var normal := Vector3.ZERO
 		for jet in fleet:
 			if jet.hp <= 0.0 or jet.side == cast.owner.side:
 				continue
@@ -728,13 +740,15 @@ func _update_shots(dt: float) -> void:
 			if point.x < minimum.x or point.x > maximum.x or point.y < minimum.y or point.y > maximum.y or point.z < minimum.z or point.z > maximum.z:
 				continue
 			var inverse := jet.attitude.inverse()
-			var start := inverse * (at - jet.previous)
+			var previous_inverse := inverse if jet.rig.hit_proxies.is_empty() else jet.previous_attitude.inverse()
+			var start := previous_inverse * (at - jet.previous)
 			var end := inverse * (toward - jet.position)
-			var hit := _hull_entry(start / jet.hit_extent, end / jet.hit_extent)
-			if hit < first_hit:
-				first_hit = hit
+			var hit := _trace_airframe(jet, start, end, first_hit)
+			if hit.x < first_hit:
+				first_hit = hit.x
 				victim = jet
-				surface = start.lerp(end, hit)
+				surface = start.lerp(end, first_hit)
+				normal = Vector3(hit.y, hit.z, hit.w)
 		var ground_hit := world.trace_surface(at, toward)
 		if ground_hit.w < first_hit:
 			first_hit = ground_hit.w
@@ -744,7 +758,7 @@ func _update_shots(dt: float) -> void:
 			# Keep the authoritative sweep contact for visuals when the projectile leaves the active set.
 			cast.position = contact
 			if victim:
-				_apply_hit(cast, victim, contact, surface)
+				_apply_hit(cast, victim, contact, surface, normal)
 			else:
 				if guided:
 					var water := contact.y <= 0.001 and world.heightfield_height(contact) <= 0.0
@@ -758,6 +772,13 @@ func _update_shots(dt: float) -> void:
 		cast.nose = direction
 		if guided:
 			effects.move_projectile(int(cast.slot), toward, direction, cast.age - MISSILE_ARM_TIME)
+		if threatens_player:
+			var incoming := toward - player.position
+			var range_m := incoming.length()
+			if range_m < minf(1600.0, closest_incoming):
+				closest_incoming = range_m
+				incoming_heading = incoming.normalized()
+	warning = not is_inf(closest_incoming) and player.hp > 0.0
 	if warning and not warning_before:
 		audio.play_at("warn", player.position)
 
@@ -794,6 +815,27 @@ static func _hull_entry(start: Vector3, end: Vector3) -> float:
 	var hit := c / (-b + sqrt(discriminant))
 	return hit if hit <= 1.0 else INF
 
+static func _trace_airframe(jet: Airframe, start: Vector3, end: Vector3, limit: float) -> Vector4:
+	var proxies: Array[Transform3D] = jet.rig.hit_proxies
+	if proxies.is_empty():
+		var t := _hull_entry(start / jet.hit_extent, end / jet.hit_extent)
+		if t < limit:
+			var outward := (start.lerp(end, t) / (jet.hit_extent * jet.hit_extent)).normalized()
+			return Vector4(t, outward.x, outward.y, outward.z)
+		return Vector4(INF, 0.0, 0.0, 0.0)
+	var bounds: AABB = jet.rig.hit_bounds
+	if not bounds.has_point(start) and bounds.intersects_segment(start, end) == null:
+		return Vector4(INF, 0.0, 0.0, 0.0)
+	var result := Vector4(limit, 0.0, 0.0, 0.0)
+	for proxy in proxies:
+		var a := proxy * start
+		var b := proxy * end
+		var t := _hull_entry(a, b)
+		if t < result.x:
+			var outward := (proxy.basis.transposed() * a.lerp(b, t)).normalized()
+			result = Vector4(t, outward.x, outward.y, outward.z)
+	return result
+
 static func _track_missile(cast: Dictionary, nose: Vector3, speed: float, offset: Vector3, drift: Vector3, dt: float) -> Vector3:
 	if offset.length_squared() < 0.0001:
 		return nose
@@ -813,7 +855,7 @@ static func _track_missile(cast: Dictionary, nose: Vector3, speed: float, offset
 	var authority := lerpf(0.45, 1.0, smoothstep(MISSILE_ARM_TIME, 0.25, cast.age))
 	return nose.rotated(axis.normalized(), minf(angle, float(cast.profile.turn) * dt * authority)).normalized()
 
-func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector3) -> void:
+func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector3, local_normal: Vector3) -> void:
 	var guided: bool = cast.missile
 	if cast.owner == player:
 		shots_hit += 1
@@ -833,8 +875,8 @@ func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector
 		var previous_mark: Vector4 = jet.surface_hits.get(panel, Vector4.ZERO)
 		var severity := minf(1.0, previous_mark.w + hit_power / jet.max_hp)
 		jet.surface_hits[panel] = Vector4(local.x, local.y, local.z, severity)
-		_mark_skin(jet, panel, local, severity)
-	var normal: Vector3 = jet.attitude * (local / (jet.hit_extent * jet.hit_extent)).normalized()
+		_mark_skin(jet, panel, local, local_normal, severity)
+	var normal: Vector3 = jet.attitude * local_normal
 	effects.impact(closest, int(guided), false, jet.velocity, normal, _effect_span(jet))
 	audio.play_at("blast" if guided else "scrape", closest)
 	_expire(cast, closest)
@@ -843,13 +885,12 @@ func _apply_hit(cast: Dictionary, jet: Airframe, closest: Vector3, local: Vector
 	if mode == "training" and cast.owner == player and task.lesson == ("missile" if guided else "gun"):
 		finish(true)
 
-func _mark_skin(jet: Airframe, panel: int, hit: Vector3, severity: float) -> void:
+func _mark_skin(jet: Airframe, panel: int, hit: Vector3, outward: Vector3, severity: float) -> void:
 	if jet.rig.skin.is_empty():
 		return
 	if not scorch_material:
 		scorch_material = ShaderMaterial.new()
 		scorch_material.shader = SCORCH
-	var outward := (hit / (jet.hit_extent * jet.hit_extent)).normalized()
 	var frame: Node3D = jet.rig.meshes
 	var contact := frame.to_global(hit)
 	var direction := frame.global_basis * outward

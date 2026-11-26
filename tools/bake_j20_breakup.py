@@ -28,13 +28,12 @@ def cut(poly, axis, limit, direction):
     return output
 
 
-def bake():
-    doc, buffer = read_model(MODEL)
+def bake(model=MODEL):
+    doc, buffer = read_model(model)
     scene = doc["scenes"][doc["scene"]]["nodes"]
     if any(doc["nodes"][node].get("name") == "Breakup" for node in scene):
         return
     source = next(node for node in doc["nodes"] if node.get("name") == "Airframe shell mesh")
-    source_mesh = doc["meshes"][source["mesh"]]
 
     def read(index):
         accessor = doc["accessors"][index]
@@ -61,15 +60,30 @@ def bake():
         return len(doc["accessors"]) - 1
 
     surfaces = []
-    for part in source_mesh["primitives"]:
-        attrs = part["attributes"]
-        positions = read(attrs["POSITION"])
-        normals = read(attrs["NORMAL"])
-        texcoords = read(attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else [(0.0, 0.0)] * len(positions)
-        corners = [p + n + uv for p, n, uv in zip(positions, normals, texcoords)]
-        index = [i[0] for i in read(part["indices"])] if "indices" in part else list(range(len(corners)))
-        triangles = [[corners[i] for i in index[s:s + 3]] for s in range(0, len(index), 3)]
-        surfaces.append((part["material"], triangles))
+
+    def collect(node, offset, scale):
+        if "rotation" in node or "matrix" in node:
+            raise ValueError(f"{node['name']} must use unrotated rest coordinates")
+        offset = tuple(a + b * c for a, b, c in zip(offset, scale, node.get("translation", (0, 0, 0))))
+        scale = tuple(a * b for a, b in zip(scale, node.get("scale", (1, 1, 1))))
+        if "mesh" in node:
+            for part in doc["meshes"][node["mesh"]]["primitives"]:
+                attrs = part["attributes"]
+                positions = read(attrs["POSITION"])
+                normals = read(attrs["NORMAL"])
+                texcoords = read(attrs["TEXCOORD_0"]) if "TEXCOORD_0" in attrs else [(0.0, 0.0)] * len(positions)
+                points = [tuple((x * s + o - t) / k for x, s, o, t, k in zip(p, scale, offset,
+                                                                                source["translation"], source["scale"]))
+                          for p in positions]
+                corners = [p + n + uv for p, n, uv in zip(points, normals, texcoords)]
+                indices = [i[0] for i in read(part["indices"])] if "indices" in part else list(range(len(corners)))
+                triangles = [[corners[i] for i in indices[s:s + 3]] for s in range(0, len(indices), 3)]
+                surfaces.append((part["material"], triangles))
+        for child in node.get("children", []):
+            collect(doc["nodes"][child], offset, scale)
+
+    shell = next(node for node in doc["nodes"] if node.get("name") == "Airframe shell")
+    collect(shell, (0, 0, 0), (1, 1, 1))
 
     interior = next(i for i, entry in enumerate(doc["materials"]) if entry.get("name") == "dark")
 
@@ -152,10 +166,14 @@ def bake():
     ]
     scene.append(len(doc["nodes"]))
     doc["nodes"].append({"name": "Breakup", "children": parts})
+    write_model(model, doc, buffer)
+
+
+def write_model(model, doc, buffer):
     doc["buffers"][0]["byteLength"] = len(buffer)
     text = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     text += b" " * (-len(text) % 4)
-    MODEL.write_bytes(pack("<4sII", b"glTF", 2, 28 + len(text) + len(buffer))
+    model.write_bytes(pack("<4sII", b"glTF", 2, 28 + len(text) + len(buffer))
                       + pack("<I4s", len(text), b"JSON") + text
                       + pack("<I4s", len(buffer), b"BIN\0") + buffer)
 
