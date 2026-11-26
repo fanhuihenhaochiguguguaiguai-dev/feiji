@@ -12,6 +12,8 @@ var touch_index := -3
 var steer_touch := false
 var paused := false
 var weapon_fingers := {}
+var boost_keys := {}
+var boost_mouse_held := false
 var input_actions := {}
 var input_pad := Rect2()
 var backdrop := Node2D.new()
@@ -29,9 +31,13 @@ func _ready() -> void:
 		button.tooltip_text = data[0]
 		if data[1] == "missile":
 			button.disabled = fight.player.type.rails.is_empty()
-		button.button_down.connect(func(): _trigger(data[1], true))
-		if data[1] in ["gun", "missile"]:
-			button.button_up.connect(func(): _trigger(data[1], false))
+		if data[1] == "boost":
+			button.button_down.connect(_boost_mouse.bind(true))
+			button.button_up.connect(_boost_mouse.bind(false))
+		else:
+			button.button_down.connect(func(): _trigger(data[1], true))
+			if data[1] in ["gun", "missile"]:
+				button.button_up.connect(func(): _trigger(data[1], false))
 		if OS.has_feature("android"):
 			button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		button.pressed.connect(func(): queue_redraw())
@@ -98,6 +104,8 @@ func _draw_backdrop() -> void:
 func _process(delta: float) -> void:
 	if not is_instance_valid(fight):
 		return
+	if fight.player.hp <= 0.0 and (boost_mouse_held or not boost_keys.is_empty() or "boost" in weapon_fingers.values()):
+		_clear_boost()
 	if not steer_touch and fight.stick.length_squared() > 0.0001:
 		fight.stick = fight.stick.lerp(Vector2.ZERO, 1.0 - exp(-delta * 9.0))
 	if fight.time != drawn_time:
@@ -107,13 +115,42 @@ func _process(delta: float) -> void:
 func _trigger(action: String, pressed: bool) -> void:
 	if action in ["gun", "missile"]:
 		fight.set_weapon_trigger(action, pressed)
+	elif action == "boost":
+		_sync_boost()
 	elif pressed:
 		fight.action[action] = true
+
+func _boost_mouse(pressed: bool) -> void:
+	boost_mouse_held = pressed
+	_sync_boost()
+
+func _sync_boost() -> void:
+	if not is_instance_valid(fight):
+		return
+	if not paused and not fight.paused and fight.player.hp > 0.0 and (
+			boost_mouse_held or not boost_keys.is_empty() or "boost" in weapon_fingers.values()):
+		fight.action.boost = true
+	else:
+		fight.action.erase("boost")
+	queue_redraw()
+
+func _clear_boost() -> void:
+	boost_keys.clear()
+	boost_mouse_held = false
+	for index in weapon_fingers.keys():
+		if weapon_fingers[index] == "boost":
+			weapon_fingers.erase(index)
+	_sync_boost()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_clear_boost()
 
 func clear_input() -> void:
 	steer_touch = false
 	touch_index = -3
 	weapon_fingers.clear()
+	_clear_boost()
 	if is_instance_valid(fight):
 		fight.action.clear()
 		fight.stick = Vector2.ZERO
@@ -121,9 +158,18 @@ func clear_input() -> void:
 func _input(event: InputEvent) -> void:
 	if not is_instance_valid(fight) or not fight.ready_for_play or paused or fight.paused:
 		return
-	if event is InputEventScreenTouch and event.pressed:
+	if event is InputEventKey and event.physical_keycode == KEY_SHIFT and not event.echo:
+		if event.pressed and fight.player.hp > 0.0:
+			boost_keys[event.location] = true
+		else:
+			boost_keys.erase(event.location)
+		_sync_boost()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed and boost_mouse_held:
+		_boost_mouse(false)
+	elif event is InputEventScreenTouch and event.pressed and not event.canceled:
 		for item in artifacts:
-			if not item.button.disabled and item.button.get_global_rect().has_point(event.position):
+			if not item.button.disabled and (item.action != "boost" or fight.player.hp > 0.0) and item.button.get_global_rect().has_point(event.position):
 				weapon_fingers[event.index] = item.action
 				_trigger(item.action, true)
 				get_viewport().set_input_as_handled()
@@ -166,7 +212,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.physical_keycode:
 			KEY_E: fight.action.evade = true
 			KEY_Q: fight.action.counter = true
-			KEY_SHIFT: fight.action.boost = true
 			KEY_G: fight.action.gear = true
 			KEY_ESCAPE: input_actions.pause.pressed.emit()
 		return
@@ -232,7 +277,7 @@ func _draw() -> void:
 		if edge.length_squared() > 0.0001:
 			var p := aim + edge * (radius + 12.0)
 			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
-	var reticle: Vector2 = _aim_at(fight.lead) if fight.target and fight.contact_lost_at == -INF else aim
+	var reticle: Vector2 = _aim_at(fight.lead) if not fight.camera.is_position_behind(fight.lead) else aim
 	draw_arc(reticle, 17, 0.0, TAU, 36, Color(cyan, 0.69), 1.0, true)
 	for n in 4:
 		var a := Vector2.RIGHT.rotated(n * PI * 0.5)
@@ -255,11 +300,12 @@ func _draw() -> void:
 	for other in fight.fleet:
 		if other == jet or other.hp <= 0.0 or (other != primary and jet.position.distance_squared_to(other.position) > radar_range_squared):
 			continue
-		var p := _aim_at(other.position)
-		if fight.camera.is_position_behind(other.position) or not Rect2(132, 85, w - 265, h - 152).has_point(p):
+		var visible_position: Vector3 = other.model.global_position
+		var p := _aim_at(visible_position)
+		if fight.camera.is_position_behind(visible_position) or not Rect2(132, 85, w - 265, h - 152).has_point(p):
 			if other == primary:
 				var off: Vector2 = p - center
-				if fight.camera.is_position_behind(other.position):
+				if fight.camera.is_position_behind(visible_position):
 					off = -off
 				var n := off.normalized()
 				var pointer := center + n * minf(h * 0.34, 178.0)
@@ -307,6 +353,8 @@ func _draw_action(item: Dictionary) -> void:
 	var radius: float = item.radius
 	var at: Vector2 = item.centre
 	var active: bool = item.button.button_pressed or name in weapon_fingers.values()
+	if name == "boost":
+		active = bool(fight.action.get("boost", false))
 	var color := Color("#8ae7ff") if name == "missile" and fight.is_locked() else Color("#a8c5d8")
 	var label := Color(top_left, 0.40) if item.button.disabled else top_left
 	if item.button.disabled:
@@ -315,7 +363,6 @@ func _draw_action(item: Dictionary) -> void:
 	match name:
 		"missile": cool = (jet.missile_at - fight.time) / fight.MISSILE_CYCLE
 		"counter": cool = (jet.counter_at - fight.time) / fight.COUNTER_CYCLE
-		"boost": cool = (fight.boost_at - fight.time) / fight.BOOST_CYCLE
 		"evade": cool = (jet.evade_at - fight.time) / fight.EVADE_CYCLE
 	if side:
 		draw_circle(at, radius, Color("#143044d9") if active else Color("#0e1e30c2"), true, -1, true)

@@ -43,6 +43,8 @@ func _match(catalogue: RefCounted, profile: RefCounted) -> Dictionary:
 		var started := Time.get_ticks_usec()
 		if step % 680 == 0:
 			fight.action.boost = true
+		elif step % 680 == 189:
+			fight.action.erase("boost")
 		fight._physics_process(STEP)
 		timings.append(Time.get_ticks_usec() - started)
 		if step % 90 == 0:

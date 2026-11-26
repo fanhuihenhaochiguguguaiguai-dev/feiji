@@ -26,10 +26,68 @@ func run() -> void:
 	results.append(_check_target_continuity(fight))
 	results.append(_check_hidden_contact(fight))
 	results.append(_check_wreck(fight))
+	results.append(_check_cannon(fight, true, false))
+	results.append(_check_cannon(fight, true, true))
+	results.append(_check_cannon(fight, false, false))
+	var normal_radius := BATTLE.Effects.explosion_radius(14.0, 480.0, 50.0, false)
+	var destruction_radius := BATTLE.Effects.explosion_radius(14.0, 480.0, 50.0, true)
+	var long_radius := BATTLE.Effects.explosion_radius(14.0, 930.0, 50.0, false)
+	var scaled := normal_radius > 8.5 and destruction_radius > normal_radius * 1.6 and long_radius > normal_radius
+	failed += int(not scaled)
+	results.append({"scenario":"visual_explosion_radius","normal_m":normal_radius,"destroyed_m":destruction_radius,
+		"mid_range_normal_m":long_radius,"passed":scaled})
 	fight.queue_free()
 	await process_frame
 	print(JSON.stringify({"scenarios":results,"failures":failed}, "\t"))
 	quit(0 if failed == 0 else 1)
+
+func _check_cannon(fight: BATTLE, locked: bool, evade: bool) -> Dictionary:
+	while not fight.shots.is_empty():
+		fight._expire(fight.shots.back())
+	var start := Vector3(730.0, 1900.0, 630.0)
+	var mark := fight.fleet[1]
+	fight.player.reset(start, Vector3.FORWARD, 232.0, 4200.0)
+	mark.reset(start + Vector3(0.5, 0.0, -570.0), Vector3.FORWARD, 0.0, 3000.0)
+	mark.velocity = Vector3(39.0, 0.0, 32.0)
+	fight.time = 31.0
+	fight.target = mark
+	fight.locked_time = float(fight.missile.acquire) if locked else 0.0
+	var mount: Array = fight.player.type.guns[fight.total_fired % fight.player.type.guns.size()]
+	var muzzle := start + fight.player.attitude * Vector3(mount[0], mount[1], mount[2])
+	var solution := fight._gun_solution(muzzle, mark)
+	fight._refresh_gun_marker()
+	var marker_matches := fight.lead.is_equal_approx(solution.point)
+	fight._fire(fight.player, false, mark)
+	var cast := fight.shots[0]
+	var nominal: Vector3 = solution.direction
+	var spread: Vector3 = cast.scatter
+	var same_launch := (nominal + spread).normalized().dot(cast.nose) > 0.99999
+	var budget := float(cast.assist_budget)
+	var hit_before := fight.shots_hit
+	var successful_turn := false
+	var max_step := 0.0
+	for step in 100:
+		if not cast.active:
+			break
+		fight.time += STEP
+		mark.previous = mark.position
+		if evade and step == 8:
+			mark.evade_until = fight.time + 1.0
+		mark.velocity.x += (14.0 if evade else 0.28) if step >= 8 else 0.0
+		mark.position += mark.velocity * STEP
+		var previous: Vector3 = cast.velocity.normalized()
+		fight._update_shots(STEP)
+		max_step = maxf(max_step, rad_to_deg(previous.angle_to((cast.velocity as Vector3).normalized())))
+		if not evade:
+			successful_turn = successful_turn or float(cast.assist_budget) < budget
+	var hit := fight.shots_hit > hit_before
+	var correct_mode := budget > 0.0 if locked else budget == 0.0
+	var behavior: bool = (successful_turn and hit) if locked and not evade else (not hit if evade else cast.assist_budget == 0.0)
+	var ok: bool = marker_matches and same_launch and correct_mode and behavior and max_step < 0.19
+	failed += int(not ok)
+	return {"scenario":"cannon_evasion" if evade else ("cannon_assisted" if locked else "cannon_unlocked"),
+		"marker_matches_shot":marker_matches and same_launch,"hit":hit,"assist_budget_deg":rad_to_deg(budget),
+		"max_step_deg":max_step,"used_correction":successful_turn,"passed":ok}
 
 func _check_wreck(fight: Node) -> Dictionary:
 	var opponent = fight.fleet[1]

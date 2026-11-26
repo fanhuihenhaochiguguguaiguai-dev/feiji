@@ -27,6 +27,55 @@ func drag(shell: Node, index: int, position: Vector2) -> void:
 	event.position = position
 	shell._input(event)
 
+func check_boost(fight: Battle, hud: Control) -> void:
+	var boost_button: Button = hud.artifacts[1].button
+	var at := boost_button.get_global_rect().get_center()
+	touch(hud, 3, at, true)
+	touch(hud, 4, at, true)
+	touch(hud, 3, Vector2.ZERO, false)
+	check(fight.action.get("boost", false), "Releasing one of two boost touches stopped thrust")
+	for step in 540:
+		fight.time += 1.0 / 90.0
+		fight._update_player(1.0 / 90.0)
+	check(fight.action.get("boost", false) and fight.player.boost > 0.98, "Holding boost for six seconds timed out")
+	var shift := InputEventKey.new()
+	shift.physical_keycode = KEY_SHIFT
+	shift.pressed = true
+	hud._input(shift)
+	var cancel := InputEventScreenTouch.new()
+	cancel.index = 4
+	cancel.canceled = true
+	hud._input(cancel)
+	check(fight.action.get("boost", false), "Canceling touch canceled a held Shift")
+	shift.pressed = false
+	hud._input(shift)
+	check(not fight.action.has("boost"), "Shift release left boost stuck")
+	boost_button.button_down.emit()
+	check(fight.action.get("boost", false), "Immediate next boost press was blocked")
+	var mouse_up := InputEventMouseButton.new()
+	mouse_up.button_index = MOUSE_BUTTON_LEFT
+	mouse_up.position = Vector2.ZERO
+	hud._input(mouse_up)
+	check(not fight.action.has("boost"), "Mouse release outside the boost button left boost stuck")
+	touch(hud, 4, at, true)
+	hud.notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not fight.action.has("boost"), "Application focus loss left boost stuck")
+
+	var start := Vector3.UP * 3000.0
+	var normal := Flight.new()
+	normal.type = fight.player.type
+	normal.reset(start, Vector3.FORWARD, 250.0, 4200.0)
+	normal.move(1.0 / 90.0, Vector3.ZERO, 1.0, false, 0.0, false)
+	var switched := Flight.new()
+	switched.type = normal.type
+	switched.reset(start, Vector3.FORWARD, 250.0, 4200.0)
+	switched.move(1.0 / 90.0, Vector3.ZERO, 1.0, true, 0.0, false)
+	check(switched.velocity.dot(Vector3.FORWARD) > normal.velocity.dot(Vector3.FORWARD), "First held physics step did not increase thrust")
+	switched.reset(start, Vector3.FORWARD, 250.0, 4200.0)
+	switched.boost = 1.0
+	switched.move(1.0 / 90.0, Vector3.ZERO, 1.0, false, 0.0, false)
+	check(switched.velocity.is_equal_approx(normal.velocity) and switched.boost > 0.0, "Release left residual thrust or snapped the visual transition")
+
 func run() -> void:
 	var data := Data.new()
 	var plane := Flight.new()
@@ -146,7 +195,10 @@ func run() -> void:
 	hud._unhandled_input(press)
 	check(not hud.steer_touch, "Normal drag release did not clear touch ownership")
 	hud.clear_input()
+	check_boost(fight, hud)
+	touch(hud, 4, hud.artifacts[1].button.get_global_rect().get_center(), true)
 	shell.active_hud.input_actions.pause.pressed.emit()
+	check(not fight.action.has("boost"), "Pausing left boost held")
 	var actions: Control = shell.pause_ui.body
 	check(fight.paused and actions.get_child_count() == 5, "Pause actions are missing")
 	(actions.get_node("飞行设置") as Button).pressed.emit()

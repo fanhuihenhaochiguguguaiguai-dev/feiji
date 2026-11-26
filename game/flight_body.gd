@@ -136,7 +136,8 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	up = attitude * Vector3.UP
 	right = attitude * Vector3.RIGHT
 	throttle = lerpf(throttle, engine_command, 1.0 - exp(-dt * 3.1))
-	boost = lerpf(boost, float(afterburner and type.boost > 0.0), 1.0 - exp(-dt * 5.1))
+	var boost_power := float(afterburner and type.boost > 0.0)
+	boost = lerpf(boost, boost_power, 1.0 - exp(-dt * 5.1))
 	gear = lerpf(gear, gear_target, 1.0 - exp(-dt * 2.65))
 	var density := clampf(1.0 - position.y / 18500.0, 0.62, 1.08)
 	var down_speed := velocity.dot(up)
@@ -151,7 +152,7 @@ func move(dt: float, command: Vector3, engine_command: float, afterburner: bool,
 	var max_load := 3.0 if type.support else (4.48 if not type.props.is_empty() else 5.92)
 	load_g = clampf(cl * pow(speed / type.trim, 2.0) * lift_factor * density, -1.17, max_load)
 	var nominal: float = 12.0 + type.trim * 0.128
-	var thrust: float = (3.0 + nominal * throttle + type.boost * boost) * density * engine * type.acceleration * (1.0 - damage.z * 0.35) * lerpf(0.7, 1.0, hp / max_hp)
+	var thrust: float = (3.0 + nominal * throttle + type.boost * boost_power) * density * engine * type.acceleration * (1.0 - damage.z * 0.35) * lerpf(0.7, 1.0, hp / max_hp)
 	var drag: float = (3.0 + nominal + type.boost) * density * pow(speed / type.maxSpeed, 2.0)
 	drag += speed * gear * 0.010 + (cd + absf(cross) * 0.014) * clampf(speed / type.trim, 0.25, 1.7) + (absf(angular.x) + absf(angular.y)) * 2.02
 	var acceleration := forward * thrust - velocity.normalized() * drag - Vector3.UP * 9.81

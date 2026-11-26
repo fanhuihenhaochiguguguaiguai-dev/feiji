@@ -14,6 +14,8 @@ const BURNING := 7
 const SPARK = preload("res://assets/surface/spark.webp")
 const COMBUSTION_GRID = preload("res://assets/surface/combustion-volume.png")
 const COMBUSTION_SHADER = preload("res://shaders/combustion_volume.gdshader")
+const PLUME_SHADER = preload("res://shaders/exhaust.gdshader")
+const MISSILE_PLUME := Vector3(0.79, 4.7, 0.79)
 
 const MISSILE_VISUALS := 28
 const RIBBON_SPAN := 3.1
@@ -49,6 +51,8 @@ var ribbon_segments := MultiMesh.new()
 var segment_count := 0
 var puff_quad := QuadMesh.new()
 var view: Camera3D
+var plume_mesh := BoxMesh.new()
+var plume_materials := {}
 
 func emissive(color: Color, strength: float) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -58,6 +62,20 @@ func emissive(color: Color, strength: float) -> StandardMaterial3D:
 	m.emission = color
 	m.emission_energy_multiplier = strength
 	return m
+
+func jet_plume(extent: Vector3, missile := false) -> MeshInstance3D:
+	if not plume_materials.has(missile):
+		var material := ShaderMaterial.new()
+		material.shader = PLUME_SHADER
+		material.set_shader_parameter("tint", Color("#ff8652") if missile else Color("#496ee5"))
+		material.set_shader_parameter("intensity", 4.15 if missile else 2.65)
+		plume_materials[missile] = material
+	var plume := MeshInstance3D.new()
+	plume.mesh = plume_mesh
+	plume.material_override = plume_materials[missile]
+	plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	plume.scale = extent
+	return plume
 
 func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 	view = camera
@@ -205,25 +223,36 @@ func damaged_plume(at: Vector3, velocity: Vector3, severity: float) -> void:
 	if burning:
 		puff(at, velocity * 0.35, 0.60 + severity * 0.66, 0.40, BURNING)
 
-func start_wreck(hull: Node3D, airframe: Node3D, at: Vector3, velocity: Vector3, roll: float, wet: bool, contact_shown := false) -> void:
+func muzzle_flash(at: Vector3, direction: Vector3) -> void:
+	if not _emit_volume(at, direction * 22.0, Vector3(2.8, 3.0, 2.8),
+			0.10, 1.35, 0.45, 0):
+		puff(at, direction * 22.0, 1.35, 0.09, BURNING)
+
+func missile_ignition(at: Vector3, direction: Vector3) -> void:
+	if not _emit_volume(at - direction * 3.2, -direction * 15.0,
+			Vector3(6.9, 5.0, 6.9), 0.78, 1.0, 0.84, 0):
+		puff(at - direction * 2.1, -direction * 18.0, 1.25, 0.15, BURNING)
+		puff(at - direction * 4.0, -direction * 14.0, 2.6, 0.82, 0, 0.62)
+
+func start_wreck(hull: Node3D, airframe: Node3D, at: Vector3, velocity: Vector3, roll: float, wet: bool, contact_shown := false, span := 12.0) -> void:
 	if not airframe:
 		hull.visible = false
-		impact(at, 2, wet, velocity)
+		impact(at, 2, wet, velocity, Vector3.ZERO, span)
 		wreck_breakup.emit(at, wet)
 		return
 	hull.visible = true
 	airframe.visible = true
 	if not contact_shown:
-		impact(at, 1, wet, velocity)
+		impact(at, 1, wet, velocity, Vector3.ZERO, span)
 	wrecks[hull] = {"airframe":airframe, "velocity":velocity, "left":0.72,
-		"roll":roll, "smoke_due":0.0}
+		"roll":roll, "smoke_due":0.0, "span":span}
 
 func finish_wreck(hull: Node3D, wet: bool) -> void:
 	var wreck: Dictionary = wrecks.get(hull, {})
 	if wreck.is_empty():
 		return
 	wrecks.erase(hull)
-	impact(hull.position, 2, wet, wreck.velocity)
+	impact(hull.position, 2, wet, wreck.velocity, Vector3.ZERO, wreck.span)
 	_breakup(wreck.velocity, wreck.airframe)
 	hull.visible = false
 	wreck_breakup.emit(hull.position, wet)
@@ -327,23 +356,33 @@ func end_prime() -> void:
 		volume_pool[0].visible = false
 	tick(0.10, [])
 
-func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, normal := Vector3.ZERO) -> void:
+static func explosion_radius(span: float, distance: float, view_fov: float, destroyed: bool) -> float:
+	var body_scale := maxf(33.0, span * 2.65) if destroyed else maxf(15.0, span * 1.24)
+	var projection := maxf(4.0, distance) * tan(deg_to_rad(view_fov * 0.5))
+	var legibility := projection * (0.19 if destroyed else 0.11)
+	return minf(maxf(body_scale, legibility), 99.0 if destroyed else 60.0)
+
+func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, normal := Vector3.ZERO, airframe_span := 12.0) -> void:
 	var direction := normal if normal != Vector3.ZERO else Vector3.UP
 	_emit_burst(at, power, water, direction)
 	if power == 0:
 		var eye_ray := view.position - at
-		var size := clampf(eye_ray.length() * 0.0060, 1.55, 5.4)
+		var size := clampf(eye_ray.length() * 0.0075, 1.65, 6.5)
 		# The cue still belongs to the confirmed contact. Lift the glare just off the opaque hull.
 		var flare := at + eye_ray.normalized() * minf(0.85, size * 0.38)
-		puff(flare, carried * 0.86, size * 0.82, 0.105, 8)
-		puff(at + direction * 0.38, carried * 0.58 + direction * 31.0, size, 0.21, 2)
+		puff(flare, carried * 0.86, size * 0.90, 0.105, 8)
+		puff(at + direction * 0.38, carried * 0.58 + direction * 31.0, size, 0.23, 2)
 		puff(at + direction * 0.58, carried * 0.69 + direction * 11.0, size * 0.34, 0.29, 4, 0.52, 0.025)
 		return
 	var destroyed := power == 2
-	var radius := 21.0 if destroyed else 8.5
-	var layered_volume := (not water and _emit_volume(at, carried * 0.66 + Vector3.UP * 6.5,
-		Vector3(2.18, 1.58, 2.18) * radius, 1.65 if destroyed else 1.05,
-		1.25 if destroyed else 0.86, 1.35 if destroyed else 1.08, 2 if destroyed else 1))
+	var radius := explosion_radius(airframe_span, view.position.distance_to(at), view.fov, destroyed)
+	# Lift the proxy so the hot portion of the baked volume starts on the contact.
+	var layered_volume := (not water and _emit_volume(at + Vector3.UP * radius * 0.34,
+		carried * 0.66 + Vector3.UP * 6.5, Vector3(3.05, 1.94, 3.05) * radius,
+		1.65 if destroyed else 1.05, 1.56 if destroyed else 1.24, 1.40 if destroyed else 1.15, 2 if destroyed else 1))
+	if layered_volume and destroyed and active_volumes.size() < 5:
+		_emit_volume(at + Vector3.UP * radius * 0.38, carried * 0.43 + Vector3.UP * 13.0,
+			Vector3(1.65, 2.10, 1.65) * radius, 2.25, 0.0, 1.43, 1)
 	if water:
 		for i in (8 if destroyed else 5):
 			var spread := Vector3(randf_range(-0.70, 0.70), randf_range(0.8, 1.8), randf_range(-0.70, 0.70))
@@ -371,11 +410,12 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 	item.energy = item.light.light_energy
 	item.wave.position = at
 	item.wave.scale = Vector3.ONE
-	item.wave.visible = destroyed
-	item.total = 0.47 if destroyed else 0.15
+	item.wave.visible = not water
+	item.total = 0.47 if destroyed else 0.27
 	item.left = item.total
-	item.radius = radius * 2.5
-	item.wave.set_instance_shader_parameter("amplitude", 0.33)
+	item.radius = radius * (2.5 if destroyed else 1.85)
+	item.wave_strength = 0.33 if destroyed else 0.13
+	item.wave.set_instance_shader_parameter("amplitude", item.wave_strength)
 
 func _prepare_projectiles() -> void:
 	var beam := CylinderMesh.new()
@@ -404,42 +444,15 @@ func _prepare_projectiles() -> void:
 	material.metallic = 0.56
 	material.roughness = 0.28
 	body.material = material
-	var flame := CylinderMesh.new()
-	flame.top_radius = 0.19
-	flame.bottom_radius = 0.02
-	flame.height = 4.7
-	flame.radial_segments = 5
-	flame.rings = 0
-	var plume_material := ShaderMaterial.new()
-	plume_material.shader = preload("res://shaders/exhaust.gdshader")
-	plume_material.set_shader_parameter("flame_flipbook", SUSTAINED_FIRE)
-	plume_material.set_shader_parameter("tint", Color("#ff9750"))
-	plume_material.set_shader_parameter("intensity", 4.8)
-	plume_material.set_shader_parameter("bias", 0.45)
-	flame.material = plume_material
-	var core := CylinderMesh.new()
-	core.top_radius = 0.105
-	core.bottom_radius = 0.022
-	core.height = 2.1
-	core.radial_segments = 5
-	core.rings = 0
-	core.material = emissive(Color("#fff4da"), 5.6)
 	for i in MISSILE_VISUALS:
 		var shell := MeshInstance3D.new()
 		shell.mesh = body
 		shell.visible = false
 		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var plume := MeshInstance3D.new()
-		plume.mesh = flame
-		plume.position.y = -4.1
+		var plume := jet_plume(MISSILE_PLUME, true)
+		plume.rotation.z = PI
 		plume.visible = false
-		plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		shell.add_child(plume)
-		var hot_core := MeshInstance3D.new()
-		hot_core.mesh = core
-		hot_core.position.y = 1.25
-		hot_core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		plume.add_child(hot_core)
 		add_child(shell)
 		missile_pool.append(shell)
 
@@ -504,9 +517,10 @@ func move_projectile(slot: int, at: Vector3, direction: Vector3, plume_age := -1
 		body.quaternion = Quaternion(Vector3.UP, direction)
 		var plume := body.get_child(0) as MeshInstance3D
 		plume.visible = plume_age >= 0.0
-		if plume.visible and plume_age < 0.42:
+		if plume.visible:
 			var flare := 1.0 - smoothstep(0.04, 0.36, plume_age)
-			plume.scale = Vector3(1.0 + flare * 0.65, 1.0 + flare * 0.38, 1.0 + flare * 0.65)
+			plume.scale = MISSILE_PLUME * Vector3(1.0 + flare * 0.65, 1.0 + flare * 0.38, 1.0 + flare * 0.65)
+			plume.position.y = -1.65 - plume.scale.y * 0.5
 
 func release_projectile(slot: int, points: Array, sample_count: int) -> void:
 	var body: MeshInstance3D = missile_visuals.get(slot)
@@ -529,7 +543,9 @@ func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> v
 		if at.distance_squared_to(camera.position) > 4350.0 * 4350.0:
 			continue
 		var nose: Vector3 = shot.nose
-		tracers.set_instance_transform(visible, Transform3D(Basis(Quaternion(Vector3.UP, nose)), at - nose * (TRACER_LENGTH * 0.5)))
+		var width := clampf(at.distance_to(camera.position) * 0.0034, 1.0, 3.5)
+		var pose := Basis(Quaternion(Vector3.UP, nose)).scaled_local(Vector3(width, 1.0, width))
+		tracers.set_instance_transform(visible, Transform3D(pose, at - nose * (TRACER_LENGTH * 0.5)))
 		visible += 1
 	tracers.visible_instance_count = visible
 
@@ -581,7 +597,7 @@ func tick(dt: float, shots: Array[Dictionary], landscape: Node3D = null) -> void
 		var t := clampf(1.0 - item.left / item.total, 0, 1)
 		if item.wave.visible:
 			item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(t, 0.59))
-			item.wave.set_instance_shader_parameter("amplitude", 0.33 * pow(1.0 - t, 1.65))
+			item.wave.set_instance_shader_parameter("amplitude", item.wave_strength * pow(1.0 - t, 1.65))
 		if item.light.visible:
 			if t > 0.54:
 				item.light.visible = false
