@@ -19,6 +19,8 @@ The alpine snow texture uses the CC0 gravel color and displacement as its grain 
 Volumetric smoke and sustained flame: Small Campfire by JangaFX, generated in
 EmberGen and released under CC0 1.0. Adapted to a pair of RGB light-response
 atlases with opacity in alpha, and a separate rendered emission atlas.
+Six sampled density and flame grids from the same VDB are packed with
+integrated upper-hemisphere visibility for close-range destruction smoke.
 https://jangafx.com/software/embergen/download/free-vdb-animations
 
 Short impact fireball: adapted from the Lave Blob sequence in Photo Realistic

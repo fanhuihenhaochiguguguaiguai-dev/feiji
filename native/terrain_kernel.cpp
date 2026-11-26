@@ -148,7 +148,7 @@ GDExtensionTypeFromVariantConstructorFunc to_bytes;
 GDExtensionVariantFromTypeConstructorFunc from_int,from_float,from_array;
 GDExtensionTypeFromVariantConstructorFunc to_float,to_int,to_array;
 struct alignas(16) Slot { unsigned char opaque[64]; };
-Slot klass, base, sample_name, tile_name, resize_name, relief_name;
+Slot klass, base, sample_name, tile_name, resize_name, relief_name, decode_name;
 
 template<class T> T fn(const char *name) { return reinterpret_cast<T>(proc(name)); }
 int64_t integer(GDExtensionConstVariantPtr v) { int64_t n=0; to_int(&n,const_cast<void *>(v)); return n; }
@@ -180,29 +180,63 @@ void sample(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr 
     from_float(out,const_cast<double*>(&h));
     err->error=nargs==3?GDEXTENSION_CALL_OK:GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
 }
-void tile(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
-          GDExtensionInt nargs,GDExtensionVariantPtr out,GDExtensionCallError *err) {
-    if (nargs!=5) { err->error=GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS; return; }
-    const double x=number(args[0]),z=number(args[1]),step=number(args[3]);
-    const int64_t size=integer(args[2]),seed=integer(args[4]);
-    if(size<1||size>512||step<=0) { err->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT; return; }
+template<class Fill>
+void height_array(int64_t count, GDExtensionVariantPtr out, GDExtensionCallError *err, Fill fill) {
     Slot values,n,ret,array;
     GDExtensionCallError result{};
     construct(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,&values,nullptr,0,&result);
-    int64_t count=size*size;
     from_int(&n,&count);
     GDExtensionConstVariantPtr resize_args[]{&n};
     invoke(&values,&resize_name,resize_args,1,&ret,&result);
     destroy(&ret);destroy(&n);
     if(result.error!=GDEXTENSION_CALL_OK){destroy(&values);*err=result;return;}
     to_array(&array,&values);
-    float *data=float_index(&array,0);
-    tile_heights(data, size, x, z, step, seed);
+    fill(float_index(&array,0));
     destroy(out);
     from_array(out,&array);
     get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY)(&array);
     destroy(&values);
     err->error=GDEXTENSION_CALL_OK;
+}
+void tile(void *,GDExtensionClassInstancePtr,const GDExtensionConstVariantPtr *args,
+          GDExtensionInt nargs,GDExtensionVariantPtr out,GDExtensionCallError *err) {
+    if (nargs!=5) { err->error=GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS; return; }
+    const double x=number(args[0]),z=number(args[1]),step=number(args[3]);
+    const int64_t size=integer(args[2]),seed=integer(args[4]);
+    if(size<1||size>512||step<=0) { err->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT; return; }
+    height_array(size*size, out, err, [=](float *data) { tile_heights(data, size, x, z, step, seed); });
+}
+
+void decode_tile(void *, GDExtensionClassInstancePtr, const GDExtensionConstVariantPtr *args,
+                 GDExtensionInt nargs, GDExtensionVariantPtr out, GDExtensionCallError *err) {
+    const int64_t size = nargs == 3 ? integer(args[1]) : 0;
+    if (size < 1 || size > 512 || integer(args[2]) != 4 + size * size * 2) {
+        err->error = GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;
+        return;
+    }
+    Slot encoded;
+    to_bytes(&encoded, const_cast<void *>(args[0]));
+    const uint8_t *data = byte_index(&encoded, 0);
+    height_array(size * size, out, err, [=](float *heights) {
+        const uint32_t first = data[0] | (uint32_t(data[1]) << 8) | (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
+        int64_t previous[512];
+        const uint8_t *next = data + 4;
+        for (int64_t y = 0; y < size; ++y) {
+            int64_t west = 0;
+            int64_t northwest = 0;
+            for (int64_t x = 0; x < size; ++x) {
+                const int64_t north = y == 0 ? 0 : previous[x];
+                const auto delta = static_cast<int16_t>(next[0] | uint16_t(next[1]) << 8);
+                next += 2;
+                const int64_t predictor = y == 0 && x == 0 ? static_cast<int32_t>(first) : west + north - northwest;
+                const int64_t elevation = predictor + delta;
+                heights[y * size + x] = static_cast<float>(elevation) * 0.0625f;
+                previous[x] = west = elevation;
+                northwest = north;
+            }
+        }
+    });
+    get_dtor(GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY)(&encoded);
 }
 void bind(Slot& name,GDExtensionClassMethodCall function,GDExtensionVariantType result_type,
           const GDExtensionVariantType *types,const char **labels,uint32_t count) {
@@ -245,6 +279,7 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     name_new(&klass,"SkyTerrainKernel");name_new(&base,"RefCounted");name_new(&sample_name,"height_m");
     name_new(&tile_name,"height_tile");name_new(&resize_name,"resize");
     name_new(&relief_name,"load_relief");
+    name_new(&decode_name,"decode_tile");
     GDExtensionClassCreationInfo6 ci{};
     ci.is_abstract=true;ci.is_exposed=true;
     ci.free_instance_func=[](void *,GDExtensionClassInstancePtr){};
@@ -258,12 +293,14 @@ void initialize(void *,GDExtensionInitializationLevel level) {
     const GDExtensionVariantType relief_args[]{GDEXTENSION_VARIANT_TYPE_PACKED_BYTE_ARRAY,GDEXTENSION_VARIANT_TYPE_INT,GDEXTENSION_VARIANT_TYPE_INT};
     const char *relief_labels[]{"elevations","byte_count","seed"};
     bind(relief_name,load_relief,GDEXTENSION_VARIANT_TYPE_NIL,relief_args,relief_labels,3);
+    const char *decode_labels[]{"sample_residuals","side","byte_count"};
+    bind(decode_name,decode_tile,GDEXTENSION_VARIANT_TYPE_PACKED_FLOAT32_ARRAY,relief_args,decode_labels,3);
 }
 void deinitialize(void *,GDExtensionInitializationLevel level) {
     if(level!=GDEXTENSION_INITIALIZATION_SCENE)return;
     fn<GDExtensionInterfaceClassdbUnregisterExtensionClass>("classdb_unregister_extension_class")(library,&klass);
     const auto dtor=get_dtor(GDEXTENSION_VARIANT_TYPE_STRING_NAME);
-    dtor(&relief_name);
+    dtor(&decode_name);dtor(&relief_name);
     dtor(&resize_name);dtor(&tile_name);dtor(&sample_name);dtor(&base);dtor(&klass);
 }
 }

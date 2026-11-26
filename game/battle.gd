@@ -33,6 +33,10 @@ var player: Airframe
 var fleet: Array[Airframe] = []
 var target_life := -1
 var contact_lost_at := -INF
+var observed_contact := Vector3.ZERO
+var observed_velocity := Vector3.ZERO
+var wreck_focus: Node3D
+var wreck_focus_until := -INF
 var target: Airframe:
 	get:
 		return target if target and target.hp > 0.0 and target.life_id == target_life else null
@@ -239,6 +243,7 @@ func _exhaust_meshes(span: float) -> Array:
 	return models
 
 func _spawn_aircraft(jet: Airframe, at: Vector3, heading: Vector3, airspeed: float, health: float, runway := false) -> void:
+	effects.finish_wreck(jet.model, jet.model.position.y < 8.0)
 	jet.reset(at, heading, airspeed, health, runway)
 	jet.model.visible = true
 
@@ -271,6 +276,7 @@ func _spawn_wave() -> void:
 	var right := course.cross(Vector3.UP)
 	for i in range(1, fleet.size()):
 		var jet := fleet[i]
+		effects.finish_wreck(jet.model, jet.model.position.y < 8.0)
 		if i > amount:
 			jet.hp = 0.0
 			jet.model.visible = false
@@ -318,6 +324,7 @@ func _physics_process(dt: float) -> void:
 				shot.trail[n] -= drift
 		camera.position -= drift
 		camera_anchor -= drift
+		observed_contact -= drift
 		hit_position -= drift
 		effects.rebase(drift)
 		audio.rebase(drift)
@@ -422,6 +429,8 @@ func _targeting(dt: float) -> void:
 
 func _refresh_lead(dt: float, was_locked: bool) -> void:
 	if target and contact_lost_at == -INF:
+		observed_contact = target.position
+		observed_velocity = target.velocity
 		locked_time = minf(missile.acquire, locked_time + dt)
 		if not was_locked and is_locked():
 			audio.play_at("lock", player.position)
@@ -455,6 +464,7 @@ func _reset_player_spawn() -> void:
 	camera_lock = 0.0
 	steering_amount = 0.0
 	hit_time = -INF
+	wreck_focus = null
 	target = null
 	locked_time = 0.0
 	queued_missile_target = null
@@ -811,15 +821,28 @@ func _expire(cast: Dictionary) -> void:
 		effects.release_projectile(int(cast.slot), cast.trail, int(cast.sample_count))
 
 func _destroy(jet: Airframe, who: Airframe, contact := Vector3.INF) -> void:
+	var followed := jet == target
 	jet.hp = 0.0
 	jet.deaths += 1
 	jet.until_respawn = time + FREE_RESPAWN if mode == "free" else 0.0
 	var structure: Node3D = jet.rig.levels.Exterior
 	jet.model.transform = Transform3D(Basis(jet.attitude), jet.position)
 	jet.rig.meshes.scale = Vector3.ONE
-	effects.breakup(contact if contact.is_finite() else jet.position, jet.velocity, jet.position.y < 8.0, structure)
-	jet.model.visible = false
-	audio.play_at("water" if jet.position.y < 8.0 else "fracture", jet.position)
+	for name in jet.rig.levels:
+		if is_instance_valid(jet.rig.levels[name]):
+			jet.rig.levels[name].visible = name == "Exterior"
+	jet.rig.lod = "Exterior"
+	if jet.rig.cockpit:
+		jet.rig.cockpit.visible = false
+	for plume in jet.rig.exhausts:
+		plume.visible = false
+	var wet := jet.position.y < 8.0
+	effects.start_wreck(jet.model, structure, contact if contact.is_finite() else jet.position, jet.velocity,
+		1.6 if jet.index % 2 == 0 else -1.6, wet)
+	if who == player and followed:
+		wreck_focus = jet.model
+		wreck_focus_until = time + 0.93
+	audio.play_at("water" if wet else "fracture", jet.position)
 	if who and who != jet:
 		who.kills += 1
 	if jet == player:
@@ -897,7 +920,7 @@ func _process(dt: float) -> void:
 	effects.sync_tracers(shots, Engine.get_physics_interpolation_fraction(), camera)
 	effects_phase += dt
 	if effects_phase >= 0.023 or effects.ribbon_dirty:
-		effects.tick(minf(effects_phase, 0.07), shots)
+		effects.tick(minf(effects_phase, 0.07), shots, world)
 		effects_phase = 0.0
 
 func _render_pose(dt: float) -> void:
@@ -911,20 +934,28 @@ func _render_pose(dt: float) -> void:
 	effects.update_heat(origin - forward * (float(player.type.length) * 0.5 + 3.6), pose, player.hp > 0.0 and player.boost > 0.5 and not manual_cockpit)
 	var focus := origin + forward * (span * 3.1) - Vector3.UP * (span * 0.23)
 	var chase := origin - forward * (span * 1.46 + player.boost * 1.35) + Vector3.UP * (span * 0.37) + up * (span * 0.08)
-	var tracking := is_locked() and not manual_cockpit and not player.grounded and time >= player.evade_until
+	var chase_enabled := not manual_cockpit and not player.grounded and time >= player.evade_until
+	var tracking: bool = chase_enabled and target != null and locked_time >= float(missile.acquire)
+	var watching_wreck := chase_enabled and target == null and wreck_focus != null and time < wreck_focus_until
 	var manual_weight := 1.0 - smoothstep(0.04, 0.46, steering_amount)
-	var zoom_request := lerpf(0.30, 1.0, manual_weight) if tracking else 0.0
+	var loss := clampf(time - contact_lost_at, 0.0, CONTACT_GRACE) if contact_lost_at != -INF else 0.0
+	var confidence := 1.0 - smoothstep(CONTACT_GRACE * 0.35, CONTACT_GRACE, loss)
+	var zoom_request := lerpf(0.30, 1.0, manual_weight) * confidence if tracking else 0.0
+	if watching_wreck:
+		confidence = smoothstep(0.03, 0.22, wreck_focus_until - time)
+		zoom_request = 0.83 * confidence * manual_weight
 	camera_lock = 0.0 if manual_cockpit else lerpf(camera_lock, zoom_request, 1.0 - exp(-dt * 6.0))
 	var pair_fov := 0.0
-	if tracking:
-		var contact := target.previous.lerp(target.position, alpha)
+	if tracking or watching_wreck:
+		var contact := wreck_focus.position if watching_wreck else (target.previous.lerp(target.position, alpha)
+			if is_locked() else observed_contact + observed_velocity * loss)
 		var normal_view := focus - chase
 		var target_view := (contact - chase).normalized() * normal_view.length()
 		var own_view := (origin - chase).normalized()
 		var pair_angle := own_view.angle_to(target_view.normalized())
 		var frame_weight := lerpf(0.84, 0.66, smoothstep(0.15, 0.52, pair_angle))
 		pair_fov = rad_to_deg(pair_angle) * 1.36 + 16.0
-		focus = chase + normal_view.slerp(target_view, camera_lock * manual_weight * frame_weight)
+		focus = chase + normal_view.slerp(target_view, camera_lock * manual_weight * frame_weight * confidence)
 	if manual_cockpit:
 		var eye: Array = player.type.eye
 		chase = origin + pose * Vector3(eye[0], eye[1], eye[2])

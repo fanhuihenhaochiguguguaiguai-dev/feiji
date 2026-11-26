@@ -5,10 +5,10 @@ on:
     branches: [v18.3-native]
   workflow_dispatch:
     inputs:
-      custom_release:
-        description: Compile and verify the stripped ARM64 release template
+      debug_build:
+        description: Build a Debug APK for troubleshooting
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
       GODOT_VERSION: 4.7.2
       GODOT_RELEASE: 4.7.2-stable
       NDK_VERSION: 29.0.14206865
-      CUSTOM_RELEASE: ${{ inputs.custom_release || contains(github.event.head_commit.message, '[release-template]') }}
+      CUSTOM_RELEASE: ${{ !inputs.debug_build }}
     steps:
       - name: Set workspace-local Godot paths
         run: |

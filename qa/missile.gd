@@ -25,10 +25,28 @@ func run() -> void:
 	results.append(_check_lock_camera(fight))
 	results.append(_check_target_continuity(fight))
 	results.append(_check_hidden_contact(fight))
+	results.append(_check_wreck(fight))
 	fight.queue_free()
 	await process_frame
 	print(JSON.stringify({"scenarios":results,"failures":failed}, "\t"))
 	quit(0 if failed == 0 else 1)
+
+func _check_wreck(fight: Node) -> Dictionary:
+	var opponent = fight.fleet[1]
+	var at := Vector3(730.0, 1950.0, 550.0)
+	opponent.reset(at, Vector3.FORWARD, 220.0, 50.0)
+	var kills: int = fight.player.kills
+	fight._destroy(opponent, fight.player, at + Vector3(0.5, 0.3, -2.0))
+	var immediate: bool = opponent.hp == 0.0 and fight.player.kills == kills + 1
+	var retained: bool = opponent.model.visible and fight.effects.wrecks.has(opponent.model)
+	fight.effects.tick(0.2, fight.shots, fight.world)
+	var drifted: bool = opponent.model.position.distance_to(at) > 20.0 and opponent.model.visible
+	fight.effects.tick(0.6, fight.shots, fight.world)
+	var detached: bool = not opponent.model.visible and not fight.effects.wrecks.has(opponent.model) and not fight.effects.active_fragments.is_empty()
+	var ok := immediate and retained and drifted and detached
+	failed += int(not ok)
+	return {"scenario":"wreck_lifecycle", "counts_immediately":immediate, "visible_after_kill":retained,
+		"moves_before_breakup":drifted, "releases_components":detached, "passed":ok}
 
 func _check(fight: Node, scenario: String) -> Dictionary:
 	while not fight.shots.is_empty():

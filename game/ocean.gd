@@ -3,6 +3,7 @@ extends MeshInstance3D
 const SURFACE = preload("res://shaders/sea.gdshader")
 const CLIPMAP = preload("res://addons/ocean_waves/clipmap_low.obj")
 const NOISE = preload("res://assets/surface/water.png")
+const WATER_RESPONSE = preload("res://assets/environment/water-response.png")
 
 var material := ShaderMaterial.new()
 var fft: WaveGenerator
@@ -30,6 +31,7 @@ func setup(theatre: Dictionary, camera: Camera3D) -> void:
 	mesh = CLIPMAP
 	material.shader = SURFACE
 	material.set_shader_parameter("shore_noise", NOISE)
+	material.set_shader_parameter("water_response", WATER_RESPONSE)
 	material.set_shader_parameter("deep", Color(hue[0] * 0.76, hue[1] * 0.79, hue[2] * 0.79))
 	material_override = material
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

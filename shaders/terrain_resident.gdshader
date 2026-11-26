@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled;
+#include "air_transport.gdshaderinc"
 
 uniform sampler2D detailed_regions : repeat_disable, filter_nearest;
 uniform vec2 first_region;
@@ -19,4 +20,5 @@ void fragment() {
 		}
 	}
 	ALBEDO = COLOR.rgb;
+	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
 }

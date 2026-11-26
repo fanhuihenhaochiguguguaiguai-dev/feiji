@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c4ahc2jyh0qni"
-path="res://.godot/imported/apron-light.webp-6fb70f998c681defd232d19b4284f829.ctex"
+uid="uid://ds7nosdgsvdy5"
+path="res://.godot/imported/water-response.png-6c37b40e66826c668a9b1f08fd1e8bdf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/studio/apron-light.webp"
-dest_files=["res://.godot/imported/apron-light.webp-6fb70f998c681defd232d19b4284f829.ctex"]
+source_file="res://assets/environment/water-response.png"
+dest_files=["res://.godot/imported/water-response.png-6c37b40e66826c668a9b1f08fd1e8bdf.ctex"]
 
 [params]
 

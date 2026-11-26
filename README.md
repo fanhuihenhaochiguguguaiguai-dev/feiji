@@ -4,7 +4,9 @@
 
 ## 运行
 
-使用 Godot 4.7.2 打开 `project.godot`。工程包含 Linux x86_64 和 Android ARM64 的 Terrain3D 1.1.0 与原生地形扩展。需要重新编译时，将 `ANDROID_NDK_HOME` 指向 Android NDK 后运行 `tools/build_extension.sh`。GitHub Actions 配置 ARM64 Gradle 流程。
+使用 Godot 4.7.2 打开 `project.godot`。工程包含 Linux x86_64 和 Android ARM64 的 Terrain3D 1.1.0 与原生地形扩展。需要重新编译时，将 `ANDROID_NDK_HOME` 指向 Android NDK 后运行 `tools/build_extension.sh`。GitHub Actions 默认交付 ARM64 定制 Release，手动运行时可选择 Debug。
+
+安卓导出从主场景跟随资源依赖。动态读取的机型、音频、战区、计算着色器和扩展列在 `export_presets.cfg`，新增动态资源时需更新对应条目。跑道、空中出生点和首段航路的 6 米间距精细地形通过 `godot --headless --script tools/compile_battlefields.gd -- --detail-only` 离线生成。
 
 大厅的金色「开始战斗」继续战役，「无限空战」位于正下方。战役每波同时出现 5～6 架敌机。无限空战为每局 10 分钟，12 架战机各自为战，击落后 3 秒复活，难度固定。最终按击落数降序和死亡数升序排名。2 个指标均相同时共享名次。正常结束且达到参战条件时按排名和战绩结算信用点。
 

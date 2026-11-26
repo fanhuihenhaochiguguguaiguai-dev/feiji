@@ -18,8 +18,11 @@ const LOWLAND = preload("res://assets/environment/sand-height.webp")
 const NORMAL_ROCK = preload("res://assets/environment/rock-rough.webp")
 const NORMAL_LOWLAND = preload("res://assets/environment/sand-rough.webp")
 const ATMOSPHERE = preload("res://assets/environment/air-scattering.png")
+const AIR_COLUMN = preload("res://assets/environment/air-column.png")
 const PANORAMA_RANGE := 2.34
 const FIELDS := {413:"bay", 704:"frost"}
+const FINE_PACK_MAGIC := 0x34465453
+const FINE_TILE_BYTES := 4 + SIZE * SIZE * 2
 static var relief_ready := {}
 
 const CLOUD_SIZE := Vector2i(96, 64)
@@ -45,6 +48,7 @@ var completed_tiles: Dictionary = {}
 var neutral_control: Image
 var neutral_color: Image
 var relief_color: Image
+var fine_tiles := {}
 var prefetch_centre := Vector2i.MAX
 var prefetch_here := Vector2i.MAX
 var prefetch_heading := Vector2i.MAX
@@ -81,6 +85,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	coast_enabled = DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
 	prepare_relief(seed_value)
+	fine_tiles = fine_tile_index(seed_value)
 	if FIELDS.has(seed_value):
 		relief_color = (load("res://assets/environment/%s-color.png" % FIELDS[seed_value]) as Texture2D).get_image()
 	flight_environment = add_environment(self, theatre)
@@ -118,7 +123,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 		terrain.material.set_shader_param("auto_height_reduction", 0.0 if snow else 0.026)
 	terrain.set_clipmap_target(rider)
 	for coord in opening_tiles(start):
-		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else bake_tile(coord, seed_value)
+		var heights: PackedFloat32Array = prepared[coord] if prepared.has(coord) else read_tile(coord, seed_value, fine_tiles)
 		_activate(coord, heights)
 	terrain.data.update_maps()
 	terrain.set_camera(camera)
@@ -248,6 +253,35 @@ func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2
 static func bake_tile(coord: Vector2i, seed_id: int) -> PackedFloat32Array:
 	return ClassDB.class_call_static("SkyTerrainKernel", "height_tile", coord.x * TILE, coord.y * TILE, SIZE, STEP, seed_id)
 
+static func fine_tile_index(seed_id: int) -> Dictionary:
+	var file := FileAccess.open("res://assets/environment/detail-%d.terrainpack" % seed_id, FileAccess.READ)
+	if not file or file.get_32() != FINE_PACK_MAGIC or file.get_16() != SIZE or file.get_16() != int(STEP):
+		return {}
+	var count := file.get_32()
+	var payload := 12 + count * 12
+	if count > 512 or payload > file.get_length():
+		return {}
+	var index := {}
+	for i in count:
+		var coord := Vector2i(file.get_32(), file.get_32())
+		var size := file.get_32()
+		if size == 0 or size > FINE_TILE_BYTES + 1024 or payload + size > file.get_length():
+			return {}
+		index[coord] = Vector2i(payload, size)
+		payload += size
+	return index
+
+static func read_tile(coord: Vector2i, seed_id: int, index: Dictionary) -> PackedFloat32Array:
+	if index.has(coord):
+		var file := FileAccess.open("res://assets/environment/detail-%d.terrainpack" % seed_id, FileAccess.READ)
+		if file:
+			var entry: Vector2i = index[coord]
+			file.seek(entry.x)
+			var data := file.get_buffer(entry.y).decompress(FINE_TILE_BYTES, FileAccess.COMPRESSION_ZSTD)
+			if data.size() == FINE_TILE_BYTES:
+				return ClassDB.class_call_static("SkyTerrainKernel", "decode_tile", data, SIZE, data.size())
+	return bake_tile(coord, seed_id)
+
 func cell(local_point: Vector3) -> Vector2i:
 	return origin + Vector2i(floori(local_point.x / TILE), floori(local_point.z / TILE))
 
@@ -298,7 +332,7 @@ func _make_sea(camera: Camera3D) -> void:
 	ocean = Ocean.new()
 	add_child(ocean)
 	ocean.setup(climate, camera)
-	ocean.material.set_shader_parameter("air_color", flight_environment.fog_light_color)
+	_set_aerial_transport(ocean.material)
 	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
 
 func _add_resident_ground() -> void:
@@ -306,6 +340,7 @@ func _add_resident_ground() -> void:
 	resident = compiled.instantiate() as Node3D
 	var material := ShaderMaterial.new()
 	material.shader = RESIDENT_SHADER
+	_set_aerial_transport(material)
 	material.set_shader_parameter("first_region", Vector2(RESIDENT_MIN))
 	material.set_shader_parameter("region_span", TILE)
 	residency = Image.create_empty(RESIDENT_SIDE, RESIDENT_SIDE, false, Image.FORMAT_R8)
@@ -315,6 +350,13 @@ func _add_resident_ground() -> void:
 		chunk.material_override = material
 	add_child(resident)
 	_sync_resident_ground()
+
+func _set_aerial_transport(material: ShaderMaterial) -> void:
+	material.set_shader_parameter("air_column", AIR_COLUMN)
+	material.set_shader_parameter("air_color", flight_environment.fog_light_color)
+	material.set_shader_parameter("solar_color", cloud_material.get_shader_parameter("sun_color"))
+	material.set_shader_parameter("solar_direction", cloud_material.get_shader_parameter("sun_direction"))
+	material.set_shader_parameter("aerosol_extinction", 0.000043 if seed_value == 116 else 0.000024)
 
 func _sync_resident_ground() -> void:
 	if not resident:
@@ -386,7 +428,8 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	if stream_clock >= publish_interval:
 		var update_span := stream_clock
 		stream_clock = 0.0
-		_publish_and_prefetch(here)
+		if delta == Vector3.ZERO:
+			_publish_and_prefetch(here)
 		if coast_enabled:
 			_update_shallows(rider.position)
 		_update_cloud_visibility(rider.position, update_span)
@@ -478,7 +521,7 @@ func _publish_and_prefetch(here: Vector2i) -> void:
 			completed_tiles[key] = cache[key]
 		else:
 			var task := Thread.new()
-			if task.start(bake_tile.bind(key, seed_value)) == OK:
+			if task.start(read_tile.bind(key, seed_value, fine_tiles)) == OK:
 				jobs[key] = task
 	for key in current.keys():
 		if (key - here).length_squared() > 20:

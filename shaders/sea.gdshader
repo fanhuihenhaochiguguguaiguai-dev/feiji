@@ -1,13 +1,14 @@
 shader_type spatial;
 render_mode cull_disabled, shadows_disabled, diffuse_burley, specular_schlick_ggx;
+#include "air_transport.gdshaderinc"
 
 uniform vec2 world_offset;
 uniform vec4 wake;
 uniform float wake_strength = 0.0;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
 uniform vec4 scatter_color : source_color = vec4(0.098, 0.264, 0.277, 1.0);
-uniform vec4 air_color : source_color = vec4(0.53, 0.64, 0.75, 1.0);
 uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D water_response : repeat_disable, filter_linear;
 uniform sampler2D coast_depth : repeat_disable, filter_linear;
 uniform vec4 coast_area = vec4(0.0);
 uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
@@ -90,12 +91,11 @@ void fragment() {
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
 	float angle = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	float sea_state = 0.5;
-	if (outer_resolved < 0.86) {
-		float broad = textureLod(shore_noise, uv / 11800.0 + flow * 0.012, 2.0).r;
-		sea_state = mix(broad, 0.5, smoothstep(0.55, 0.86, outer_resolved));
-	}
-	vec3 water = deep.rgb * mix(0.88, 1.14, sea_state) + air_color.rgb * 0.045;
+	float unresolved = 0.042 * (1.0 - outer_resolved) + 0.035 * (1.0 - inner_resolved);
+	float sigma = sqrt(0.0025 + unresolved);
+	vec2 response = (vec2(angle, clamp(sigma / 0.32, 0.0, 1.0)) * vec2(95.0, 47.0) + 0.5) / vec2(96.0, 48.0);
+	float reflection = textureLod(water_response, response, 0.0).r;
+	vec3 water = (deep.rgb + air_color.rgb * 0.045) * (1.0 - reflection);
 	if (coast_area.w > 0.5 && distance_m < 2200.0) {
 		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
 		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
@@ -110,13 +110,11 @@ void fragment() {
 		}
 	}
 	ALBEDO = mix(water, vec3(0.49, 0.61, 0.62), clamp(foam, 0.0, 0.82));
-	float unresolved = 0.066 * (1.0 - outer_resolved) + 0.049 * (1.0 - inner_resolved);
 	ROUGHNESS = mix(sqrt(0.068 + unresolved), 0.59, clamp(foam, 0.0, 1.0));
 	METALLIC = 0.0;
 	float broad_lobe = 1.0 - outer_resolved;
-	float grazing = 1.0 - clamp(dot(VIEW, VIEW_MATRIX[1].xyz), 0.0, 1.0);
-	// After the sampled normal is subpixel, approximate its sky convolution with the shared horizon radiance.
-	EMISSION = air_color.rgb * (broad_lobe * (0.043 + 0.19 * grazing * grazing * grazing));
-	SPECULAR = 0.255 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.38);
-	FOG = vec4(air_color.rgb * 0.78, smoothstep(1800.0, 16600.0, distance_m));
+	// Resolved highlights still come from the sky probe and sun. The table recovers the broad unresolved lobe.
+	EMISSION = air_color.rgb * reflection * broad_lobe * (1.0 - 0.75 * clamp(foam, 0.0, 1.0));
+	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.42);
+	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, vec3(uv.x - world_offset.x, water_point.y, uv.y - world_offset.y));
 }

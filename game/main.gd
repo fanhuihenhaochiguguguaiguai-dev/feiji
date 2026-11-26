@@ -560,6 +560,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 	var tiles := Landscape.opening_tiles(start)
 	var seed_value := int(catalogue.source.theatres[int(operation.get("region", 0))].seed)
 	Landscape.prepare_relief(seed_value)
+	var fine_tiles := Landscape.fine_tile_index(seed_value)
 	var ids := [str(profile.state.selected)]
 	if mode == "free":
 		ids.append_array(Battle.FREE_ROSTER)
@@ -609,7 +610,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 		while workers.size() < 3 and not tiles.is_empty():
 			var coord: Vector2i = tiles.pop_front()
 			var job := Thread.new()
-			if job.start(Landscape.bake_tile.bind(coord, seed_value)) == OK:
+			if job.start(Landscape.read_tile.bind(coord, seed_value, fine_tiles)) == OK:
 				workers[coord] = job
 			else:
 				failure = true

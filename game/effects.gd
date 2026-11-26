@@ -10,6 +10,8 @@ const SMOKE_OPPOSITE = preload("res://assets/surface/soot-negative.webp")
 const SUSTAINED_FIRE = preload("res://assets/surface/flame-volume.webp")
 const BURNING := 7
 const SPARK = preload("res://assets/surface/spark.webp")
+const COMBUSTION_GRID = preload("res://assets/surface/combustion-volume.png")
+const COMBUSTION_SHADER = preload("res://shaders/combustion_volume.gdshader")
 
 const MISSILE_VISUALS := 28
 const RIBBON_SPAN := 3.1
@@ -29,9 +31,11 @@ var fragments: Array[Dictionary] = []
 var active_puffs := {}
 var active_impacts := {}
 var active_fragments := {}
+var wrecks := {}
 var puff_materials: Array[ShaderMaterial] = []
 var debris_cursor := 0
 var pressure_material := ShaderMaterial.new()
+static var combustion_field: ImageTexture3D
 var heat_wake := MeshInstance3D.new()
 var cursor := 0
 var impact_slot := 0
@@ -60,7 +64,13 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 	ribbon_material.set_shader_parameter("smoke_volume", SMOKE)
 	ribbon_segments.transform_format = MultiMesh.TRANSFORM_3D
 	ribbon_segments.use_custom_data = true
-	ribbon_segments.mesh = QuadMesh.new()
+	var section := CylinderMesh.new()
+	section.height = 1.0
+	section.radial_segments = 8
+	section.rings = 0
+	section.cap_top = false
+	section.cap_bottom = false
+	ribbon_segments.mesh = section
 	ribbon_segments.instance_count = RIBBON_SEGMENTS
 	ribbon_segments.visible_instance_count = 0
 	ribbon_segments.custom_aabb = AABB(Vector3(-20000, -2500, -20000), Vector3(40000, 7000, 40000))
@@ -94,6 +104,13 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 	sphere.radial_segments = 24
 	sphere.rings = 12
 	pressure_material.shader = PRESSURE
+	var combustion_material: ShaderMaterial
+	if DisplayServer.get_name() != "headless":
+		combustion_material = ShaderMaterial.new()
+		combustion_material.shader = COMBUSTION_SHADER
+		combustion_material.set_shader_parameter("combustion", _load_combustion())
+		combustion_material.set_shader_parameter("daylight", sky.get_shader_parameter("sun_color"))
+	var volume_shape := BoxMesh.new()
 	heat_wake.mesh = sphere
 	var heat := ShaderMaterial.new()
 	heat.shader = preload("res://shaders/heat.gdshader")
@@ -113,7 +130,13 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 		wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		wave.visible = false
 		add_child(wave)
-		impacts.append({"light":bulb, "wave":wave, "left":0.0, "radius":1.0})
+		var volume := MeshInstance3D.new()
+		volume.mesh = volume_shape
+		volume.material_override = combustion_material
+		volume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		volume.visible = false
+		add_child(volume)
+		impacts.append({"light":bulb, "wave":wave, "volume":volume, "left":0.0, "radius":1.0})
 	for i in 48:
 		var fragment := MeshInstance3D.new()
 		fragment.visible = false
@@ -121,8 +144,39 @@ func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
 		add_child(fragment)
 		fragments.append({"node":fragment, "left":0.0})
 
-func breakup(at: Vector3, carried_velocity: Vector3, wet: bool, airframe: Node3D) -> void:
-	impact(at, 2, wet, carried_velocity)
+static func _load_combustion() -> ImageTexture3D:
+	if combustion_field:
+		return combustion_field
+	var atlas := COMBUSTION_GRID.get_image()
+	atlas.convert(Image.FORMAT_RGBA8)
+	var slices: Array[Image] = []
+	for layer in 192:
+		slices.append(atlas.get_region(Rect2i(layer % 8 * 32, layer / 8 * 32, 32, 32)))
+	combustion_field = ImageTexture3D.new()
+	combustion_field.create(Image.FORMAT_RGBA8, 32, 32, slices.size(), false, slices)
+	return combustion_field
+
+func start_wreck(hull: Node3D, airframe: Node3D, at: Vector3, velocity: Vector3, roll: float, wet: bool) -> void:
+	if not airframe:
+		hull.visible = false
+		impact(at, 2, wet, velocity)
+		return
+	hull.visible = true
+	airframe.visible = true
+	impact(at, 1, wet, velocity)
+	wrecks[hull] = {"airframe":airframe, "velocity":velocity, "left":0.72,
+		"roll":roll, "smoke_due":0.0}
+
+func finish_wreck(hull: Node3D, wet: bool) -> void:
+	var wreck: Dictionary = wrecks.get(hull, {})
+	if wreck.is_empty():
+		return
+	wrecks.erase(hull)
+	impact(hull.position, 2, wet, wreck.velocity)
+	_breakup(wreck.velocity, wreck.airframe)
+	hull.visible = false
+
+func _breakup(carried_velocity: Vector3, airframe: Node3D) -> void:
 	if not is_instance_valid(airframe):
 		return
 	var surfaces := airframe.find_children("*", "MeshInstance3D", true, false)
@@ -207,10 +261,17 @@ func prime(at: Vector3) -> void:
 	puff(at, Vector3.ZERO, 0.12, 0.05, 8)
 	update_heat(at, Quaternion.IDENTITY, true)
 	heat_wake.scale = Vector3.ONE * 0.055
+	if combustion_field:
+		var volume: MeshInstance3D = impacts[0].volume
+		volume.position = at
+		volume.scale = Vector3.ONE * 0.12
+		volume.set_instance_shader_parameter("progress", 1.0)
+		volume.visible = true
 
 func end_prime() -> void:
 	tracers.visible_instance_count = 0
 	heat_wake.visible = false
+	impacts[0].volume.visible = false
 	tick(0.10, [])
 
 func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, normal := Vector3.ZERO) -> void:
@@ -223,9 +284,11 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 		var flare := at + eye_ray.normalized() * minf(0.85, size * 0.38)
 		puff(flare, carried * 0.86, size * 0.82, 0.105, 8)
 		puff(at + direction * 0.38, carried * 0.58 + direction * 31.0, size, 0.21, 2)
+		puff(at + direction * 0.58, carried * 0.69 + direction * 11.0, size * 0.34, 0.29, 4, 0.52, 0.025)
 		return
 	var destroyed := power == 2
 	var radius := 21.0 if destroyed else 8.5
+	var layered_volume := destroyed and not water and combustion_field != null and view.position.distance_squared_to(at) < 850.0 ** 2
 	if water:
 		for i in (8 if destroyed else 5):
 			var spread := Vector3(randf_range(-0.70, 0.70), randf_range(0.8, 1.8), randf_range(-0.70, 0.70))
@@ -239,7 +302,8 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 			var span := randf_range(0.63, 0.91) if destroyed and i > 1 else randf_range(0.27, 0.53)
 			var kind := BURNING if destroyed and i > 1 else 1
 			puff(at + flow * radius * 0.24, carried * 0.49 + flow * radius * 1.18, radius * randf_range(0.40, 0.72), span, kind, 0.93)
-		for i in (5 if destroyed else 2):
+		var smoke_layers := 2 if layered_volume or not destroyed else 5
+		for i in smoke_layers:
 			var flow := Vector3(randf_range(-1, 1), randf_range(0.13, 1), randf_range(-1, 1))
 			puff(at + flow * radius * 0.20, carried * 0.33 + flow * radius * 0.67, radius * randf_range(0.37, 0.68), randf_range(1.35, 2.65), 5, 0.98, 0.11 + 0.036 * i)
 	var item := impacts[impact_slot]
@@ -253,9 +317,15 @@ func impact(at: Vector3, power: int, water := false, carried := Vector3.ZERO, no
 	item.wave.position = at
 	item.wave.scale = Vector3.ONE
 	item.wave.visible = destroyed
-	item.total = 0.47 if destroyed else 0.15
+	item.volume.visible = layered_volume
+	if layered_volume:
+		item.volume.position = at
+		item.volume.scale = Vector3(42.0, 30.0, 42.0)
+		item.volume.set_instance_shader_parameter("progress", 0.0)
+	item.total = 1.65 if layered_volume else (0.47 if destroyed else 0.15)
 	item.left = item.total
 	item.radius = radius * 2.5
+	item.carried = carried
 	item.wave.set_instance_shader_parameter("amplitude", 0.33)
 
 func _prepare_projectiles() -> void:
@@ -414,7 +484,27 @@ func sync_tracers(shots: Array[Dictionary], alpha: float, camera: Camera3D) -> v
 		visible += 1
 	tracers.visible_instance_count = visible
 
-func tick(dt: float, shots: Array[Dictionary]) -> void:
+func tick(dt: float, shots: Array[Dictionary], landscape: Node3D = null) -> void:
+	for hull: Node3D in wrecks.keys():
+		var wreck: Dictionary = wrecks[hull]
+		wreck.left -= dt
+		wreck.velocity.y -= 21.0 * dt
+		var next: Vector3 = hull.position + wreck.velocity * dt
+		var floor_m := maxf(0.0, landscape.height(next)) if landscape else 0.0
+		var grounded := next.y <= floor_m + 1.0
+		next.y = maxf(next.y, floor_m + 1.0)
+		hull.position = next
+		hull.rotate_object_local(Vector3.FORWARD, wreck.roll * dt)
+		hull.rotate_object_local(Vector3.RIGHT, -0.29 * dt)
+		if grounded or wreck.left <= 0.0:
+			finish_wreck(hull, grounded and floor_m < 0.5)
+			continue
+		wreck.smoke_due -= dt
+		if wreck.smoke_due <= 0.0:
+			wreck.smoke_due = 0.095
+			var wake := hull.position + hull.basis.z * 4.0
+			puff(wake, wreck.velocity * 0.32 + Vector3.UP * 5.0, 2.3, 1.65, 5)
+			puff(wake, wreck.velocity * 0.48, 1.8, 0.34, BURNING)
 	var drag := exp(-dt * 1.51)
 	for slot in active_puffs.keys():
 		var item := puffs[slot]
@@ -441,16 +531,23 @@ func tick(dt: float, shots: Array[Dictionary]) -> void:
 		var item := impacts[slot]
 		item.left -= dt
 		var t := clampf(1.0 - item.left / item.total, 0, 1)
+		var flash_t := clampf((item.total - item.left) / minf(item.total, 0.47), 0.0, 1.0)
 		if item.wave.visible:
-			item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(t, 0.59))
-			item.wave.set_instance_shader_parameter("amplitude", 0.33 * pow(1.0 - t, 1.65))
+			item.wave.visible = flash_t < 1.0
+			item.wave.scale = Vector3.ONE * maxf(0.03, item.radius * pow(flash_t, 0.59))
+			item.wave.set_instance_shader_parameter("amplitude", 0.33 * pow(1.0 - flash_t, 1.65))
 		if item.light.visible:
-			if t > 0.54:
+			if flash_t > 0.54:
 				item.light.visible = false
 			else:
-				item.light.light_energy = item.energy * exp(-t * 9.0)
+				item.light.light_energy = item.energy * exp(-flash_t * 9.0)
+		if item.volume.visible:
+			item.volume.scale = Vector3(42.0, 30.0, 42.0) * (1.0 + 1.3 * pow(t, 0.74))
+			item.volume.position += (item.carried * exp(-t * 4.8) * 0.62 + Vector3.UP * 6.5) * dt
+			item.volume.set_instance_shader_parameter("progress", t)
 		if t >= 1.0:
 			item.wave.visible = false
+			item.volume.visible = false
 			active_impacts.erase(slot)
 	for slot in active_fragments.keys():
 		var piece := fragments[slot]
@@ -515,6 +612,8 @@ func _write_ribbon(points: Array, samples: int, settled: float, tip := Vector3.I
 		segment_count += 1
 
 func rebase(delta: Vector3) -> void:
+	for hull: Node3D in wrecks:
+		hull.position -= delta
 	for trail in spent_ribbons:
 		for i in trail.points.size():
 			trail.points[i] -= delta
@@ -527,3 +626,4 @@ func rebase(delta: Vector3) -> void:
 	for slot in active_impacts:
 		impacts[slot].wave.position -= delta
 		impacts[slot].light.position -= delta
+		impacts[slot].volume.position -= delta
