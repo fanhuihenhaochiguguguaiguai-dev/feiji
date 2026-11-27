@@ -103,6 +103,7 @@ def derive(sample, inherited, output):
     base = [n for n in hull if not n["name"].startswith(DETAIL)]
     full_mesh = append_mesh(dst, src, hull, materials, scale, "Reference exterior")
     base_mesh = append_mesh(dst, src, base, materials, scale, "Reference combat")
+    reconstructed_skin = src.doc["asset"].get("extras", {}).get("reference_fighter_fit_version") == 3
     flap_meshes = {flap["name"]: append_mesh(dst, src, [flap], materials, scale, flap["name"], local=True)
                    for flap in flaps}
     for i in dst.scene[:]:
@@ -113,6 +114,12 @@ def derive(sample, inherited, output):
         if name not in ("Exterior", "Combat", "LOD"):
             continue
         keep = [j for j in level["children"] if dst.nodes[j]["name"].startswith(("Gear_", "Bay_"))]
+        if reconstructed_skin:
+            for j in keep:
+                panel = dst.nodes[j]
+                if panel["name"].startswith("Bay_"):
+                    # Refit the original belly panels to the shallower shell.
+                    panel["translation"][1] = -0.42
         part = {"name": "Airframe shell mesh" if name == "Exterior" else f"Reference {name} mesh",
                 "mesh": full_mesh if name == "Exterior" else base_mesh, "translation": [0, 0, 0], "scale": [1, 1, 1]}
         part_index = len(dst.nodes)

@@ -150,9 +150,13 @@ def ship_skin(asset):
                 # Lower centerbody carries the avionics and inlet shoulders,
                 # then narrows into the engine nacelles.
                 core_y = root_chine + eps*(crown if top else belly)*center
-                outside_x = b + (w-b)*beyond
+                local_span = w - b
+                outside_x = b + local_span * beyond
                 wave = np.sin(np.pi*beyond)**.8
-                wing_y = root_chine + wing_fold(outside_x) + eps * wave * (.16 if top else .19)
+                # The chine converges at the radome. Giving its last thin
+                # strip full wing camber creates a vertical blade at the tip.
+                thickness = clampstep(.018, .86, local_span) * (.16 if top else .19)
+                wing_y = root_chine + wing_fold(outside_x) + eps * wave * thickness
                 x = sign * np.concatenate((b*FUSELAGE_X, outside_x))
                 y = np.concatenate((core_y, wing_y))
                 rows.extend(zip(x, y, np.full(columns, NOSE + q*LENGTH)))
