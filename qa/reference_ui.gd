@@ -128,6 +128,7 @@ func _run() -> void:
 		_report()
 		return
 	game._open("lobby")
+	var preview_path: String = game.showcase_aircraft.get_child(0).scene_file_path
 	game.lobby_screen.actions.start.pressed.emit()
 	var in_flight: Control = game.loading_screen
 	root.size_changed.emit()
@@ -137,6 +138,8 @@ func _run() -> void:
 		await process_frame
 	_check(game.route == "battle" and not game.loading and is_instance_valid(game.active_hud), "Start button did not complete a real sortie")
 	if game.route == "battle":
+		var combat_model: Node3D = game.current_battle.player.rig.meshes
+		_check(combat_model.scene_file_path == preview_path, "Combat changed the mesh presented in the lobby")
 		game._abort_battle()
 	_check(is_instance_valid(game.lobby_screen), "Returning from a sortie did not restore the carrier")
 	_report()
