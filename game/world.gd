@@ -123,13 +123,13 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var coast := seed_value == 413
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
 	var lowland := _surface("积雪" if snow else "砂砾地表",
-		Color("#fafcff") if snow else (Color("#a5b2b9") if coast else Color("#b3b9a8")),
+		Color("#fafcff") if snow else (Color("#b6b3a3") if coast else Color("#b3b9a8")),
 		0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45)
 	if coast:
 		lowland.set_detiling_rotation(0.09)
 		lowland.set_detiling_shift(0.27)
 	terrain.assets.set_texture_asset(0, lowland)
-	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#a4b2c0") if coast else Color("#a6aaa5")),
+	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#b5aea3") if coast else Color("#a6aaa5")),
 		0.57 if snow else 0.155, ROCK, NORMAL_ROCK)
 	if snow or coast:
 		# Break the period of the scan and avoid stretching it across the exposed face.
@@ -212,10 +212,14 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio_sky: Shade
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.97 if studio else 1.02
 	env.fog_enabled = not studio
+	if not studio:
+		# The sky shader already solves the horizon. Fogging it at infinity
+		# washes out cloud detail and colors before they reach the camera.
+		env.fog_sky_affect = 0.0
 	env.fog_light_color = air
 	env.fog_sun_scatter = 0.045
 	env.fog_density = 0.000064 if storm else 0.000037
-	env.fog_aerial_perspective = 0.46
+	env.fog_aerial_perspective = 0.20
 	host.add_child(env_node)
 	var sun := DirectionalLight3D.new()
 	sun.light_color = light
@@ -258,7 +262,7 @@ func _update_cloud_visibility(at: Vector3, dt: float) -> void:
 		var raw := lerpf(cloud_slices[index].get_pixelv(coords).r, cloud_slices[index + 1].get_pixelv(coords).r, level - index)
 		sample_density = smoothstep(0.20, 0.66, raw * (1.34 if storm else 1.0))
 	local_cloud = lerpf(local_cloud, sample_density, 1.0 - exp(-dt * 4.5))
-	var clear_fog := 0.000064 if storm else 0.000037
+	var clear_fog := 0.000049 if storm else 0.000022
 	flight_environment.fog_density = clear_fog * lerpf(1.0, 0.58, smoothstep(1800.0, 4500.0, at.y)) + local_cloud * 0.00135
 
 func _surface(label: String, tint: Color, texture_scale: float, albedo: Texture2D, surface_normal: Texture2D, normal_strength := 0.45) -> Terrain3DTextureAsset:
@@ -486,6 +490,9 @@ func _make_sea(camera: Camera3D) -> void:
 	add_child(ocean)
 	ocean.setup(climate, camera)
 	_set_aerial_transport(ocean.material)
+	ocean.material.set_shader_parameter("distant_reflection", 0.48)
+	if seed_value == 413:
+		ocean.material.set_shader_parameter("scatter_color", Color("#368c87"))
 	ocean.track(rider.position, Vector2(origin) * TILE, Vector3.ZERO, false)
 
 func _add_resident_ground() -> void:
@@ -494,6 +501,9 @@ func _add_resident_ground() -> void:
 	var material := ShaderMaterial.new()
 	material.shader = RESIDENT_SHADER
 	_set_aerial_transport(material)
+	material.set_shader_parameter("geology_scan", ROCK)
+	material.set_shader_parameter("relief_color_strength", 0.23 if seed_value == 413 else 0.11)
+	material.set_shader_parameter("coastal_geology", 0.72 if seed_value == 413 else 0.0)
 	material.set_shader_parameter("first_region", Vector2(RESIDENT_MIN))
 	material.set_shader_parameter("region_span", TILE)
 	residency = Image.create_empty(RESIDENT_SIDE, RESIDENT_SIDE, false, Image.FORMAT_R8)
@@ -509,7 +519,7 @@ func _set_aerial_transport(material: ShaderMaterial) -> void:
 	material.set_shader_parameter("air_color", flight_environment.fog_light_color)
 	material.set_shader_parameter("solar_color", cloud_material.get_shader_parameter("sun_color"))
 	material.set_shader_parameter("solar_direction", cloud_material.get_shader_parameter("sun_direction"))
-	material.set_shader_parameter("aerosol_extinction", 0.000043 if seed_value == 116 else 0.000024)
+	material.set_shader_parameter("aerosol_extinction", 0.000034 if seed_value == 116 else 0.000014)
 
 func _sync_resident_ground() -> void:
 	if not resident:
@@ -592,19 +602,19 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 
 func _update_shallows(at: Vector3) -> void:
 	const PROBE_SIZE := 64
-	const PROBE_STEP := 24.0
+	const PROBE_STEP := 48.0
 	const COVERAGE := PROBE_SIZE * PROBE_STEP
 	if coast_job and not coast_job.is_alive():
 		var image: Image = coast_job.wait_to_finish()
 		coast_job = null
 		ocean.set_shallows(image, coast_corner, COVERAGE)
-	if coast_job or at.y > 1400.0 or jobs.size() >= MAX_JOBS:
+	if coast_job or at.y > 3700.0 or jobs.size() >= MAX_JOBS:
 		return
 	var world_point := Vector2(at.x, at.z) + Vector2(origin) * TILE
-	var next := Vector2i((world_point / 384.0).floor())
+	var next := Vector2i((world_point / 576.0).floor())
 	if next == coast_cell:
 		return
-	coast_corner = Vector2(next) * 384.0 - Vector2.ONE * (COVERAGE * 0.5)
+	coast_corner = Vector2(next) * 576.0 - Vector2.ONE * (COVERAGE * 0.5)
 	var worker := Thread.new()
 	if worker.start(_bake_shallows.bind(coast_corner, PROBE_SIZE, PROBE_STEP, seed_value)) == OK:
 		coast_cell = next

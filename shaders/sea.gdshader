@@ -17,6 +17,7 @@ uniform sampler2DArray spectral_displacement : repeat_enable, filter_linear;
 uniform sampler2DArray spectral_normals : repeat_enable, filter_linear;
 uniform bool spectral_enabled = false;
 uniform float spectral_weight = 0.0;
+uniform float distant_reflection = 1.0;
 varying vec3 water_point;
 
 const vec2 SWELL_AXIS = vec2(0.863, -0.505);
@@ -148,15 +149,16 @@ void fragment() {
 	vec2 response = (vec2(angle, clamp(sigma / 0.32, 0.0, 1.0)) * vec2(95.0, 47.0) + 0.5) / vec2(96.0, 48.0);
 	float reflection = textureLod(water_response, response, 0.0).r;
 	vec3 water = (deep.rgb + air_color.rgb * 0.045) * (1.0 - reflection);
-	if (coast_area.w > 0.5 && distance_m < 2200.0) {
+	if (coast_area.w > 0.5 && distance_m < 6100.0) {
 		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
 		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
 		if (edge > 0.0) {
 			float sea_floor = texture(coast_depth, shore_uv).r * 63.75 - 32.0;
-			float shore_weight = smoothstep(0.0, 0.11, edge);
+			float shore_weight = smoothstep(0.0, 0.12, edge) * (1.0 - smoothstep(4200.0, 6100.0, distance_m));
 			float shallows = smoothstep(-20.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * shore_weight;
 			float immersion = max(0.3, -sea_floor) / max(0.72, angle);
-			water += scatter_color.rgb * exp(-vec3(0.32, 0.137, 0.063) * immersion) * (0.62 * shore_weight);
+			vec3 bottom = scatter_color.rgb * exp(-vec3(0.26, 0.091, 0.079) * immersion);
+			water += bottom * ((0.75 - 0.42 * reflection) * shore_weight);
 			float breaker = coast_crest(sea_floor, uv) + fine.x * 0.43;
 			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
 		}
@@ -166,7 +168,7 @@ void fragment() {
 	METALLIC = 0.0;
 	float broad_lobe = 1.0 - outer_resolved;
 	// Resolved highlights still come from the sky probe and sun. The table recovers the broad unresolved lobe.
-	EMISSION = air_color.rgb * reflection * broad_lobe * (1.0 - 0.75 * clamp(foam, 0.0, 1.0));
+	EMISSION = air_color.rgb * reflection * broad_lobe * distant_reflection * (1.0 - 0.75 * clamp(foam, 0.0, 1.0));
 	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.42);
 	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, vec3(uv.x - world_offset.x, water_point.y, uv.y - world_offset.y));
 }

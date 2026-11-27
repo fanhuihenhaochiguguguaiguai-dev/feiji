@@ -64,8 +64,14 @@ func _check_j20_geometry(fight: BATTLE) -> Dictionary:
 	var wing := BATTLE._trace_airframe(jet, Vector3(4.9, 2.0, 4.9), Vector3(4.9, -2.0, 4.9), INF)
 	var above := BATTLE._trace_airframe(jet, Vector3(4.9, 0.8, 4.9), Vector3(4.9, 0.8, 3.7), INF)
 	var canopy := BATTLE._trace_airframe(jet, Vector3(0.0, 3.0, -4.4), Vector3(0.0, 0.0, -4.4), INF)
-	var anchor: Node3D = jet.rig.exhausts[0]
-	var fitted: bool = absf(anchor.position.z - 9.66) < 0.001 and jet.rig.gear.size() == 3
+	var shell := AABB()
+	for surface: MeshInstance3D in jet.rig.levels.Exterior.find_children("*", "MeshInstance3D", true, false):
+		if surface.get_aabb().size.z > shell.size.z:
+			shell = surface.get_aabb()
+	var fitted: bool = jet.rig.gear.size() == 3 and jet.rig.exhausts.size() == 2
+	for anchor: Node3D in jet.rig.exhausts:
+		fitted = fitted and absf(anchor.position.z - shell.end.z) < 0.24 and absf(anchor.position.y) < 0.08
+	fitted = fitted and jet.rig.exhausts[0].position.x * jet.rig.exhausts[1].position.x < 0.0
 	var ok := wing.x > 0.4 and wing.x < 0.6 and wing.z > 0.9 and is_inf(above.x) and canopy.x < 0.65 and fitted
 	fight._change_plane(jet, previous_id)
 	failed += int(not ok)

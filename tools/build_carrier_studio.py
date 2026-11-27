@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("output", type=Path)
 parser.add_argument("--master", type=Path)
 parser.add_argument("--calibration", type=Path)
+parser.add_argument("--sample-only", action="store_true")
 options = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(root / "tools"))
@@ -284,9 +285,10 @@ def coastal_relief():
     return parent_to("SurveyedCoastline",parts)
 
 
-skin = material("Carbon graphite · satin radar finish", (0.050, 0.071, 0.098), 0.33, 0.47)
-trim = material("Dielectric edge and seal", (0.019, 0.028, 0.040), 0.50, 0.19)
-slate = material("Wing ceramic composite", (0.105, 0.149, 0.194), 0.31, 0.53)
+skin = material("Carbon graphite · satin radar finish", (0.021, 0.024, 0.027), 0.30, 0.58)
+trim = material("Dielectric edge and seal", (0.012, 0.014, 0.016), 0.50, 0.19)
+slate = material("Wing ceramic composite", (0.078, 0.087, 0.102), 0.31, 0.60)
+edge = material("Silver-grey wing edge", (0.263, 0.276, 0.306), 0.28, 0.76)
 metal = material("Brushed titanium and steel", (0.23, 0.265, 0.29), 0.29, 0.86)
 heat = material("Heat-treated nozzle", (0.141, 0.10, 0.08), 0.38, 0.79)
 glass = material("Blue-green optical multilayer", (0.068, 0.29, 0.28), 0.15, 0.65)
@@ -358,21 +360,28 @@ def wing(sign):
             angle = tau*j/marks
             chord = .5-.5*cos(angle)
             verts.append((sign*x,front+(rear-front)*chord,datum+thickness*sin(angle)*(1-.30*chord)))
-    faces = []
+    faces, flaps = [], []
     for i in range(30):
         for j in range(marks):
             a,b = i*marks+j,i*marks+(j+1)%marks
             face = (a,b,b+marks,a+marks)
-            faces.append(face if sign>0 else face[::-1])
+            region = flaps if 12 <= i < 29 and 21 <= j < 35 else faces
+            region.append(face if sign>0 else face[::-1])
     obj = mesh("Curved mainplane · %s" % ("P" if sign>0 else "S"), verts, faces, slate, True)
     obj.data.materials.append(skin)
-    obj.data.materials.append(metal)
+    obj.data.materials.append(edge)
     for face in obj.data.polygons:
-        chord_segment = face.index%marks
-        if chord_segment < 3 or chord_segment > marks-4:
+        chord_segment = min(v % marks for v in face.vertices)
+        if 6 <= chord_segment < 12 or marks-13 <= chord_segment < marks-7:
             face.material_index=1
-        if face.index//marks > 15 and chord_segment in (3, 4, marks-5, marks-4):
+        if chord_segment < 6 or chord_segment >= marks-7:
             face.material_index=2
+    used = sorted({i for face in flaps for i in face})
+    remap = {index: i for i, index in enumerate(used)}
+    pivot = Vector((sign*4.8, -4.93, -0.13))
+    aileron = mesh("Aileron" + ("SampleP" if sign > 0 else "SampleS"),
+        [Vector(verts[i])-pivot for i in used], [tuple(remap[i] for i in f) for f in flaps], slate, True)
+    aileron.location = pivot
     # Aileron split and the breaks between the composite skin panels.
     for t in (.59,.83):
         verts = []
@@ -389,8 +398,8 @@ def wing(sign):
 def fighter():
     previous = set(bpy.data.objects)
     loft("Continuous centrebody and pointed radome", FUSELAGE, body, skin, 112, 80)
-    frames = [(1.42,.042,.016,.797),(1.92,.29,.24,.787),(2.63,.48,.44,.72),
-              (3.36,.51,.49,.693),(4.02,.42,.43,.653),(4.77,.26,.23,.60),(5.23,.025,.011,.564)]
+    frames = [(1.78,.035,.010,.784),(2.28,.32,.26,.76),(2.98,.50,.47,.695),
+              (3.73,.53,.52,.664),(4.47,.44,.46,.622),(5.20,.27,.27,.586),(5.84,.016,.01,.535)]
     loft("Low optical canopy", frames, canopy, glass, 46, 40, False)
     for side in (-1,1):
         chine = []
@@ -444,12 +453,12 @@ def fighter():
         strut=(s*1.9,-2.27,-.48); hub=(s*2.42,-2.10,-1.38)
         door = bevel(box("Main landing gear bay door",(s*2.18,-2.63,-.61),(.27,1.29,.12),skin),.060)
         door.rotation_euler.y = s * .35
-        combine[metal].extend([cylinder("Main gear oleo",strut,hub,.103,metal,14,.084),
-            cylinder("Trailing gear link",(s*2.31,-2.92,-.58),hub,.067,metal,12)])
+        cylinder("Main gear oleo",strut,hub,.103,metal,14,.084)
+        cylinder("Trailing gear link",(s*2.31,-2.92,-.58),hub,.067,metal,12)
         cylinder("Main tyre",(hub[0]-.16,hub[1],hub[2]),(hub[0]+.16,hub[1],hub[2]),.37,rubber,32)
-        combine[metal].append(cylinder("Wheel hub",(hub[0]-.182,hub[1],hub[2]),(hub[0]+.182,hub[1],hub[2]),.175,metal,24))
+        cylinder("Wheel hub",(hub[0]-.182,hub[1],hub[2]),(hub[0]+.182,hub[1],hub[2]),.175,metal,24)
         combine[cyan].append(box("Navigation light strip",(s*7.12,-5.9,-.175),(.085,.40,.052),cyan))
-    combine[metal].append(cylinder("Nose gear oleo",(0,5.14,-.38),(0,5.14,-1.48),.075,metal,14,.06))
+    cylinder("Nose gear oleo",(0,5.14,-.38),(0,5.14,-1.48),.075,metal,14,.06)
     for x in (-.13,.13):
         cylinder("Nose wheel",(x-.063,5.14,-1.49),(x+.065,5.14,-1.49),.26,rubber,28)
     for group in combine.values():
@@ -483,11 +492,14 @@ def export(assembly, path):
                              export_apply=True, export_animations=False, export_cameras=False, export_lights=False)
 
 
-stage = carrier()
-coast = coastal_relief()
-coast.parent = stage
+stage = None
+if not options.sample_only or options.master or options.calibration:
+    stage = carrier()
+    coast = coastal_relief()
+    coast.parent = stage
+    if not options.sample_only:
+        export(stage, options.output / "carrier-stage.glb")
 sample = fighter()
-export(stage, options.output / "carrier-stage.glb")
 specimen = options.output / "reference-fighter.glb"
 export(sample, specimen)
 asset = AirframeGLB(specimen)
