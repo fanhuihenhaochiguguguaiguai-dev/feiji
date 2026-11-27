@@ -196,13 +196,16 @@ def ship_skin(asset):
             hole_width = CANOPY(np.clip(q, .168, .447))[:, 0]
             opening = (q > .207) & (q < .430) & (w < hole_width * .78) & top
             inlet = (q > .369) & (q < .496) & (w > 1.36) & (w < 2.47) & (not top)
+            # Skin faces inside the recessed throats show as dark bars from
+            # the rear. Terminate the skin at the twin engine housings.
+            exhaust = (q > .940) & ((w - .92) ** 2 + (centers[:, 1] - .02) ** 2 < .59 ** 2)
             core = np.where((panel >= 4) & (q < .62), CHINE, SKIN) if top else BELLY
             marks = np.where(bright, EDGE, np.where(wing, WING, core))
             for mat in (EDGE, SKIN, WING, CHINE, BELLY):
                 for mobile in (False, True):
                     name = ("Aileron left" if sign < 0 else "Aileron right") if mobile else "Fused airframe skin"
                     origin = np.array([sign*4.92, -.04, NOSE+.829*LENGTH]) if mobile else None
-                    mask = (marks == mat) & (flap == mobile) & ~opening & ~inlet
+                    mask = (marks == mat) & (flap == mobile) & ~opening & ~inlet & ~exhaust
                     for cheek, normal in smoothing:
                         section = mask & cheek
                         if section.any():
@@ -304,16 +307,22 @@ def intakes(asset):
                  np.array([(0, i + 1, i) for i in range(1, 7)])[:, ::sign], HARDWARE)
         # The inboard fairing swells into the duct, then comes back to the
         # body side. It follows the chine and stays distinct from the lip.
-        z = np.array([-4.56, -4.30, -4.03, -3.77, -3.45, -3.18, -2.94])
-        swell = np.array([.005, .124, .220, .276, .216, .142, .016])
-        spread = np.array([.03, .27, .39, .46, .45, .35, .10])
+        z = np.array([-4.68, -4.30, -4.03, -3.77, -3.45, -3.18, -2.89])
+        swell = np.array([.005, .096, .174, .220, .195, .109, .004])
+        spread = np.array([.036, .183, .249, .272, .258, .196, .060])
         section = np.linspace(0., np.pi, 15)
         bulge = []
         for at, height, half in zip(z, swell, spread, strict=True):
             q = (at - NOSE) / LENGTH
-            b, chine, _, _, _ = cross_section(q, span_at(q))
-            pts = np.column_stack((b - .030 + height * np.sin(section),
-                                   chine - .16 + half * np.cos(section), np.full(len(section), at)))
+            b, chine, crown, belly, profile = cross_section(q, span_at(q))
+            y = chine - .062 + half * np.cos(section)
+            upper = b * np.interp((y - chine) / crown, profile[::-1], FUSELAGE_X[::-1])
+            lower_profile = (profile + LOWER_SECTION) * .5
+            lower = b * np.interp((chine - y) / belly, lower_profile[::-1], FUSELAGE_X[::-1])
+            # Embed the perimeter in the existing side so only the centre
+            # of the bulge stands off the skin.
+            shell = np.where(y > chine, upper, lower)
+            pts = np.column_stack((shell - .012 + height * np.sin(section), y, np.full(len(section), at)))
             bulge.append(pts * mirror)
         loft(asset, "Inboard intake bulge", bulge, CHINE, sign > 0, True)
 
@@ -425,7 +434,7 @@ def bake_panel_maps(normal_path, orm_path):
     paint = ImageDraw.Draw(channel)
     def seam(points, strength=94):
         xy = [(round(x*(resolution-1)), round(z*(resolution-1))) for x, z in points]
-        paint.line(xy, fill=strength, width=3)
+        paint.line(xy, fill=strength, width=2)
     for side in (-1.,1.):
         for x in (.022, .048, .087):
             offset = side*x
@@ -497,7 +506,7 @@ def reconstruct(source, output, normal_map, orm_map):
     orm = len(textures)-1
     for key in (SKIN,WING,EDGE,CHINE,BELLY):
         mat = asset.materials[asset.names[key]]
-        mat["normalTexture"] = {"index": orm-1, "scale": .66}
+        mat["normalTexture"] = {"index": orm-1, "scale": .55}
         mat["occlusionTexture"] = {"index": orm, "strength": .55}
         surface = mat["pbrMetallicRoughness"]
         surface.update(metallicRoughnessTexture={"index": orm}, roughnessFactor=1.0,
