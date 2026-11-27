@@ -14,28 +14,34 @@ from bake_j20_breakup import bake, write_model
 
 
 GEAR = ("Main landing gear", "Main gear", "Main tyre", "Trailing gear", "Nose gear", "Nose wheel", "Wheel hub")
-DETAIL = ("Flush ", "Low-observable ", "Canted tail leading", "Recessed intake", "Shared physical")
+DETAIL = ("Flush ", "Low-observable ", "Canted tail leading", "Recessed intake", "Shared physical",
+          "Landing bay perimeter", "Nozzle petals")
 
 
 def transfer_materials(target, source):
+    def transfer_texture(slot):
+        tex = source.doc["textures"][slot["index"]]
+        original = source.doc["images"][tex["source"]]
+        images = target.doc["images"]
+        uri = Path(original["uri"]).name
+        image = next((j for j, entry in enumerate(images) if entry.get("uri") == uri), None)
+        if image is None:
+            image = len(images)
+            images.append({"uri": uri, "name": original["name"]})
+        textures = target.doc["textures"]
+        texture = next((j for j, entry in enumerate(textures) if entry["source"] == image), None)
+        if texture is None:
+            texture = len(textures)
+            textures.append({"source": image, "sampler": 0})
+        slot["index"] = texture
+
     mapping = {}
     for i, material in enumerate(source.materials):
         new = deepcopy(material)
-        if "normalTexture" in new:
-            tex = source.doc["textures"][new["normalTexture"]["index"]]
-            normal = source.doc["images"][tex["source"]]
-            dst = target.doc["images"]
-            uri = Path(normal["uri"]).name
-            image = next((j for j, entry in enumerate(dst) if entry.get("uri") == uri), None)
-            if image is None:
-                image = len(dst)
-                dst.append({"uri": uri, "name": normal["name"]})
-            textures = target.doc["textures"]
-            texture = next((j for j, entry in enumerate(textures) if entry["source"] == image), None)
-            if texture is None:
-                texture = len(textures)
-                textures.append({"source": image, "sampler": 0})
-            new["normalTexture"]["index"] = texture
+        pbr = new.get("pbrMetallicRoughness", {})
+        for slot in (new.get("normalTexture"), new.get("occlusionTexture"), pbr.get("metallicRoughnessTexture")):
+            if slot:
+                transfer_texture(slot)
         mapping[i] = len(target.materials)
         target.materials.append(new)
     target.doc["extensionsUsed"] = sorted(set(target.doc.get("extensionsUsed", [])) | set(source.doc.get("extensionsUsed", [])))
@@ -103,7 +109,7 @@ def derive(sample, inherited, output):
     base = [n for n in hull if not n["name"].startswith(DETAIL)]
     full_mesh = append_mesh(dst, src, hull, materials, scale, "Reference exterior")
     base_mesh = append_mesh(dst, src, base, materials, scale, "Reference combat")
-    reconstructed_skin = src.doc["asset"].get("extras", {}).get("reference_fighter_fit_version") == 3
+    skin_version = src.doc["asset"].get("extras", {}).get("reference_fighter_fit_version", 0)
     flap_meshes = {flap["name"]: append_mesh(dst, src, [flap], materials, scale, flap["name"], local=True)
                    for flap in flaps}
     for i in dst.scene[:]:
@@ -114,12 +120,12 @@ def derive(sample, inherited, output):
         if name not in ("Exterior", "Combat", "LOD"):
             continue
         keep = [j for j in level["children"] if dst.nodes[j]["name"].startswith(("Gear_", "Bay_"))]
-        if reconstructed_skin:
+        if skin_version >= 3:
             for j in keep:
                 panel = dst.nodes[j]
                 if panel["name"].startswith("Bay_"):
                     # Refit the original belly panels to the shallower shell.
-                    panel["translation"][1] = -0.42
+                    panel["translation"][1] = -0.345 if skin_version >= 4 else -0.42
         part = {"name": "Airframe shell mesh" if name == "Exterior" else f"Reference {name} mesh",
                 "mesh": full_mesh if name == "Exterior" else base_mesh, "translation": [0, 0, 0], "scale": [1, 1, 1]}
         part_index = len(dst.nodes)
