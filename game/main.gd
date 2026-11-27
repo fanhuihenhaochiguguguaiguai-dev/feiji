@@ -487,6 +487,14 @@ func _set_showcase_aircraft(id: String) -> void:
 	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0, id == "j20")
 	for surface: MeshInstance3D in plane.find_children("*", "MeshInstance3D", true, false):
 		surface.layers = 2
+	if id == "j20":
+		var fill := OmniLight3D.new()
+		fill.position = Vector3(8.0, 6.8, -3.8)
+		fill.omni_range = 25.0
+		fill.light_energy = 3.1
+		fill.light_color = Color("#c8d5ec")
+		fill.light_cull_mask = 2
+		plane.add_child(fill)
 	showcase_aircraft.position.y = CarrierStage.DECK_Y + maxf(0.8, spec.gearClearance)
 	orbit_distance = 27.7 * clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
 	_tick_orbit(0.0, true)

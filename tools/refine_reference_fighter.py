@@ -33,7 +33,7 @@ SURFACES = {
     "Carbon graphite · satin radar finish": ((.025, .028, .032), .63, .28, .33, .22),
     "Wing ceramic composite": ((.065, .074, .086), .61, .35, .22, .28),
     "Silver-grey wing edge": ((.32, .348, .389), .74, .26, .20, .24),
-    "Blue-green optical multilayer": ((.044, .234, .213), .18, .16, .76, .13),
+    "Blue-green optical multilayer": ((.035, .168, .156), .13, .135, .79, .12),
 }
 
 
@@ -116,7 +116,7 @@ def shade(asset):
         if material["name"] == "Blue-green optical multilayer":
             material["alphaMode"] = "BLEND"
             material["doubleSided"] = True
-            material["pbrMetallicRoughness"]["baseColorFactor"][3] = .56
+            material["pbrMetallicRoughness"]["baseColorFactor"][3] = .42
 
 
 def add_shell(asset, name, points, triangles, material):
@@ -144,7 +144,11 @@ def add_cockpit(asset, shape):
     # These outlines sit inside the window and share the aircraft's calibrated
     # ordinate map, so they follow the same fairing in both camera views.
     metal = "Brushed titanium and steel"
-    graphite = "Dielectric edge and seal"
+    graphite = "Cockpit anthracite and fabric"
+    asset.names[graphite] = len(asset.materials)
+    asset.materials.append({"name": graphite, "doubleSided": True, "pbrMetallicRoughness": {
+        "baseColorFactor": [.083, .105, .102, 1.0], "metallicFactor": .15, "roughnessFactor": .66,
+    }})
     canopy = next(n for n in asset.nodes if n["name"] == "Low optical canopy")
     skin = asset.meshes[canopy["mesh"]]["primitives"][0]["attributes"]["POSITION"]
     shell = np.asarray(asset.read(skin))
