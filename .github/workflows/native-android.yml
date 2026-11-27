@@ -62,6 +62,7 @@ jobs:
           tools/build_extension.sh
           godot --headless --editor --import
           godot --headless --script res://qa/smoke.gd
+          godot --headless --script res://qa/reference_ui.gd
           godot --headless --script res://qa/v182.gd
           godot --headless --script res://qa/refinement.gd
           godot --headless --script res://qa/campaign.gd

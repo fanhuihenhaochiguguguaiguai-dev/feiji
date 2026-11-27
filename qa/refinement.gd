@@ -130,19 +130,20 @@ func run() -> void:
 	await process_frame
 	var initial_id: int = shell.showcase_aircraft.get_child(0).get_instance_id()
 	var original: float = shell.orbit_scale
-	var point := Vector2(390, 300)
+	var canvas: Transform2D = shell.lobby_screen.frame.get_global_transform()
+	var point := canvas * Vector2(390, 300)
 	touch(shell, 0, point, true)
-	touch(shell, 1, point + Vector2(180, 0), true)
-	drag(shell, 1, point + Vector2(234, 0))
+	touch(shell, 1, canvas * Vector2(570, 300), true)
+	drag(shell, 1, canvas * Vector2(624, 300))
 	check(shell.orbit_scale < original, "Spreading fingers did not zoom in")
-	drag(shell, 1, point + Vector2(136, 0))
+	drag(shell, 1, canvas * Vector2(526, 300))
 	check(shell.orbit_scale > original, "Pinching fingers did not zoom out")
 	var zoom: float = shell.orbit_scale
 	touch(shell, 1, Vector2.ZERO, false)
 	var heading: float = shell.orbit_spin
-	drag(shell, 0, point + Vector2(80, 50))
+	drag(shell, 0, canvas * Vector2(470, 350))
 	check(shell.orbit_scale == zoom and shell.orbit_spin != heading, "Lifting one finger interrupted or jumped the orbit")
-	touch(shell, 7, point + Vector2(290, 0), true)
+	touch(shell, 7, canvas * Vector2(680, 300), true)
 	check(shell.orbit_scale == zoom, "A new pinch jumped before movement")
 	touch(shell, 7, Vector2.ZERO, false)
 	touch(shell, 0, Vector2.ZERO, false)

@@ -120,26 +120,19 @@ func run() -> void:
 	var shell: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(shell)
 	await process_frame
-	var start_button: Control
-	var free_button: Control
-	for control in shell.view.get_children():
-		if control.get_script() != preload("res://game/menu_panel.gd"):
-			continue
-		if control.title == "开始战斗":
-			start_button = control
-		elif control.title == "无限空战":
-			free_button = control
+	var start_button: Button = shell.lobby_screen.actions.get("start")
+	var free_button: Button = shell.lobby_screen.actions.get("free")
 	check(start_button != null and free_button != null, "Lobby is missing a sortie entry")
 	if start_button and free_button:
 		check(free_button.position.y >= start_button.position.y + start_button.size.y,
 			"Unlimited air combat is not underneath the main sortie")
 		var pointer := InputEventMouseButton.new()
 		pointer.button_index = MOUSE_BUTTON_LEFT
-		pointer.position = free_button.size * 0.5
+		pointer.position = free_button.get_global_rect().get_center()
 		pointer.pressed = true
-		free_button._gui_input(pointer)
+		root.push_input(pointer, true)
 		pointer.pressed = false
-		free_button._gui_input(pointer)
+		root.push_input(pointer, true)
 		var timeout := Time.get_ticks_msec() + 10000
 		while shell.loading and Time.get_ticks_msec() < timeout:
 			await process_frame

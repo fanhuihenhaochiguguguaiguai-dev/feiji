@@ -7,14 +7,22 @@ const Landscape = preload("res://game/world.gd")
 const Hud = preload("res://game/hud.gd")
 const CutButton = preload("res://game/menu_panel.gd")
 const PausePanel = preload("res://game/pause_panel.gd")
+const LoadingScreen = preload("res://game/loading_screen.gd")
+const CarrierLobby = preload("res://game/reference_lobby.gd")
 
-var catalogue := Data.new()
-var profile := Profile.new(catalogue)
+var catalogue: Data
+var profile: Profile
 var font: Font
 var layer := CanvasLayer.new()
 var view: Control
 var showcase: Node3D
 var showcase_aircraft: Node3D
+var showcase_stage: Node3D
+var showcase_environment: Environment
+var showcase_lights: Array[DirectionalLight3D] = []
+var lobby_viewport: SubViewport
+var lobby_screen: CarrierLobby
+var lobby_shadow: MeshInstance3D
 var current_battle: Battle
 var debrief: Dictionary = {}
 var route := "lobby"
@@ -41,8 +49,7 @@ var panel_styles := {}
 var preview_camera: Camera3D
 var active_hud: Control
 var last_operation := {}
-var light_load_label: Label
-var load_meter: ProgressBar
+var loading_screen: LoadingScreen
 var loading := false
 var pause_ui: Control
 var adaptive_clock := 0.0
@@ -54,6 +61,10 @@ var thermal_limited := false
 var cool_windows := 0
 
 func _ready() -> void:
+	if not catalogue:
+		catalogue = Data.new()
+	if not profile:
+		profile = Profile.new(catalogue)
 	font = load("res://assets/locale/PilotSC.otf")
 	if font == null:
 		font = ThemeDB.fallback_font
@@ -69,7 +80,7 @@ func _ready() -> void:
 		button_styles[state] = _box_style(fill, Color("#57839ca8"), 2)
 	add_child(layer)
 	get_viewport().size_changed.connect(func():
-		if route != "battle":
+		if not loading and route != "battle":
 			_render_menu())
 	viewed_plane = str(profile.state.selected)
 	selected_mission = int(profile.state.campaign)
@@ -84,13 +95,14 @@ func _open(page: String) -> void:
 		get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
 		_build_showcase()
 	elif is_instance_valid(showcase):
-		preview_camera.make_current()
+		_sync_showcase_stage()
 	if page in ["lobby", "training", "pilot", "settings", "report"]:
 		viewed_plane = str(profile.state.selected)
 		_set_showcase_aircraft(viewed_plane)
 	_render_menu()
 
 func _clear_ui() -> void:
+	lobby_screen = null
 	if is_instance_valid(view):
 		layer.remove_child(view)
 		view.queue_free()
@@ -159,6 +171,9 @@ func _button(area: Rect2, text: String, click: Callable, active := true) -> Butt
 
 func _render_menu() -> void:
 	_clear_ui()
+	if route == "lobby":
+		_show_carrier_lobby()
+		return
 	var size := get_viewport().get_visible_rect().size
 	_panel(Rect2(0, 0, size.x, 65.0), Color("#081726ec"))
 	var crest := TextureRect.new()
@@ -178,16 +193,6 @@ func _render_menu() -> void:
 		var labels := ["大厅", "战机机库", "战役"]
 		var icons := ["home", "hangar", "map"]
 		_cut(Rect2(21, size.y * 0.205 + i * 61.0, 166, 52), labels[i], icons[i], 0, _open.bind(pages[i]))
-	if route == "lobby":
-		var info := Vector2(24, size.y - 78)
-		var plane := catalogue.aircraft(str(profile.state.selected))
-		_panel(Rect2(info, Vector2(313, 58)), Color("#10273cde"))
-		_text(info + Vector2(14, 4), str(plane.name), 26)
-		_text(info + Vector2(16, 36), str(plane.role), 14, Color("#aac4d7"))
-		_cut(Rect2(size.x - 345, size.y - 169, 321, 66), "开始战斗", "plane", 1, _start_campaign.bind(int(profile.state.campaign)))
-		_cut(Rect2(size.x - 328, size.y - 92, 304, 51), "无限空战", "infinite", 2, _start_free)
-		_button(Rect2(size.x - 492, size.y - 83, 139, 40), "训练模式", _open.bind("training"))
-		return
 	var p := Vector2(204, 94)
 	var box_w := 426.0
 	var sidebar := Vector2(size.x - box_w - 20, 93)
@@ -351,6 +356,8 @@ func _setting_items(lobby: bool) -> Array:
 func _apply_settings() -> void:
 	Engine.max_fps = mini(int(profile.state.settings.fps), 60) if thermal_limited else int(profile.state.settings.fps)
 	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
+	if is_instance_valid(lobby_viewport):
+		lobby_viewport.scaling_3d_scale = float(profile.state.settings.quality)
 	if is_instance_valid(current_battle):
 		current_battle.audio.mute = profile.state.settings.mute
 
@@ -397,6 +404,20 @@ func _equip(id: String) -> void:
 	note = profile.equip(id)
 	_render_menu()
 
+func _show_carrier_lobby() -> void:
+	var plane := catalogue.aircraft(str(profile.state.selected))
+	var details := {"name":plane.name, "role":plane.role, "notice":note,
+		"level":Data.level(int(profile.state.xp)), "credits":int(profile.state.credits)}
+	var handlers := {
+		"lobby":["大厅", _open.bind("lobby")], "hangar":["战机机库", _open.bind("hangar")],
+		"campaign":["战役", _open.bind("campaign")], "training":["训练模式", _open.bind("training")],
+		"pilot":["个人档案", _open.bind("pilot")], "settings":["设置", _open.bind("settings")],
+		"start":["开始战斗", _start_campaign.bind(int(profile.state.campaign))], "free":["无限空战", _start_free],
+	}
+	lobby_screen = CarrierLobby.new()
+	view.add_child(lobby_screen)
+	lobby_screen.configure(font, lobby_viewport.get_texture(), details, handlers)
+
 func _build_showcase() -> void:
 	showcase = Node3D.new()
 	add_child(showcase)
@@ -407,7 +428,68 @@ func _build_showcase() -> void:
 	camera.fov = 34.0
 	camera.far = 18000.0
 	var at := Vector3(-340.0, Landscape.APRON_HEIGHT, 350.0)
-	Landscape.add_environment(showcase, catalogue.source.theatres[0], true)
+	showcase_environment = Landscape.add_environment(showcase, catalogue.source.theatres[0], true)
+	showcase_lights.clear()
+	for child in showcase.get_children():
+		if child is DirectionalLight3D:
+			showcase_lights.append(child)
+	showcase_aircraft = Node3D.new()
+	showcase_aircraft.position = at + Vector3(0.0, 1.5, 0.0)
+	showcase.add_child(showcase_aircraft)
+	lobby_shadow = MeshInstance3D.new()
+	lobby_shadow.mesh = PlaneMesh.new()
+	lobby_shadow.position = at + Vector3(0.0, 0.03, 0.0)
+	lobby_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var contact_shadow := ShaderMaterial.new()
+	contact_shadow.shader = preload("res://shaders/lobby_shadow.gdshader")
+	lobby_shadow.material_override = contact_shadow
+	showcase.add_child(lobby_shadow)
+	_sync_showcase_stage()
+	_set_showcase_aircraft(str(profile.state.selected))
+
+func _sync_showcase_stage() -> void:
+	var carrier := route == "lobby"
+	if carrier:
+		if not is_instance_valid(lobby_viewport):
+			lobby_viewport = SubViewport.new()
+			lobby_viewport.size = Vector2i(1280, 720)
+			lobby_viewport.own_world_3d = true
+			lobby_viewport.transparent_bg = true
+			lobby_viewport.msaa_3d = Viewport.MSAA_2X
+			lobby_viewport.scaling_3d_scale = float(profile.state.settings.quality)
+			add_child(lobby_viewport)
+		if showcase.get_parent() != lobby_viewport:
+			showcase.reparent(lobby_viewport, false)
+		if is_instance_valid(showcase_stage):
+			showcase_stage.hide()
+		lobby_shadow.show()
+		lobby_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	else:
+		if showcase.get_parent() != self:
+			showcase.reparent(self, false)
+		if not is_instance_valid(showcase_stage):
+			_build_showcase_stage()
+		showcase_stage.show()
+		lobby_shadow.hide()
+	showcase_environment.background_mode = Environment.BG_CLEAR_COLOR if carrier else Environment.BG_SKY
+	showcase_environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if carrier else Environment.REFLECTION_SOURCE_BG
+	showcase_environment.ambient_light_energy = 0.62 if carrier else 0.82
+	showcase_environment.tonemap_exposure = 0.90 if carrier else 0.97
+	var sun_angle := Vector3(0.21, 0.16, -0.96) if carrier else Vector3(0.47, 0.11, 0.876)
+	showcase_environment.sky_rotation.y = 0.100 * TAU - atan2(sun_angle.x, -sun_angle.z)
+	showcase_lights[0].look_at_from_position(sun_angle * 100.0, Vector3.ZERO)
+	showcase_lights[0].light_energy = 1.05 if carrier else 1.18
+	showcase_lights[1].light_energy = 0.67 if carrier else 0.76
+	showcase_lights[1].light_color = Color("#9cbedc") if carrier else Color("#d5e4f2")
+	preview_camera.h_offset = -1.08 if carrier else 0.0
+	preview_camera.v_offset = -0.97 if carrier else 0.0
+	preview_camera.make_current()
+	_tick_orbit(0.0, true)
+
+func _build_showcase_stage() -> void:
+	showcase_stage = Node3D.new()
+	showcase.add_child(showcase_stage)
+	var at := Vector3(-340.0, Landscape.APRON_HEIGHT, 350.0)
 	var ridges := (load("res://assets/environment/airfield-ridges.glb") as PackedScene).instantiate() as Node3D
 	ridges.position = at
 	var baked := StandardMaterial3D.new()
@@ -416,10 +498,7 @@ func _build_showcase() -> void:
 	for surface in ridges.find_children("*", "MeshInstance3D", true, false):
 		surface.material_override = baked
 		surface.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	showcase.add_child(ridges)
-	showcase_aircraft = Node3D.new()
-	showcase_aircraft.position = at + Vector3(0.0, 1.5, 0.0)
-	showcase.add_child(showcase_aircraft)
+	showcase_stage.add_child(ridges)
 	var airfield := MeshInstance3D.new()
 	var tarmac := PlaneMesh.new()
 	tarmac.size = Vector2(260.0, 120)
@@ -434,11 +513,11 @@ func _build_showcase() -> void:
 	wet.normal_texture = preload("res://assets/studio/tarmac-normal.png")
 	wet.uv1_scale = Vector3(3.8, 1.8, 1.0)
 	airfield.material_override = wet
-	showcase.add_child(airfield)
+	showcase_stage.add_child(airfield)
 	var architecture: Node3D = (load("res://assets/studio/hangar-dusk.glb") as PackedScene).instantiate()
 	architecture.position = at + Vector3(86.0, 0.3, 12.0)
 	architecture.scale = Vector3.ONE * 0.73
-	showcase.add_child(architecture)
+	showcase_stage.add_child(architecture)
 	var lamps := StandardMaterial3D.new()
 	lamps.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	lamps.emission_enabled = true
@@ -454,8 +533,7 @@ func _build_showcase() -> void:
 		var inst := MeshInstance3D.new()
 		inst.mesh = lens
 		inst.position = at + Vector3(4 + i * 4.1, 0.27, -27.0)
-		showcase.add_child(inst)
-	_set_showcase_aircraft(str(profile.state.selected))
+		showcase_stage.add_child(inst)
 
 func _set_showcase_aircraft(id: String) -> void:
 	if id == preview_id and showcase_aircraft.get_child_count() > 0:
@@ -469,6 +547,7 @@ func _set_showcase_aircraft(id: String) -> void:
 	showcase_aircraft.add_child(plane)
 	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
 	showcase_aircraft.position.y = Landscape.APRON_HEIGHT + maxf(0.8, spec.gearClearance)
+	(lobby_shadow.mesh as PlaneMesh).size = Vector2(float(spec.span) * 0.98, float(spec.length) * 1.12)
 	orbit_distance = 27.7 * clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
 	_tick_orbit(0.0, true)
 
@@ -498,33 +577,38 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	var prepared: Dictionary = await _prepare_sortie(mode, operation, runway)
 	if prepared.is_empty():
 		loading = false
+		loading_screen = null
 		_open("lobby")
 		note = "战机或战区加载失败，请重试"
 		_render_menu()
 		return
-	light_load_label.text = "正在装配战场"
+	loading_screen.set_status("正在装配战场")
 	await get_tree().process_frame
 	if is_instance_valid(showcase):
-		remove_child(showcase)
+		showcase.get_parent().remove_child(showcase)
 		showcase.queue_free()
 		showcase = null
+	if is_instance_valid(lobby_viewport):
+		lobby_viewport.queue_free()
+		lobby_viewport = null
 	route = "battle"
 	current_battle = Battle.new()
 	add_child(current_battle)
 	current_battle.finished.connect(_battle_finished, CONNECT_DEFERRED)
 	current_battle.setup(catalogue, profile, mode, operation, runway, prepared)
 	current_battle.paused = true
-	load_meter.value = load_meter.max_value
-	light_load_label.text = "准备完成"
 	if DisplayServer.get_name() != "headless":
 		var camera := current_battle.camera
 		current_battle.effects.prime(camera.position - camera.global_basis.z * 13.0)
 		await RenderingServer.frame_post_draw
 		current_battle.effects.end_prime()
+	loading_screen.meter.value = loading_screen.meter.max_value
+	loading_screen.set_status("准备完成")
 	await get_tree().process_frame
 	var fade := create_tween()
 	fade.tween_property(view, "modulate:a", 0.0, 0.23)
 	await fade.finished
+	loading_screen = null
 	_clear_ui()
 	var hud := Hud.new()
 	hud.fight = current_battle
@@ -537,23 +621,9 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 
 func _show_loading(title: String) -> void:
 	_clear_ui()
-	var size := get_viewport().get_visible_rect().size
-	var image := TextureRect.new()
-	image.texture = preload("res://assets/loading/alpine.webp")
-	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	view.add_child(image)
-	_panel(Rect2(Vector2.ZERO, size), Color("#08152675"))
-	var midpoint := size * Vector2(0.5, 0.77)
-	_panel(Rect2(midpoint - Vector2(290.0, 72.0), Vector2(580.0, 126.0)), Color("#081725e8"))
-	_text(midpoint - Vector2(257.0, 57.0), title, 28, Color("#f2d397"))
-	light_load_label = _text(midpoint - Vector2(257.0, 20.0), "正在准备战机与空域", 16)
-	load_meter = ProgressBar.new()
-	load_meter.position = midpoint - Vector2(257.0, -23.0)
-	load_meter.size = Vector2(510.0, 11.0)
-	load_meter.show_percentage = false
-	view.add_child(load_meter)
+	loading_screen = LoadingScreen.new()
+	view.add_child(loading_screen)
+	loading_screen.configure(preload("res://assets/loading/alpine.webp"), font, title)
 
 func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dictionary:
 	var start := Battle.start_position(mode, operation, runway)
@@ -588,7 +658,8 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 			return {}
 		requests[path] = path
 	var total := tiles.size() + requests.size() + 1
-	load_meter.max_value = total
+	var meter := loading_screen.meter
+	meter.max_value = total
 	var ready := {}
 	var workers := {}
 	var failure := false
@@ -600,8 +671,9 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 				workers.erase(coord)
 				if data.is_empty():
 					failure = true
-				ready[coord] = data
-				load_meter.value += 1
+				else:
+					ready[coord] = data
+					meter.value += 1
 		for id in requests.keys():
 			var path: String = requests[id]
 			var state := ResourceLoader.load_threaded_get_status(path)
@@ -613,10 +685,10 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 					ready[id] = resource
 				else:
 					catalogue.scenes[id] = resource
+				meter.value += 1
 			else:
 				failure = true
 			requests.erase(id)
-			load_meter.value += 1
 		while workers.size() < 3 and not tiles.is_empty():
 			var coord: Vector2i = tiles.pop_front()
 			var job := Thread.new()
@@ -624,7 +696,7 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 				workers[coord] = job
 			else:
 				failure = true
-		light_load_label.text = "已准备 %d / %d 项" % [int(load_meter.value), total]
+		loading_screen.set_status("已准备 %d / %d 项" % [int(meter.value), total])
 		await get_tree().process_frame
 	if not failure and relief_color:
 		ready["relief_color"] = relief_color
@@ -740,6 +812,8 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _orbit_clear(at: Vector2) -> bool:
+	if is_instance_valid(lobby_screen):
+		return not lobby_screen.blocks_orbit(at)
 	for control in view.get_children():
 		if (control is Panel or control is BaseButton or control is ScrollContainer or control is CutButton) and control.visible and control.get_global_rect().has_point(at):
 			return false
@@ -770,11 +844,20 @@ func _tick_orbit(delta: float, snap := false) -> void:
 	var target_point := showcase_aircraft.position + Vector3(0, 1.1, 0)
 	var tilt := orbit_display.y
 	var spin := orbit_display.x
-	var offset := Vector3(sin(spin) * cos(tilt), sin(tilt), cos(spin) * cos(tilt)) * orbit_distance * orbit_display.z
+	var distance := orbit_distance * orbit_display.z
+	if route == "lobby":
+		spin += 3.49
+		tilt += 0.118
+		distance *= 1.04
+	var offset := Vector3(sin(spin) * cos(tilt), sin(tilt), cos(spin) * cos(tilt)) * distance
 	var at := target_point + offset
 	at.y = maxf(at.y, Landscape.APRON_HEIGHT + 0.85)
+	if not snap and preview_camera.position.is_equal_approx(at):
+		return
 	preview_camera.position = at
 	preview_camera.look_at(target_point, Vector3.UP)
+	if route == "lobby" and is_instance_valid(lobby_viewport):
+		lobby_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func _process(delta: float) -> void:
 	if route in ["lobby", "hangar"] and not loading:
