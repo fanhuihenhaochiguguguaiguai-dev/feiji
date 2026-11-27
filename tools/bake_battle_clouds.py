@@ -9,6 +9,7 @@ ASSET = Path(__file__).resolve().parents[1] / "assets/environment/battle-clouds.
 WIDTH, DEPTH, SLICES = 128, 96, 48
 PERIOD_X, PERIOD_Z = 24.0, 18.0  # kilometres
 SUN = ((-.88, .31, -.36), (-.74, .59, .33), (.50, .218, -.84))
+THICKNESS_KM = (5.4, 5.675, 6.25)  # Coast, snow, and storm ranges in game/world.gd.
 RNG = np.random.default_rng(18314)
 
 layer, row, column = np.mgrid[:SLICES, :DEPTH, :WIDTH].astype(np.float32)
@@ -76,7 +77,7 @@ def sunlight(direction, thickness):
     return np.exp(-optical_depth * 3.35)
 
 
-channels = [density, *(sunlight(v, thickness) for v, thickness in zip(SUN, (2.16, 2.27, 2.50)))]
+channels = [density, *(sunlight(v, thickness) for v, thickness in zip(SUN, THICKNESS_KM, strict=True))]
 voxels = np.rint(np.stack(channels, axis=-1) * 255).astype(np.uint8)
 atlas = voxels.reshape(6, 8, DEPTH, WIDTH, 4).transpose(0, 2, 1, 3, 4).reshape(6 * DEPTH, 8 * WIDTH, 4)
 image = Image.new("RGBA", (atlas.shape[1], atlas.shape[0] + DEPTH))

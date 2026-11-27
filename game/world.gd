@@ -69,7 +69,7 @@ var coast_corner := Vector2.ZERO
 var coast_enabled := false
 var cloud_material: ShaderMaterial
 var sky_material: ShaderMaterial
-var cloud_altitudes := Vector2(1040.0, 3200.0)
+var cloud_altitudes := Vector2(2600.0, 8000.0)
 var cloud_layout := Vector2.ZERO
 var cloud_strength := 1.0
 var flight_environment: Environment
@@ -273,11 +273,11 @@ static func _load_battle_clouds() -> ImageTexture3D:
 func _add_cloud_layer(camera: Camera3D) -> void:
 	var light_channel := 1
 	if seed_value == 704:
-		cloud_altitudes = Vector2(1310.0, 3580.0)
+		cloud_altitudes = Vector2(3275.0, 8950.0)
 		cloud_layout = Vector2(4900.0, -5100.0)
 		light_channel = 2
 	elif seed_value == 116:
-		cloud_altitudes = Vector2(650.0, 3150.0)
+		cloud_altitudes = Vector2(1625.0, 7875.0)
 		cloud_layout = Vector2(18300.0, 6500.0)
 		cloud_strength = 1.3
 		light_channel = 3
