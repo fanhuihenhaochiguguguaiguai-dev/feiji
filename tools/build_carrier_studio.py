@@ -284,9 +284,9 @@ def coastal_relief():
     return parent_to("SurveyedCoastline",parts)
 
 
-skin = material("Carbon graphite · satin radar finish", (0.016, 0.016, 0.016), 0.33, 0.47)
-trim = material("Dielectric edge and seal", (0.010, 0.010, 0.010), 0.50, 0.19)
-slate = material("Wing ceramic composite", (0.022, 0.022, 0.022), 0.31, 0.53)
+skin = material("Carbon graphite · satin radar finish", (0.050, 0.071, 0.098), 0.33, 0.47)
+trim = material("Dielectric edge and seal", (0.019, 0.028, 0.040), 0.50, 0.19)
+slate = material("Wing ceramic composite", (0.105, 0.149, 0.194), 0.31, 0.53)
 metal = material("Brushed titanium and steel", (0.23, 0.265, 0.29), 0.29, 0.86)
 heat = material("Heat-treated nozzle", (0.141, 0.10, 0.08), 0.38, 0.79)
 glass = material("Blue-green optical multilayer", (0.068, 0.29, 0.28), 0.15, 0.65)
