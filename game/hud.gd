@@ -1,20 +1,5 @@
 extends Control
 
-const HUD_ART = preload("res://assets/ui/combat-hud.webp")
-const Frame = preload("res://game/reference_frame.gd")
-const REFERENCE := Vector2(1774, 887)
-const TELEMETRY := Rect2(40, 88, 416, 204)
-const STATUS := Rect2(558, 86, 655, 74)
-const RADAR := Rect2(1410, 79, 231, 209)
-const PAUSE := Rect2(1611, 73, 86, 84)
-const WARNING := Rect2(605, 666, 537, 118)
-const RETICLE_SIDES := [Rect2(480, 191, 223, 395), Rect2(1064, 190, 223, 396)]
-const ACTION_ART := {
-	"counter": Rect2(73, 376, 270, 127), "boost": Rect2(73, 500, 270, 110),
-	"evade": Rect2(73, 606, 270, 128), "gun": Rect2(1455, 350, 187, 162),
-	"missile": Rect2(1385, 510, 315, 247),
-}
-
 var fight: Node3D
 var typeface: Font
 var artifacts := []
@@ -35,15 +20,10 @@ var backdrop := Node2D.new()
 var contact_visibility := {}
 var contact_revision := -1
 var drawn_time := -1.0
-var safe_rect := Rect2()
-var art_scale := 1.0
-var radar_area := Rect2()
-var telemetry_area := Rect2()
-var status_area := Rect2()
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for data in [["反制导弹", "counter"], ["加速", "boost"], ["躲避", "evade"], ["机炮", "gun"], ["导弹", "missile"]]:
+	for data in [["反制导弹", "counter","shield",0], ["加速","boost","boost",1], ["躲避","evade","evade",2], ["航炮","gun","gun",0], ["导弹","missile","missile",1]]:
 		var button := Button.new()
 		button.flat = true
 		button.focus_mode = Control.FOCUS_NONE
@@ -62,12 +42,10 @@ func _ready() -> void:
 			button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		button.pressed.connect(func(): queue_redraw())
 		add_child(button)
-		artifacts.append({"button":button, "action":data[1], "art":ACTION_ART[data[1]]})
-	for entry in [["", "pause"], ["视角", "view"]]:
+		artifacts.append({"button":button,"label":data[0],"action":data[1],"icon":data[2],"slot":data[3]})
+	for entry in [["Ⅱ", "pause"], ["◉", "view"]]:
 		var button := Button.new()
 		button.text = entry[0]
-		button.flat = entry[1] == "pause"
-		button.tooltip_text = "暂停" if entry[1] == "pause" else "切换视角"
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func():
 			if entry[1] == "pause":
@@ -90,50 +68,38 @@ func _ready() -> void:
 	_layout()
 
 func _layout() -> void:
-	safe_rect = Frame.safe_bounds(self, size)
-	art_scale = minf(safe_rect.size.x / REFERENCE.x, safe_rect.size.y / REFERENCE.y)
-	var scale_now := maxf(0.001, art_scale)
-	telemetry_area = _place(TELEMETRY)
-	status_area = _place(STATUS, 0.5)
-	radar_area = _place(RADAR, 1.0)
-	var pause_area := _place(PAUSE, 1.0)
-	input_actions.pause.position = pause_area.position
-	input_actions.pause.size = pause_area.size
-	var view_size := Vector2(59, 50) * scale_now
-	input_actions.view.add_theme_font_size_override("font_size", _points(21))
-	input_actions.view.size = view_size
-	input_actions.view.position = Vector2(safe_rect.end.x - view_size.x - 12.0 * scale_now, pause_area.end.y + 11.0 * scale_now)
+	var w := size.x
+	var h := size.y
+	input_pad = Rect2(117, 89, w - 253, h - 160)
+	input_actions.pause.position = Vector2(w - 65, 172)
+	input_actions.pause.size = Vector2(38, 32)
+	input_actions.view.position = Vector2(w - 65, 210)
+	input_actions.view.size = Vector2(38, 32)
 	for item in artifacts:
-		var area := _place(item.art, 1.0 if item.action in ["gun", "missile"] else 0.0)
-		item.area = area
-		item.centre = area.get_center()
-		item.button.position = area.position
-		item.button.size = area.size
-	var left := safe_rect.position.x + 357.0 * scale_now
-	var right := safe_rect.end.x - 318.0 * scale_now
-	var top := status_area.end.y + 6.0 * scale_now
-	input_pad = Rect2(Vector2(left, top), Vector2(maxf(1.0, right - left), maxf(1.0, safe_rect.end.y - top)))
+		var weapon: bool = item.action in ["gun", "missile"]
+		var radius := 50.0 if item.action == "missile" else (42.0 if weapon else 35.0)
+		var centre := Vector2(w - 84.0, h - (110.0 if item.slot == 1 else 227.0)) if weapon else Vector2(72.0, h * 0.49 + item.slot * 77.0)
+		item.radius = radius
+		item.centre = centre
+		item.button.position = centre - Vector2.ONE * radius
+		item.button.size = Vector2.ONE * radius * 2.0
 	backdrop.queue_redraw()
 	queue_redraw()
 
-func _place(source: Rect2, horizontal := 0.0) -> Rect2:
-	var pad := safe_rect.size.x - REFERENCE.x * art_scale
-	var x := safe_rect.position.x + source.position.x * art_scale + pad * horizontal
-	if horizontal == 1.0:
-		x += 58.0 * art_scale
-	var y := safe_rect.position.y + source.get_center().y / REFERENCE.y * safe_rect.size.y - source.size.y * art_scale * 0.5
-	return Rect2(Vector2(x, y), source.size * art_scale)
-
 func _draw_backdrop() -> void:
-	backdrop.draw_texture_rect_region(HUD_ART, telemetry_area, TELEMETRY)
-	backdrop.draw_texture_rect_region(HUD_ART, status_area, STATUS)
-	backdrop.draw_texture_rect_region(HUD_ART, radar_area, RADAR)
-	backdrop.draw_texture_rect_region(HUD_ART, _place(PAUSE, 1.0), PAUSE)
-	var label_at := telemetry_area.position + Vector2(8, 227) * art_scale
-	backdrop.draw_string(typeface, label_at, fight.task.name, HORIZONTAL_ALIGNMENT_LEFT, -1, _points(18), cream)
-
-func _points(reference_size: float) -> int:
-	return maxi(10, roundi(reference_size * art_scale))
+	var radar := Vector2(size.x - 93, 92)
+	_panel(Rect2(27, 18, 257, 131), 12.0, Color("#142437cf"), Color("#51758a88"), backdrop)
+	backdrop.draw_rect(Rect2(45, 54, 198, 4), Color("#638b9c60"))
+	backdrop.draw_string(typeface, Vector2(35, 171), fight.task.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, cream)
+	_panel(Rect2(size.x * 0.5 - 192, 14, 384, 34), 12.0, Color("#122337d0"), Color("#678b9a8c"), backdrop)
+	backdrop.draw_circle(radar, 63.0, Color("#091b2baa"), true, -1.0, true)
+	for radius in [21, 42, 63]:
+		backdrop.draw_arc(radar, radius, 0, TAU, 64, Color("#7bbbd27c"), 1.0, true)
+	backdrop.draw_line(radar - Vector2(63, 0), radar + Vector2(63, 0), Color("#5995b67a"))
+	backdrop.draw_line(radar - Vector2(0, 63), radar + Vector2(0, 63), Color("#5995b67a"))
+	backdrop.draw_colored_polygon(PackedVector2Array([radar + Vector2(0, -5), radar + Vector2(4, 5), radar + Vector2(-4, 5)]), cyan)
+	var width := typeface.get_string_size("北", HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	backdrop.draw_string(typeface, radar - Vector2(width * 0.5, 68), "北", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, top_left)
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(fight):
@@ -273,42 +239,31 @@ func _draw() -> void:
 	var center := size * 0.5
 	var now: float = fight.time
 	var jet: RefCounted = fight.player
-	var vital := telemetry_area.position
-	var integrity := clampf(jet.hp / jet.max_hp, 0.0, 1.0)
-	_text(vital + Vector2(115, 43) * art_scale, jet.type.name, _points(24), top_left)
-	_text(vital + Vector2(286, 65) * art_scale, "机体 %d%%" % roundi(integrity * 100.0), _points(18), cream)
-	draw_rect(Rect2(vital + Vector2(54, 60) * art_scale, Vector2(220, 5) * art_scale), Color("#143c52"))
-	draw_rect(Rect2(vital + Vector2(54, 60) * art_scale, Vector2(220 * integrity, 4) * art_scale), cyan)
-	_text(vital + Vector2(170, 101) * art_scale, "%d 公里/时" % int(jet.velocity.length() * 3.6), _points(23), top_left)
-	_text(vital + Vector2(170, 130) * art_scale, "%d 米" % int(jet.position.y), _points(23), top_left)
-	_text(vital + Vector2(170, 158) * art_scale, "%03d°" % int(fposmod(rad_to_deg(atan2(jet.forward.x, -jet.forward.z)), 360)), _points(23), top_left)
+	_text(Vector2(45, 44), "机体  %d" % ceili(jet.hp), 18, top_left)
+	draw_rect(Rect2(45, 54, 198 * jet.hp / jet.max_hp, 4), Color("#7ce5c4"))
+	_text(Vector2(45, 82), "空速    %d 公里/时" % int(jet.velocity.length() * 3.6), 15, top_left)
+	_text(Vector2(45, 105), "高度    %d 米" % int(jet.position.y), 15, top_left)
+	_text(Vector2(45, 128), "航向    %03d°" % int(fposmod(rad_to_deg(atan2(jet.forward.x, -jet.forward.z)), 360)), 15, top_left)
 	var progress: String
 	var clock := int(now)
 	if fight.mode == "campaign":
-		progress = "第 %d / %d 波" % [fight.wave, fight.task.engagement.waves.size()]
+		progress = "波次 %d / %d    ·    剩余敌机 %d" % [fight.wave, fight.task.engagement.waves.size(), fight.alive_enemies()]
 	elif fight.mode == "free":
 		progress = "击落 %d   ·   死亡 %d   ·   在场 %d/%d" % [fight.player_kills, fight.respawns, fight.alive_enemies() + int(jet.hp > 0.0), fight.fleet.size()]
 		clock = ceili(maxf(0.0, fight.FREE_LENGTH - now))
 	else:
 		progress = fight.task.detail
-	var status_y := status_area.position.y + 40.0 * art_scale
-	if fight.mode == "campaign":
-		_center_text(Vector2(status_area.position.x + 134.0 * art_scale, status_y), progress, _points(25), top_left)
-		_center_text(Vector2(status_area.position.x + 344.0 * art_scale, status_y), "剩余敌机 %d" % fight.alive_enemies(), _points(24), cream)
-	else:
-		_center_text(Vector2(status_area.position.x + 226.0 * art_scale, status_y), progress, _points(20), top_left)
-	_center_text(Vector2(status_area.position.x + 570.0 * art_scale, status_y), "%02d:%02d" % [clock / 60, clock % 60], _points(24), top_left)
+	_center_text(Vector2(w * 0.5, 37), "%s    |    %02d:%02d" % [progress, clock / 60, clock % 60], 15, top_left)
 	if not fight.warning and now < fight.countered_until:
 		_center_text(Vector2(w * 0.5, 78), "反制成功", 18, Color("#77e6a3"))
-	var radar := radar_area.position + Vector2(115, 105) * art_scale
-	var radar_radius := 92.0 * art_scale
+	var radar := Vector2(w - 93, 92)
 	for other in fight.fleet:
 		if other == jet or other.hp <= 0.0:
 			continue
 		var vector: Vector3 = jet.attitude.inverse() * (other.position - jet.position)
 		var p: Vector2 = Vector2(vector.x, vector.z) / fight.radar_range
 		if p.length() <= 1.0:
-			draw_circle(radar + p * radar_radius, 3.1 if other == fight.target else 2.1, pink if other == fight.target else cream, true, -1, true)
+			draw_circle(radar + p * 61.0, 3.1 if other == fight.target else 2.1, pink if other == fight.target else cream, true, -1, true)
 	var aim := _aim_at(jet.position + jet.forward * 1200.0)
 	var p1 := _aim_at(jet.position + jet.forward.rotated(jet.attitude * Vector3.UP, fight.LOCK_ANGLE) * 1200.0)
 	var radius := clampf(aim.distance_to(p1), 68.0, h * 0.33)
@@ -317,17 +272,12 @@ func _draw() -> void:
 	if fight.warning:
 		var bearing: Vector3 = jet.attitude.inverse() * fight.incoming_heading
 		var edge := Vector2(bearing.x, clampf(bearing.z - bearing.y, -1.0, 1.0)).normalized()
-		var blip: Vector2 = radar + Vector2(bearing.x, bearing.z) * (radar_radius * fight.closest_incoming / fight.radar_range)
+		var blip: Vector2 = radar + Vector2(bearing.x, bearing.z) * (61.0 * fight.closest_incoming / fight.radar_range)
 		draw_arc(blip, 4.4, 0.0, TAU, 16, pink, 1.6, true)
 		if edge.length_squared() > 0.0001:
 			var p := aim + edge * (radius + 12.0)
 			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
 	var reticle: Vector2 = _aim_at(fight.reticle_point) if not fight.camera.is_position_behind(fight.reticle_point) else aim
-	if not fight.manual_cockpit:
-		var shell_scale := art_scale * (0.86 if locked else 0.96)
-		for trim: Rect2 in RETICLE_SIDES:
-			var position := aim + (trim.position - Vector2(884, 394)) * shell_scale
-			draw_texture_rect_region(HUD_ART, Rect2(position, trim.size * shell_scale), trim, Color(1, 1, 1, 0.73))
 	var reticle_color := Color("#79f0a6") if locked else Color(cyan, 0.69)
 	draw_arc(reticle, radius if locked else 17.0, 0.0, TAU, 64 if locked else 36, reticle_color, 1.2, true)
 	for n in 4:
@@ -402,46 +352,70 @@ func _draw_incoming_warning(jet: RefCounted, now: float) -> void:
 		var tail: Vector3 = jet.model.global_transform * Vector3(0.0, -0.4, float(jet.type.length) * 0.40)
 		if not fight.camera.is_position_behind(tail):
 			at = _aim_at(tail) + Vector2(0.0, 25.0)
-	var label_size := WARNING.size * art_scale
-	at.x = clampf(at.x, safe_rect.position.x + label_size.x * 0.5, safe_rect.end.x - label_size.x * 0.5)
-	at.y = clampf(at.y, safe_rect.position.y + safe_rect.size.y * 0.60, safe_rect.end.y - label_size.y * 0.48)
+	at.x = clampf(at.x, 225.0, size.x - 225.0)
+	at.y = clampf(at.y, size.y * 0.62, size.y - 62.0)
 	var urgent: float = 1.0 - smoothstep(160.0, 1150.0, fight.closest_incoming)
 	var rhythm := 0.5 + 0.5 * sin(now * lerpf(9.0, 15.0, urgent))
-	draw_texture_rect_region(HUD_ART, Rect2(at - label_size * 0.5, label_size), WARNING, Color(1, 1, 1, 0.79 + rhythm * 0.21))
+	var alert := Color("#ff484e").lerp(Color("#ff9380"), rhythm * 0.42)
+	_panel(Rect2(at - Vector2(123.0, 20.0), Vector2(246.0, 40.0)), 10.0, Color("#260c16e5"), alert)
+	_center_text(at + Vector2(0.0, 7.0), "导弹来袭", 21, Color("#ffb3ab"))
+	for side in [-1.0, 1.0]:
+		var icon := at + Vector2(side * 91.0, 0.0)
+		draw_colored_polygon(PackedVector2Array([icon + Vector2(0, -11), icon + Vector2(11, 9), icon + Vector2(-11, 9)]), alert)
+		draw_line(icon + Vector2(0, -5), icon + Vector2(0, 1), Color("#290d15"), 2.0, true)
+		draw_circle(icon + Vector2(0, 5), 1.1, Color("#290d15"), true, -1.0, true)
 
 func _draw_action(item: Dictionary, locked: bool) -> void:
 	var name: String = item.action
-	var weapon := name in ["gun", "missile"]
+	var side := name in ["gun", "missile"]
 	var jet: RefCounted = fight.player
-	var area: Rect2 = item.area
+	var radius: float = item.radius
 	var at: Vector2 = item.centre
 	var active: bool = item.button.button_pressed or name in weapon_fingers.values()
 	if name == "boost":
 		active = bool(fight.action.get("boost", false))
-	var tint := Color(1, 1, 1, 0.42 if item.button.disabled else 1.0)
-	if active or (weapon and locked):
-		tint = Color(1.14, 1.14, 1.14, tint.a)
-	draw_texture_rect_region(HUD_ART, area, item.art, tint)
+	var color := Color("#8ae7ff") if side and locked else Color("#a8c5d8")
+	var label := Color(top_left, 0.40) if item.button.disabled else top_left
+	if item.button.disabled:
+		color.a *= 0.4
 	var cool := 0.0
 	match name:
 		"missile": cool = (jet.missile_at - fight.time) / fight.MISSILE_CYCLE
 		"counter": cool = (jet.counter_at - fight.time) / fight.COUNTER_CYCLE
 		"evade": cool = (jet.evade_at - fight.time) / fight.EVADE_CYCLE
+	if side:
+		draw_circle(at, radius, Color("#143044d9") if active else Color("#0e1e30c2"), true, -1, true)
+		draw_arc(at, radius, 0, TAU, 65, Color(color, 0.72), 1.2, true)
+	else:
+		_panel(Rect2(at - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), 9.0, Color("#153249e0") if active else Color("#0e1e30bf"), Color(color, 0.43))
+	_symbol(at + Vector2(0, -10), item.icon, color)
+	_center_text(at + Vector2(0, 21), item.label, 16, label)
 	cool = clampf(cool, 0.0, 1.0)
-	if cool < 0.001:
-		return
-	var shade := Color("#050a14cf")
-	if weapon:
-		var step_count := maxi(1, ceili(cool * 36.0))
+	if cool >= 0.99999:
+		draw_circle(at, radius - 1.0, Color("#050d19d9"), true, -1, true)
+	elif cool > 0.0001:
+		var step_count := ceili(cool * 42.0)
 		var wedge := PackedVector2Array([at])
 		for i in range(step_count + 1):
-			wedge.append(at + Vector2.UP.rotated(TAU * cool * i / step_count) * area.size * 0.40)
-		draw_colored_polygon(wedge, shade)
-	else:
-		var inset := area.size * Vector2(0.12, 0.18)
-		var inner := Rect2(area.position + inset, area.size - inset * 2.0)
-		var height := inner.size.y * cool
-		_panel(Rect2(inner.position, Vector2(inner.size.x, height)), minf(height, 12.0 * art_scale), shade, Color.TRANSPARENT)
+			wedge.append(at + Vector2.UP.rotated(TAU * cool * i / step_count) * (radius - 1.0))
+		draw_colored_polygon(wedge, Color("#050d19d9"))
+
+func _symbol(at: Vector2, icon: String, color: Color) -> void:
+	match icon:
+		"shield":
+			draw_polyline(PackedVector2Array([at+Vector2(-11,-9),at+Vector2(0,-15),at+Vector2(11,-9),at+Vector2(9,4),at+Vector2(0,11),at+Vector2(-9,4),at+Vector2(-11,-9)]),color,2.1,true)
+			draw_line(at-Vector2(0,8),at+Vector2(0,3),color,2.0,true)
+		"boost":
+			for y in [-6, 3]:
+				draw_polyline(PackedVector2Array([at+Vector2(-10,y+5),at+Vector2(0,y-3),at+Vector2(10,y+5)]), color, 2.6, true)
+		"evade":
+			draw_polyline(PackedVector2Array([at+Vector2(-12,8),at+Vector2(-2,-1),at+Vector2(3,0),at+Vector2(11,-11),at+Vector2(4,-9)]),color,2.5,true)
+		"gun", "missile":
+			for shift in ([0] if icon == "gun" else [-5, 6]):
+				var p := at + Vector2(shift, 0)
+				draw_line(p+Vector2(-12,9),p+Vector2(10,-10),color,3,true)
+				draw_colored_polygon(PackedVector2Array([p+Vector2(7,-10),p+Vector2(15,-14),p+Vector2(12,-6)]), color)
+				draw_line(p+Vector2(-12,3),p+Vector2(-7,9),color,2.5,true)
 
 func _aim_at(p: Vector3) -> Vector2:
 	return fight.camera.unproject_position(p)

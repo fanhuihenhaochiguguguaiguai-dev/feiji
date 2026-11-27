@@ -43,11 +43,6 @@ func _run() -> void:
 	_check(battle.player.rig.fins.size() == 2, "Reference wing surfaces were not attached to the animated rig")
 	_check(battle.player.rig.gear.size() == 3, "Flight rig lost a landing gear track")
 	_check(battle.player.rig.breakup.get_child_count() == 5, "Missing derived breakup geometry")
-	var original_size := hud.size
-	for ratio in [16.0 / 9.0, 2.0, 19.5 / 9.0, 20.0 / 9.0, 22.0 / 9.0]:
-		hud.size = Vector2(ratio * 576.0, 576.0)
-		_check_right(hud)
-	hud.size = original_size
 	if "--model-only" in OS.get_cmdline_user_args():
 		hud.hide()
 		await _model_views(battle, catalogue)
@@ -138,17 +133,6 @@ func _capture(name: String) -> void:
 	for frame in 3:
 		await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png(output.path_join(name + ".png"))
-
-func _check_right(hud: Hud) -> void:
-	var pause: Rect2 = hud.input_actions.pause.get_rect()
-	var view: Rect2 = hud.input_actions.view.get_rect()
-	var weapons: Rect2 = hud.artifacts[4].button.get_rect()
-	_check(hud.safe_rect.encloses(pause) and hud.safe_rect.encloses(view) and hud.safe_rect.encloses(weapons),
-		"Right controls escaped the display safe area")
-	_check(pause.end.y < view.position.y and not view.intersects(hud.radar_area),
-		"First-person button overlaps the radar or pause")
-	_check(weapons.end.x > hud.safe_rect.end.x - 24.0 * hud.art_scale,
-		"Right controls did not use the available edge space")
 
 func _check(condition: bool, error: String) -> void:
 	if not condition:
