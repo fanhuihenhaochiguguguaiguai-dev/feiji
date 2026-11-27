@@ -33,6 +33,9 @@ METAL = "Brushed titanium and steel"
 SEAL = "Dielectric edge and seal"
 GLASS = "Blue-green optical multilayer"
 INTERIOR = "Cockpit anthracite and fabric"
+FUSELAGE_X = np.array([0., .18, .36, .53, .68, .80, .90, 1.])
+RADOME_SECTION = np.array([1., .94, .77, .57, .38, .23, .11, 0.])
+CENTREBODY_SECTION = np.array([1., .978, .884, .720, .54, .35, .17, 0.])
 
 
 def spline(rows):
@@ -44,8 +47,8 @@ def spline(rows):
 # The low plateau after the forward strake is the gap before the main wing.
 PLANFORM = spline([
     (0, .015), (.06, .21), (.13, .49), (.21, .82), (.29, 1.12),
-    (.34, 1.48), (.371, 1.83), (.427, 2.98), (.459, 3.14),
-    (.469, 2.21), (.492, 2.01), (.526, 2.26), (.574, 2.87),
+    (.34, 1.48), (.371, 1.83), (.427, 2.98), (.451, 3.11), (.459, 3.14),
+    (.463, 3.12), (.469, 2.19), (.492, 2.01), (.526, 2.26), (.574, 2.87),
     (.63, 3.76), (.69, 4.77), (.748, 5.83), (.794, 6.68),
     (.831, 7.22), (.850, 7.25), (.871, 7.13), (.881, 6.53),
     (.895, 4.74), (.909, 3.10), (.927, 1.99), (.954, 1.77), (.984, 1.66), (1, 1.49),
@@ -54,23 +57,34 @@ PLANFORM = spline([
 BODY = spline([
     (0, .014, .011, .012), (.075, .25, .12, .093),
     (.155, .55, .24, .17), (.242, .89, .37, .23),
-    (.327, 1.21, .47, .31), (.41, 1.47, .51, .42),
-    (.50, 1.62, .53, .48), (.61, 1.75, .489, .46),
+    (.327, 1.21, .47, .37), (.41, 1.47, .51, .56),
+    (.50, 1.62, .53, .58), (.61, 1.75, .489, .52),
     (.735, 1.81, .45, .43), (.855, 1.72, .441, .40),
     (.938, 1.60, .43, .42), (.981, 1.59, .40, .36), (1, 1.40, .32, .31),
 ])
 # The glass starts well ahead of the wing root, as in Aircraft 01 and 04.
 CANOPY = spline([
-    (.18, .021, .03, .324), (.22, .32, .184, .402),
-    (.269, .503, .354, .47), (.319, .58, .405, .521),
-    (.365, .557, .328, .561), (.411, .333, .161, .591),
-    (.446, .029, .016, .603),
+    (.18, .021, .013), (.22, .32, .220), (.269, .503, .430),
+    (.319, .58, .495), (.365, .557, .429), (.411, .333, .19),
+    (.446, .029, .018),
 ])
 
 
 def clampstep(low, high, value):
     a = np.clip((value - low) / (high - low), 0, 1)
     return a * a * (3 - 2 * a)
+
+
+def cross_section(q, w):
+    b, crown, belly = BODY(q)
+    chine = .065 - .11 * clampstep(.79, .966, q)
+    axial = clampstep(.13, .44, q)
+    profile = RADOME_SECTION * (1 - axial) + CENTREBODY_SECTION * axial
+    return min(b, .94 * w), chine, crown, belly, profile
+
+
+def wing_fold(x):
+    return .087 * clampstep(2., 3.94, x) - .121 * clampstep(4.1, 6.6, x)
 
 
 def patch_indices(rows, columns, reverse=False):
@@ -116,36 +130,30 @@ def normals_for(points, triangles):
 
 def ship_skin(asset):
     stations = np.unique(np.round(np.concatenate((
-        np.linspace(0., .982, 75), PLANFORM.x, BODY.x, CANOPY.x, [.125, .141, .815, .865, .902]
+        np.linspace(0., .982, 75), PLANFORM.x, BODY.x, CANOPY.x,
+        [.094, .129, .723, .836, .869, .902, .914]
     )), 6))
     stations = stations[stations <= .984]
     surfaces = defaultdict(list)
     # Piecewise cross-section keeps the radome's chine sharp and allows the
     # rear shoulder to turn continuously into a thin airfoil.
-    fuselage_x = np.array([0., .18, .36, .53, .68, .80, .90, 1.])
-    forward = np.array([1., .94, .77, .57, .38, .23, .11, 0.])
-    aft = np.array([1., .978, .884, .720, .54, .35, .17, 0.])
     beyond = np.array([.05, .13, .24, .38, .51, .64, .76, .86, .93, .97, 1.])
-    columns = len(fuselage_x) + len(beyond)
+    columns = len(FUSELAGE_X) + len(beyond)
+    panel = np.tile(np.repeat(np.arange(columns - 1), 2), len(stations) - 1)
     for sign in (-1, 1):
         for top in (True, False):
             eps = 1. if top else -1.
             rows = []
             for q in stations:
                 w = PLANFORM(q)[0]
-                b, crown, belly = BODY(q)
-                b = min(b, .94*w)
-                root_chine = .065 - .11 * clampstep(.79, .966, q)
-                axial = clampstep(.13, .44, q)
-                center = forward*(1-axial)+aft*axial
+                b, root_chine, crown, belly, center = cross_section(q, w)
                 # Lower centerbody carries the avionics and inlet shoulders,
                 # then narrows into the engine nacelles.
                 core_y = root_chine + eps*(crown if top else belly)*center
                 outside_x = b + (w-b)*beyond
                 wave = np.sin(np.pi*beyond)**.8
-                fold = (.087*clampstep(2., 3.94, outside_x) - .121*clampstep(4.1, 6.6, outside_x))
-                wing_y = root_chine + fold + eps * wave * (.16 if top else .19)
-                x = sign * np.concatenate((b*fuselage_x, outside_x))
+                wing_y = root_chine + wing_fold(outside_x) + eps * wave * (.16 if top else .19)
+                x = sign * np.concatenate((b*FUSELAGE_X, outside_x))
                 y = np.concatenate((core_y, wing_y))
                 rows.extend(zip(x, y, np.full(columns, NOSE + q*LENGTH)))
             vertices = np.asarray(rows)
@@ -153,14 +161,14 @@ def ship_skin(asset):
             centers = vertices[triangles].mean(axis=1)
             w = abs(centers[:, 0])
             q = (centers[:, 2] - NOSE) / LENGTH
-            width = PLANFORM(q)[:, 0]
-            body = BODY(q)[:, 0]
             normals = normals_for(vertices, triangles)
-            wing = w > body * .94
-            flap = wing & (q > .815) & (q < .914) & (w > 3.22)
-            bright = ((w > width * .86) & (q > .723) & wing)
-            bright |= ((q > .865) & (w > 2.5) & wing)
-            bright |= ((q > .094) & (q < .129) & (w > body*.28))
+            # Material and moving panel borders follow whole rows and columns.
+            # Classifying triangle centers by distance left half-panel teeth.
+            wing = panel >= len(FUSELAGE_X) - 1
+            flap = (panel >= 11) & (panel < 15) & (q > .836) & (q < .914)
+            bright = ((panel >= 15) & (q > .723) & (q < .914))
+            bright |= ((panel >= 12) & (q > .869) & (q < .914))
+            bright |= ((q > .094) & (q < .129))
             hole_width = CANOPY(np.clip(q, .18, .446))[:, 0]
             opening = (q > .202) & (q < .425) & (w < hole_width*.78) & top
             marks = np.where(bright, EDGE, np.where(wing, WING, SKIN))
@@ -169,7 +177,7 @@ def ship_skin(asset):
                     mask = (marks == mat) & (flap == mobile) & ~opening
                     if mask.any():
                         name = ("Aileron left" if sign < 0 else "Aileron right") if mobile else "Fused airframe skin"
-                        origin = np.array([sign*4.92, -.04, NOSE+.815*LENGTH]) if mobile else None
+                        origin = np.array([sign*4.92, -.04, NOSE+.836*LENGTH]) if mobile else None
                         surfaces[name, mat].append((vertices, triangles[mask], normals, origin))
     for (name, material), pieces in surfaces.items():
         points, indices, ns = [], [], []
@@ -192,7 +200,9 @@ def glazing(asset):
     theta = np.linspace(0, np.pi, columns)
     points, well = [], []
     for q in rows:
-        w, rise, floor = CANOPY(q)
+        w, rise = CANOPY(q)
+        b, chine, crown, _, center = cross_section(q, PLANFORM(q)[0])
+        floor = chine + crown * np.interp(w / b, FUSELAGE_X, center) - .012
         z = NOSE + q*LENGTH
         points.extend(zip(w*np.cos(theta), floor+rise*np.sin(theta)**.83, np.full(columns,z)))
         well.extend([(w*.98, floor-.008,z), (.62*w, floor-.24,z),
@@ -204,19 +214,36 @@ def glazing(asset):
     rim = abs(center[:,0]) > .966*CANOPY(q)[:,0]
     band = rim | ((q>.262)&(q<.270)) | ((q>.401)&(q<.408))
     normals = normals_for(points,faces)
-    for mask, name, material in [(~band,"Canopy clear panes",GLASS), (band,"Canopy alloy frames",METAL)]:
+    for mask, name, material in [(~band,"Canopy clear panes",GLASS), (band,"Canopy alloy frames",SEAL)]:
         picked, mapped = np.unique(faces[mask].reshape(-1),return_inverse=True)
         put_mesh(asset,name,points[picked],mapped.reshape(-1,3),material,normals=normals[picked])
     put_mesh(asset,"Cockpit well",np.asarray(well),patch_indices(len(rows),4,True),INTERIOR)
 
     # Dark seat and coaming sit inside the glass. Displays face the seat.
     coaming = np.array([
-        [-.27,.53,-5.64],[.27,.53,-5.64],[-.30,.65,-5.20],[.30,.65,-5.20],
-        [-.235,.59,-4.18],[.235,.59,-4.18],[-.16,.86,-3.71],[.16,.86,-3.71],
-        [-.14,.88,-3.45],[.14,.88,-3.45],[-.20,.61,-3.19],[.20,.61,-3.19],
+        [-.27,.43,-5.64],[.27,.43,-5.64],[-.30,.57,-5.20],[.30,.57,-5.20],
+        [-.235,.46,-4.18],[.235,.46,-4.18],[-.16,.76,-3.71],[.16,.76,-3.71],
+        [-.14,.79,-3.45],[.14,.79,-3.45],[-.20,.48,-3.19],[.20,.48,-3.19],
     ])
     faces = np.array([(i,i+2,i+1) for i in range(0,10,2)]+[(i+1,i+2,i+3) for i in range(0,10,2)])
     put_mesh(asset,"Cockpit instrument coaming and seat",coaming,faces,INTERIOR)
+
+
+def fit_navigation_lights(asset):
+    lamp = next(n for n in asset.nodes if n["name"] == "Shared physical assembly.001")
+    for primitive in asset.meshes[lamp["mesh"]]["primitives"]:
+        attributes = primitive["attributes"]
+        points = np.array(asset.read(attributes["POSITION"]))
+        # Refit the retained airframe lamps to the new wing tip, using the same
+        # edge geometry as the wing instead of the previous asset's coordinates.
+        q = .841 + (points[:, 2] - 6.19) / LENGTH * .62
+        width = PLANFORM(q)[:, 0]
+        shift = np.max(abs(points[:, 0])) - abs(points[:, 0])
+        points[:, 0] = np.sign(points[:, 0]) * (width - shift - .03)
+        points[:, 1] += .241 + .065 - .11 * clampstep(.79, .966, q) + wing_fold(width)
+        points[:, 2] = NOSE + LENGTH * q
+        attributes["POSITION"] = asset.append(points, "VEC3")
+    lamp["name"] = "Refitted wing navigation lights"
 
 
 def intakes(asset):
@@ -277,6 +304,7 @@ def reconstruct(source, output, texture):
     if metadata.get("reference_fighter_fit_version") != 2:
         raise ValueError("Use the v2 refined J-20 authoring mesh as the retained rig source.")
     root = asset.nodes[asset.scene[0]]
+    fit_navigation_lights(asset)
     root["children"] = [i for i in root["children"] if not asset.nodes[i]["name"].startswith(REPLACED)]
     ship_skin(asset)
     glazing(asset)
@@ -288,6 +316,9 @@ def reconstruct(source, output, texture):
     for key in (SKIN,WING,EDGE):
         mat=asset.materials[asset.names[key]]
         mat["normalTexture"]={"index":len(textures)-1,"scale":.44}
+    skin = asset.materials[asset.names[SKIN]]["pbrMetallicRoughness"]
+    skin["baseColorFactor"] = [.034, .039, .046, 1.]
+    skin["metallicFactor"] = .56
     asset.materials[asset.names[GLASS]]["pbrMetallicRoughness"]["baseColorFactor"][3]=.34
     metadata["reference_fighter_fit_version"] = 3
     metadata["reference_fighter_fit"] = "Aircraft/01–04; independently lofted fuselage and wings"
