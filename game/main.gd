@@ -463,7 +463,6 @@ func _build_showcase() -> void:
 	showcase.add_child(showcase_stage)
 	showcase_stage.setup(preview_camera, catalogue.source.theatres[0])
 	showcase_aircraft = Node3D.new()
-	showcase_aircraft.position.y = CarrierStage.DECK_Y + 1.75
 	showcase.add_child(showcase_aircraft)
 	_set_showcase_aircraft(str(profile.state.selected))
 	_sync_showcase_stage()
@@ -483,14 +482,12 @@ func _set_showcase_aircraft(id: String) -> void:
 		showcase_aircraft.remove_child(child)
 		child.queue_free()
 	var spec := catalogue.aircraft(id)
-	var specimen := id == "j20"
-	var plane: Node3D = CarrierStage.SAMPLE.instantiate() if specimen else catalogue.mesh(id)
+	var plane := catalogue.mesh(id)
 	showcase_aircraft.add_child(plane)
-	if not specimen:
-		catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
+	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0, id == "j20")
 	for surface: MeshInstance3D in plane.find_children("*", "MeshInstance3D", true, false):
 		surface.layers = 2
-	showcase_aircraft.position.y = CarrierStage.DECK_Y + (1.75 if specimen else maxf(0.8, spec.gearClearance))
+	showcase_aircraft.position.y = CarrierStage.DECK_Y + maxf(0.8, spec.gearClearance)
 	orbit_distance = 27.7 * clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
 	_tick_orbit(0.0, true)
 

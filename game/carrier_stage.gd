@@ -1,7 +1,6 @@
 extends Node3D
 
 const GEOMETRY = preload("res://assets/studio/carrier-stage.glb")
-const SAMPLE = preload("res://assets/studio/reference-fighter.glb")
 const WORLD = preload("res://game/world.gd")
 const OCEAN = preload("res://game/ocean.gd")
 const DECK_Y := 12.4

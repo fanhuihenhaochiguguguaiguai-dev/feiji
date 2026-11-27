@@ -51,8 +51,7 @@ func _run() -> void:
 		"Lobby did not build the live carrier, the terrain and the ocean")
 	_check(game.preview_camera.get_viewport() == root, "Carrier is not using the whole gameplay viewport")
 	var specimen: Node3D = game.showcase_aircraft.get_child(0)
-	if game.preview_id == "j20":
-		_check(specimen.scene_file_path == "res://assets/studio/reference-fighter.glb", "The approved sample did not replace the menu preview")
+	_check(specimen.scene_file_path == game.catalogue.mesh_path(game.preview_id), "Preview must instantiate the gameplay aircraft")
 	var menu: Control = game.lobby_screen
 	await _capture("03_lobby")
 	if "--orbit" in args and not screenshots.is_empty():
