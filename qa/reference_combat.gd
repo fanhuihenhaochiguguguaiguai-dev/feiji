@@ -47,6 +47,15 @@ func _run() -> void:
 		catalogue.set_gear([track], 1.0, true)
 		_check(track.hinge.visible, "Deployed landing wheel is hidden")
 		catalogue.set_gear([track], 0.0, true)
+	var pilot := battle.player
+	var spawn := pilot.position
+	pilot.gear = 1.0
+	pilot.gear_target = 1.0
+	battle.launched_from_runway = true
+	battle._update_player(STEP)
+	_check(pilot.gear_target == 0.0 and pilot.gear < 1.0, "A climb away from the runway did not retract the gear")
+	battle.launched_from_runway = false
+	pilot.reset(spawn, Vector3.FORWARD, pilot.type.trim, pilot.max_hp)
 	_check(battle.player.rig.breakup.get_child_count() == 5, "Missing derived breakup geometry")
 	if "--model-only" in OS.get_cmdline_user_args():
 		hud.hide()
@@ -101,7 +110,7 @@ func _run() -> void:
 func _model_views(battle: Battle, catalogue: Data) -> void:
 	_pose(battle, Vector3(11450, 3100, 5250), Vector3.FORWARD)
 	var plane: Node3D = battle.player.model
-	catalogue.set_gear(battle.player.rig.gear, 1.0)
+	catalogue.set_gear(battle.player.rig.gear, 1.0, true)
 	for plume: Node3D in battle.player.rig.exhausts:
 		plume.hide()
 	battle.camera.fov = 16.0
@@ -116,6 +125,13 @@ func _model_views(battle: Battle, catalogue: Data) -> void:
 		battle.camera.global_position = plane.global_position + plane.global_basis * axis * 62.0
 		battle.camera.look_at(plane.global_position, plane.global_basis * up)
 		await _capture("flight-model-" + label)
+	battle.camera.global_position = plane.global_position + plane.global_basis * Vector3(-35.0, -13.0, 45.0)
+	battle.camera.look_at(plane.global_position)
+	await _capture("wheels-down")
+	battle.player.gear = 0.0
+	battle.player.rig.last_gear = -1.0
+	catalogue.set_gear(battle.player.rig.gear, 0.0, true)
+	await _capture("wheels-up")
 
 func _finish(layer: CanvasLayer, battle: Battle) -> void:
 	print(JSON.stringify({"failures": failures, "display": str(root.size), "renderer": RenderingServer.get_video_adapter_name()}))
