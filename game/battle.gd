@@ -187,7 +187,9 @@ func _change_plane(jet: Airframe, id: String) -> void:
 	jet.rig.clear()
 	var model: Node3D = catalogue.mesh(id)
 	jet.model.add_child(model)
-	var anchors := model.get_node_or_null("J20Exhausts") as Node3D
+	var anchors := model.get_node_or_null("Exhausts") as Node3D
+	if not anchors:
+		anchors = model.get_node_or_null("J20Exhausts") as Node3D
 	var exhausts: Array[Node3D] = []
 	for mount in jet.type.engine:
 		if not jet.type.props.is_empty():
@@ -204,7 +206,9 @@ func _change_plane(jet: Airframe, id: String) -> void:
 	jet.rig.levels = {"Exterior":exterior, "Combat":model.get_node_or_null("Combat"), "LOD":model.get_node_or_null("LOD")}
 	jet.rig.cockpit = model.get_node_or_null("Cockpit")
 	jet.rig.breakup = model.get_node_or_null("Breakup")
-	var proxies := model.get_node_or_null("J20HitProxies")
+	var proxies := model.get_node_or_null("HitProxies")
+	if not proxies:
+		proxies = model.get_node_or_null("J20HitProxies")
 	var hit_proxies: Array[Transform3D] = []
 	var bounds := AABB()
 	if proxies:

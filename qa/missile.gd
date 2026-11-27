@@ -282,27 +282,30 @@ func _check_contact(fight: Node) -> Dictionary:
 	var mark = fight.fleet[1]
 	fight.player.reset(at, Vector3.FORWARD, 240.0, 4200.0)
 	mark.reset(at + Vector3.FORWARD * 200.0, Vector3.FORWARD, 0.0, 3000.0)
-	var shape: Vector3 = mark.hit_extent
 	var impact_before: int = fight.effects.impact_slot
 	fight._fire(fight.player, true, null)
 	var shot: Dictionary = fight.shots.back()
-	shot.position = mark.position + Vector3(shape.x + 0.5, 0.0, 16.0)
+	# This path passes above the J-10 wingtip, clear of the new part proxies.
+	shot.position = mark.position + Vector3(4.68, 0.50, 16.0)
 	shot.velocity = Vector3.FORWARD * 925.0
 	shot.age = 0.16
 	fight._update_shots(STEP)
 	fight._update_shots(STEP)
 	fight._update_shots(STEP)
 	var clean_miss: bool = shot.active and fight.effects.impact_slot == impact_before and mark.hp == 3000.0
-	shot.position = mark.position + Vector3(0.0, 0.0, shape.z + 4.0)
+	shot.position = mark.position + Vector3(0.0, 0.0, 16.0)
 	shot.velocity = Vector3.FORWARD * 925.0
 	fight._update_shots(STEP)
 	var tip: Vector3 = fight.effects.trails.closing_tip
-	var hull: float = ((tip - mark.position) / shape).length()
+	var hull_error := INF
+	for proxy: Transform3D in mark.rig.hit_proxies:
+		hull_error = minf(hull_error, absf((proxy * (tip - mark.position)).length() - 1.0))
 	var immediate: bool = mark.hp < 3000.0 and not shot.active and fight.effects.impact_slot != impact_before and fight.hit_time == fight.time
-	var ok := clean_miss and immediate and absf(hull - 1.0) < 0.002
+	var ok := clean_miss and immediate and hull_error < 0.002
 	if not ok:
 		failed += 1
-	return {"scenario":"contact_and_particle_timing", "no_effect_on_near_miss":clean_miss, "impact_on_same_step":immediate,"trail_tip_hull_ratio":hull,"passed":ok}
+	return {"scenario":"contact_and_particle_timing", "no_effect_on_near_miss":clean_miss, "impact_on_same_step":immediate,
+		"trail_tip_surface_error":hull_error, "passed":ok}
 
 func _check_lock_camera(fight: Node) -> Dictionary:
 	var at: Vector3 = fight.world.local_position(Vector3(11450.0, 1900.0, 5150.0))

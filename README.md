@@ -53,3 +53,16 @@ python tools/build_j20_airframe.py /tmp/j20-rig.glb /tmp/j20-source/j20-master.g
 ```
 
 母版只用于离线编辑。将母版 GLB 导入 Blender，同目录的共享法线和遮蔽贴图可一并打包到 Blender 文件。姿态和外形的目视校核可参考公开航展照片。[2022 年珠海航展](https://english.news.cn/northamerica/20221108/b008c006943c4fb1a099f45d6cdefcf4/c.html) · [2025 年长春航空展](https://commons.wikimedia.org/wiki/File:J-20_at_China%27s_Air_Force_Aviation_Open_Activity_20250921.jpg)
+
+### 机队资产编译
+
+其余 22 架沿用各自的 GLB 设计和涂装。批量工具在原始蒙皮网格上离线细分选定曲边，保留锐边、原涂装坐标和舵面动画，从原机型部件计算碰撞代理，输出三级网格和五块解体部件。J-20 保留独立制作源。
+
+```sh
+mkdir -p /tmp/skyblade-fleet-source
+git archive 7f29643 assets/fleet | tar -xf - -C /tmp/skyblade-fleet-source
+python tools/build_fleet_airframes.py /tmp/skyblade-fleet-source/assets/fleet /tmp/skyblade-fleet-baked
+godot --headless --script res://qa/fleet_assets.gd
+```
+
+编译需要 NumPy 和 SciPy。可用 `--only f16 b2 spitfire` 选择机型，或附加 `--master` 生成离线高密度资产。在 Blender 检查高密度 GLB 时，将同机型的原纹理保留在资产同目录。

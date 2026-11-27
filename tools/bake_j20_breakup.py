@@ -1,4 +1,4 @@
-"""Cut the J-20 exterior offline without re-encoding its materials or animations."""
+"""Cut aircraft wreck components offline without re-encoding paint or animations."""
 
 import json
 import math
@@ -28,12 +28,12 @@ def cut(poly, axis, limit, direction):
     return output
 
 
-def bake(model=MODEL):
+def bake(model=MODEL, *, shell_name="Airframe shell", dimensions=None):
     doc, buffer = read_model(model)
     scene = doc["scenes"][doc["scene"]]["nodes"]
     if any(doc["nodes"][node].get("name") == "Breakup" for node in scene):
         return
-    source = next(node for node in doc["nodes"] if node.get("name") == "Airframe shell mesh")
+    source = next(node for node in doc["nodes"] if node.get("name") == f"{shell_name} mesh")
 
     def read(index):
         accessor = doc["accessors"][index]
@@ -47,12 +47,17 @@ def bake(model=MODEL):
     def add(values, semantic, bounds=False):
         origin = len(buffer)
         rows = len(values[0])
-        schema = "I" if semantic == "SCALAR" else "f"
+        if semantic == "SCALAR":
+            schema = "H" if dimensions and max(x[0] for x in values) < 65536 else "I"
+        else:
+            schema = "f"
         for value in values:
             buffer.extend(pack("<" + schema * rows, *value))
+        byte_length = len(buffer) - origin
+        buffer.extend(b"\0" * (-len(buffer) % 4))
         view = len(doc["bufferViews"])
-        doc["bufferViews"].append({"buffer": 0, "byteOffset": origin, "byteLength": len(buffer) - origin})
-        accessor = {"bufferView": view, "componentType": 5125 if schema == "I" else 5126,
+        doc["bufferViews"].append({"buffer": 0, "byteOffset": origin, "byteLength": byte_length})
+        accessor = {"bufferView": view, "componentType": {"H": 5123, "I": 5125, "f": 5126}[schema],
                     "count": len(values), "type": semantic}
         if bounds:
             accessor.update(min=[min(axis) for axis in zip(*values)], max=[max(axis) for axis in zip(*values)])
@@ -82,8 +87,14 @@ def bake(model=MODEL):
         for child in node.get("children", []):
             collect(doc["nodes"][child], offset, scale)
 
-    shell = next(node for node in doc["nodes"] if node.get("name") == "Airframe shell")
+    shell = next(node for node in doc["nodes"] if node.get("name") == shell_name)
     collect(shell, (0, 0, 0), (1, 1, 1))
+    if dimensions:
+        combat = next(doc["nodes"][index] for index in scene if doc["nodes"][index]["name"] == "Combat")
+        for index in combat.get("children", ()):
+            component = doc["nodes"][index]
+            if component["name"].startswith(("Drive nacelle", "Spinner", "Prop_", "RadarSpin", "Jammer pod")):
+                collect(component, (0, 0, 0), (1, 1, 1))
 
     interior = next(i for i, entry in enumerate(doc["materials"]) if entry.get("name") == "dark")
 
@@ -154,15 +165,20 @@ def bake(model=MODEL):
         doc["nodes"].append(node)
         return len(doc["nodes"]) - 1
 
-    cut_x = 0.245
-    cut_z = 0.31
-    centre = [(0, -cut_x, 1), (0, cut_x, -1)]
+    left, right, front, aft = -0.245, 0.245, -0.46, 0.31
+    if dimensions:
+        span, length = dimensions
+        x, _, z = source["translation"]
+        sx, _, sz = source["scale"]
+        left, right = (-span * 0.17 - x) / sx, (span * 0.17 - x) / sx
+        front, aft = (-length * 0.22 - z) / sz, (length * 0.22 - z) / sz
+    centre = [(0, left, 1), (0, right, -1)]
     parts = [
-        piece("Central fuselage", centre + [(2, -0.46, 1), (2, cut_z, -1)]),
-        piece("Port wing", [(0, -cut_x, -1)]),
-        piece("Starboard wing", [(0, cut_x, 1)]),
-        piece("Aft nacelles", centre + [(2, cut_z, 1)]),
-        piece("Forward fuselage", centre + [(2, -0.46, -1)]),
+        piece("Central fuselage", centre + [(2, front, 1), (2, aft, -1)]),
+        piece("Port wing", [(0, left, -1)]),
+        piece("Starboard wing", [(0, right, 1)]),
+        piece("Aft nacelles", centre + [(2, aft, 1)]),
+        piece("Forward fuselage", centre + [(2, front, -1)]),
     ]
     scene.append(len(doc["nodes"]))
     doc["nodes"].append({"name": "Breakup", "children": parts})
