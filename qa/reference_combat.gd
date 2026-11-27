@@ -42,6 +42,11 @@ func _run() -> void:
 	await process_frame
 	_check(battle.player.rig.fins.size() == 2, "Reference wing surfaces were not attached to the animated rig")
 	_check(battle.player.rig.gear.size() == 3, "Flight rig lost a landing gear track")
+	for track in battle.player.rig.gear:
+		_check(not track.hinge.visible, "Airborne spawn still exposes a stowed landing wheel")
+		catalogue.set_gear([track], 1.0, true)
+		_check(track.hinge.visible, "Deployed landing wheel is hidden")
+		catalogue.set_gear([track], 0.0, true)
 	_check(battle.player.rig.breakup.get_child_count() == 5, "Missing derived breakup geometry")
 	if "--model-only" in OS.get_cmdline_user_args():
 		hud.hide()

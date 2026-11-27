@@ -69,9 +69,11 @@ func gear_tracks(model: Node3D) -> Array[Dictionary]:
 					break
 	return tracks
 
-func set_gear(tracks: Array, extension: float) -> void:
+func set_gear(tracks: Array, extension: float, enclosed_bay := false) -> void:
 	for track in tracks:
 		track.hinge.quaternion = track.stowed.slerp(track.deployed, extension).normalized()
+		if enclosed_bay:
+			track.hinge.visible = extension > 0.035
 
 func missile_compatible(plane: Dictionary, weapon_id: String) -> bool:
 	return not plane.support and not plane.rails.is_empty() and (weapon_id != "skylance" or plane.era in ["modern", "stealth"])

@@ -1140,7 +1140,7 @@ func _render_pose(dt: float) -> void:
 				jet.rig.levels[lod].visible = true
 				jet.rig.lod = lod
 		if jet.rig.lod == "Exterior" and absf(jet.gear - jet.rig.last_gear) > 0.001:
-			catalogue.set_gear(jet.rig.gear, jet.gear)
+			catalogue.set_gear(jet.rig.gear, jet.gear, jet.type.id == "j20")
 			jet.rig.last_gear = jet.gear
 		for part in jet.rig.fins:
 			part.node.rotation.x = part.rot.x + clampf(jet.angular.x * 0.12, -0.29, 0.29)
