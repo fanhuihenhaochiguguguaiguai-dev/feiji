@@ -266,7 +266,7 @@ static func _load_battle_clouds() -> ImageTexture3D:
 	cloud_field = ImageTexture3D.new()
 	cloud_field.create(Image.FORMAT_RGBA8, CLOUD_SIZE.x, CLOUD_SIZE.y, CLOUD_LAYERS, false, cloud_slices)
 	var clearance := atlas.get_region(Rect2i(Vector2i(0, CLOUD_SIZE.y * (CLOUD_LAYERS / 8)), CLOUD_SIZE))
-	clearance.convert(Image.FORMAT_L8)
+	clearance.convert(Image.FORMAT_RGB8)
 	cloud_clearance = ImageTexture.create_from_image(clearance)
 	return cloud_field
 

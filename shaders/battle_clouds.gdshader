@@ -27,7 +27,7 @@ void fragment() {
 	float dy = mix(-1.0, 1.0, step(0.0, ray.y)) * max(abs(ray.y), 0.0001);
 	vec2 hit = (altitude_range - eye.y) / dy;
 	float first = max(0.0, min(hit.x, hit.y));
-	float last = min(max(hit.x, hit.y), 17000.0);
+	float last = min(max(hit.x, hit.y), 14500.0);
 	if (last - first < 1.0) { discard; }
 
 	// Clamp the integration at the surface so a cloud can hide a distant
@@ -49,13 +49,20 @@ void fragment() {
 	vec3 indirect = mix(vec3(0.19, 0.245, 0.315), air_color.rgb, 0.21);
 	vec3 lit = sun_color.rgb * (0.66 + phase * 0.30);
 	float t = first;
-	for (int i = 0; i < 58; ++i) {
+	for (int i = 0; i < 48; ++i) {
 		if (t >= last || transmit < 0.035) { break; }
 		vec3 ray_start = origin + direction * t;
-		float stride = mix(107.0, 278.0, smoothstep(2500.0, 12600.0, t)) * step_scale;
-		float clearance = textureLod(clearance_map, ray_start.xy, 0.0).r * 4000.0;
+		float stride = mix(114.0, 320.0, smoothstep(2000.0, 11800.0, t)) * step_scale;
+		vec3 bounds = textureLod(clearance_map, ray_start.xy, 0.0).rgb;
+		float clearance = bounds.r * 4000.0;
 		if (clearance > stride) {
 			t += clearance;
+			continue;
+		}
+		// At most 300 m, within the expanded horizontal bounds of the atlas.
+		float height_pad = 300.0 * abs(direction.z);
+		if (stride < 300.0 && (ray_start.z < bounds.g - height_pad || ray_start.z > bounds.b + height_pad)) {
+			t += 300.0;
 			continue;
 		}
 		stride = min(stride, last - t);
@@ -65,13 +72,13 @@ void fragment() {
 		vec4 field = textureLod(cloud_field, point, 0.0);
 		t += stride;
 		if (field.r < 0.005) { continue; }
-		float fade = 1.0 - smoothstep(10500.0, 17000.0, sample_at);
+		float fade = 1.0 - smoothstep(9000.0, 14500.0, sample_at);
 		float optical = field.r * density_gain * stride * fade * 0.0035;
 		float opacity = 1.0 - exp(-optical);
 		if (opacity > 0.003) {
 			front = min(front, sample_at);
 		}
-		vec3 cloud = indirect + lit * field[light_channel] * (0.70 + phase * 0.22);
+		vec3 cloud = indirect * mix(0.68, 1.1, point.z) + lit * field[light_channel] * (0.70 + phase * 0.22);
 		cloud = mix(cloud, air_color.rgb * 0.87, 1.0 - exp(-sample_at * 0.000028));
 		glow += cloud * opacity * transmit;
 		transmit *= 1.0 - opacity;

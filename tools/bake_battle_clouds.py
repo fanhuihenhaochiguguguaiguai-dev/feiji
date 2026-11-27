@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import distance_transform_edt, gaussian_filter, map_coordinates
+from scipy.ndimage import distance_transform_edt, gaussian_filter, map_coordinates, maximum_filter
 
 ASSET = Path(__file__).resolve().parents[1] / "assets/environment/battle-clouds.png"
 WIDTH, DEPTH, SLICES = 128, 96, 48
@@ -84,9 +84,16 @@ image.paste(Image.fromarray(atlas, "RGBA"))
 
 # Conservative horizontal free distance for ray skipping. Periodic padding
 # keeps jumps consistent across tiled weather cells and floating origins.
-empty = np.tile(density.max(axis=0) < .004, (3, 3))
+occupied = density > .004
+empty = np.tile(~occupied.any(axis=0), (3, 3))
 spacing = (PERIOD_Z / DEPTH, PERIOD_X / WIDTH)
 distance = distance_transform_edt(empty, sampling=spacing)[DEPTH:2 * DEPTH, WIDTH:2 * WIDTH]
 distance = np.clip((distance - 1.65 * np.hypot(*spacing)) / 4.0, 0.0, 1.0)
-image.paste(Image.fromarray(np.uint8(np.floor(distance * 255))).convert("RGBA"), (0, atlas.shape[0]))
+# Expand the height envelope horizontally and vertically so an empty-height
+# jump cannot cross a nearby bank, even after trilinear density filtering.
+envelope = maximum_filter(occupied, size=(5, 5, 5), mode=("nearest", "wrap", "wrap"))
+base = np.min(np.where(envelope, y, 1.0), axis=0)
+top = np.max(np.where(envelope, y, 0.0), axis=0)
+bounds = np.stack((np.floor(distance * 255), np.floor(base * 255), np.ceil(top * 255)), axis=-1)
+image.paste(Image.fromarray(np.uint8(bounds)).convert("RGBA"), (0, atlas.shape[0]))
 image.save(ASSET, optimize=True)
