@@ -25,7 +25,7 @@ var strength_sent := 0.0
 var shallows: ImageTexture
 var impact_age := 4.0
 
-func setup(theatre: Dictionary, camera: Camera3D) -> void:
+func setup(theatre: Dictionary, camera: Camera3D, use_spectrum := true) -> void:
 	view = camera
 	var windy: bool = int(theatre.seed) == 116
 	var hue: Array = theatre.sea
@@ -37,7 +37,7 @@ func setup(theatre: Dictionary, camera: Camera3D) -> void:
 	material_override = material
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	extra_cull_margin = 18000.0
-	if _supports_fft():
+	if use_spectrum and _supports_fft():
 		for i in 2:
 			var wave := WaveCascadeParameters.new()
 			wave.spectrum_seed = Vector2i(883 + i * 91, -412 + i * 217)

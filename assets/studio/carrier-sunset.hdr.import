@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chtccsw5woimw"
-path="res://.godot/imported/carrier-lobby.webp-ffc9082eb8c71457e97641bedb7bb07b.ctex"
+uid="uid://dt20c3nkcsrqf"
+path="res://.godot/imported/carrier-sunset.hdr-61466acdb9d52eca63ccfe4371724ba5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/carrier-lobby.webp"
-dest_files=["res://.godot/imported/carrier-lobby.webp-ffc9082eb8c71457e97641bedb7bb07b.ctex"]
+source_file="res://assets/studio/carrier-sunset.hdr"
+dest_files=["res://.godot/imported/carrier-sunset.hdr-61466acdb9d52eca63ccfe4371724ba5.ctex"]
 
 [params]
 

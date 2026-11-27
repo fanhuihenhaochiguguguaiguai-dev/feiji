@@ -5,10 +5,10 @@ const Profile = preload("res://game/profile.gd")
 const Battle = preload("res://game/battle.gd")
 const Landscape = preload("res://game/world.gd")
 const Hud = preload("res://game/hud.gd")
-const CutButton = preload("res://game/menu_panel.gd")
 const PausePanel = preload("res://game/pause_panel.gd")
 const LoadingScreen = preload("res://game/loading_screen.gd")
 const CarrierLobby = preload("res://game/reference_lobby.gd")
+const CarrierStage = preload("res://game/carrier_stage.gd")
 
 var catalogue: Data
 var profile: Profile
@@ -17,12 +17,8 @@ var layer := CanvasLayer.new()
 var view: Control
 var showcase: Node3D
 var showcase_aircraft: Node3D
-var showcase_stage: Node3D
-var showcase_environment: Environment
-var showcase_lights: Array[DirectionalLight3D] = []
-var lobby_viewport: SubViewport
+var showcase_stage: CarrierStage
 var lobby_screen: CarrierLobby
-var lobby_shadow: MeshInstance3D
 var current_battle: Battle
 var debrief: Dictionary = {}
 var route := "lobby"
@@ -46,6 +42,7 @@ var preview_id := ""
 var ui_theme := Theme.new()
 var button_styles := {}
 var panel_styles := {}
+var menu_safe := Rect2()
 var preview_camera: Camera3D
 var active_hud: Control
 var last_operation := {}
@@ -75,9 +72,12 @@ func _ready() -> void:
 	_apply_settings()
 	ui_theme.default_font = font
 	ui_theme.default_font_size = 17
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		var fill := Color("#142c43e8") if state == "normal" else (Color("#101a27d0") if state == "disabled" else Color("#244e69ee"))
-		button_styles[state] = _box_style(fill, Color("#57839ca8"), 2)
+	button_styles["normal"] = CarrierLobby.border_style()
+	button_styles["hover"] = CarrierLobby.border_style()
+	button_styles["hover"].modulate_color = Color(1.25,1.37,1.45)
+	button_styles["pressed"] = CarrierLobby.border_style(true)
+	button_styles["disabled"] = CarrierLobby.border_style()
+	button_styles["disabled"].modulate_color = Color(0.69,0.76,0.85)
 	add_child(layer)
 	get_viewport().size_changed.connect(func():
 		if not loading and route != "battle":
@@ -96,7 +96,7 @@ func _open(page: String) -> void:
 		_build_showcase()
 	elif is_instance_valid(showcase):
 		_sync_showcase_stage()
-	if page in ["lobby", "training", "pilot", "settings", "report"]:
+	if page != "hangar":
 		viewed_plane = str(profile.state.selected)
 		_set_showcase_aircraft(viewed_plane)
 	_render_menu()
@@ -112,21 +112,15 @@ func _clear_ui() -> void:
 	view.theme = ui_theme
 	layer.add_child(view)
 
-static func _box_style(fill: Color, edge: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = edge
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	return style
-
-func _panel(area: Rect2, color: Color = Color("#0d2033d9")) -> Panel:
+func _panel(area: Rect2, color: Color = Color.WHITE) -> Panel:
 	var p := Panel.new()
 	p.position = area.position
 	p.size = area.size
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if not panel_styles.has(color):
-		panel_styles[color] = _box_style(color, Color("#63869e71"), 3)
+		panel_styles[color] = CarrierLobby.border_style()
+		if color != Color.WHITE:
+			panel_styles[color].modulate_color = color.lerp(Color.WHITE, 0.74)
 	p.add_theme_stylebox_override("panel", panel_styles[color])
 	view.add_child(p)
 	return p
@@ -144,17 +138,6 @@ func _text(at: Vector2, s: String, n := 18, color := Color("#e5eff6"), content_w
 	view.add_child(item)
 	return item
 
-func _cut(area: Rect2, text: String, icon: String, style: int, click: Callable) -> void:
-	var button := CutButton.new()
-	button.position = area.position
-	button.size = area.size
-	button.font = font
-	button.title = text
-	button.icon = icon
-	button.variant = style
-	button.activate = click
-	view.add_child(button)
-
 func _button(area: Rect2, text: String, click: Callable, active := true) -> Button:
 	var b := Button.new()
 	b.position = area.position
@@ -171,45 +154,30 @@ func _button(area: Rect2, text: String, click: Callable, active := true) -> Butt
 
 func _render_menu() -> void:
 	_clear_ui()
+	_show_carrier_lobby()
 	if route == "lobby":
-		_show_carrier_lobby()
 		return
-	var size := get_viewport().get_visible_rect().size
-	_panel(Rect2(0, 0, size.x, 65.0), Color("#081726ec"))
-	var crest := TextureRect.new()
-	crest.texture = preload("res://assets/ui/crest.webp")
-	crest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	crest.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	crest.position = Vector2(26, 10)
-	crest.size = Vector2(62, 44)
-	crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	view.add_child(crest)
-	_text(Vector2(100, 5), "苍穹锋刃", 33, Color("#e2effa"))
-	_button(Rect2(size.x - 420, 12, 165, 41), "个人档案 · 等级 %d" % Data.level(int(profile.state.xp)), _open.bind("pilot"))
-	_text(Vector2(size.x - 229, 19), "信用点  %s" % int(profile.state.credits), 19, Color("#f1d392"))
-	_button(Rect2(size.x - 86, 12, 64, 41), "设置", _open.bind("settings"))
-	for i in 3:
-		var pages := ["lobby", "hangar", "campaign"]
-		var labels := ["大厅", "战机机库", "战役"]
-		var icons := ["home", "hangar", "map"]
-		_cut(Rect2(21, size.y * 0.205 + i * 61.0, 166, 52), labels[i], icons[i], 0, _open.bind(pages[i]))
-	var p := Vector2(204, 94)
+	menu_safe = CarrierLobby.safe_bounds(view, get_viewport().get_visible_rect().size)
+	var size := menu_safe.end
+	var left := menu_safe.position.x + lobby_screen.frame.scale.x * 260.0 + 9.0
+	var p := Vector2(left, menu_safe.position.y + 92.0)
 	var box_w := 426.0
-	var sidebar := Vector2(size.x - box_w - 20, 93)
+	var sidebar := Vector2(size.x - box_w - 20, p.y)
 	match route:
 		"campaign":
 			_panel(Rect2(p, Vector2(size.x - p.x - 21, size.y - p.y - 25)))
 			_text(p + Vector2(21, 11), "战区简报", 27)
+			var column := minf(250.0, (size.x-p.x-347.0)/2.0)
 			for i in 6:
-				_button(Rect2(p + Vector2(21 + (i % 3) * 181, 64 + (i / 3) * 40), Vector2(166, 34)), catalogue.source.chapters[i], _select_chapter.bind(i))
+				_button(Rect2(p + Vector2(21 + (i % 3) * column * 0.67, 64 + (i / 3) * 40), Vector2(column*0.62, 34)), catalogue.source.chapters[i], _select_chapter.bind(i))
 			var ops: Array = catalogue.source.campaign
 			for j in 10:
 				var row: Dictionary = ops[list_chapter * 10 + j]
-				var xy: Vector2 = p + Vector2(22 + (j % 2) * 270, 156 + (j / 2) * 49)
+				var xy: Vector2 = p + Vector2(22 + (j % 2) * column, 156 + (j / 2) * 49)
 				var unlocked: bool = row.campaign <= profile.state.campaign
-				_button(Rect2(xy, Vector2(254, 39)), "%02d   %s%s" % [row.campaign, row.name, "" if unlocked else "  ·  未解锁"], _focus_campaign.bind(int(row.campaign)))
+				_button(Rect2(xy, Vector2(column-9, 39)), "%02d   %s%s" % [row.campaign, row.name, "" if unlocked else "  ·  未解锁"], _focus_campaign.bind(int(row.campaign)))
 			var mission: Dictionary = ops[selected_mission - 1]
-			var brief := p + Vector2(596, 157)
+			var brief := p + Vector2(2.0*column+52.0, 157)
 			var brief_width := size.x - brief.x - 44.0
 			_panel(Rect2(brief - Vector2(16, 12), Vector2(brief_width + 25.0, 247.0)), Color("#142638cd"))
 			_text(brief + Vector2(0, 15), str(mission.name), 24, Color("#ecd09a"))
@@ -217,12 +185,7 @@ func _render_menu() -> void:
 			_button(Rect2(brief + Vector2(0, 185), Vector2(minf(220.0, brief_width), 40)), "开始任务" if mission.campaign <= profile.state.campaign else "未解锁", _start_campaign.bind(selected_mission), mission.campaign <= profile.state.campaign)
 
 		"training":
-			_panel(Rect2(sidebar, Vector2(box_w, 446)))
-			_text(sidebar + Vector2(20, 12), "飞行训练", 26)
-			for i in Data.TRAINING.size():
-				var lesson: Array = Data.TRAINING[i]
-				_button(Rect2(sidebar + Vector2(19, 61 + i * 57), Vector2(380, 38)), "%s   ·   %s" % [lesson[0], lesson[1]], _enter.bind("training", {"id":"training_"+lesson[2],"name":lesson[0],"detail":lesson[1],"lesson":lesson[2],"region":0}, takeoff and i == 0))
-			_button(Rect2(sidebar + Vector2(19, 369), Vector2(380, 40)), "起飞方式  ·  %s" % ("跑道" if takeoff else "空中"), _toggle_takeoff)
+			_training_menu(Vector2(size.x-478,p.y-8))
 		"hangar":
 			_aircraft_details(sidebar, box_w, size)
 
@@ -263,19 +226,57 @@ func _render_menu() -> void:
 	if not note.is_empty():
 		_text(Vector2(size.x - 416, size.y - 29), note, 15, Color("#f2d18e"))
 
+func _chrome_icon(parent: Control, area: Rect2, source: Rect2) -> void:
+	var picture := TextureRect.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.texture = CarrierLobby.chrome_slice(source)
+	picture.position = area.position
+	picture.size = area.size
+	parent.add_child(picture)
+
+func _training_menu(at: Vector2) -> void:
+	var height := minf(456.0, menu_safe.end.y - at.y - 34.0)
+	var box := _panel(Rect2(at, Vector2(455, height)))
+	box.add_theme_stylebox_override("panel", CarrierLobby.border_style(true))
+	_chrome_icon(view, Rect2(at + Vector2(12, 9), Vector2(431, 44)), Rect2(0, 505, 280, 38))
+	var row_height := (height - 112.0) / Data.TRAINING.size()
+	for i in Data.TRAINING.size():
+		var lesson: Array = Data.TRAINING[i]
+		var mission := {"id":"training_"+lesson[2], "name":lesson[0], "detail":lesson[1], "lesson":lesson[2], "region":0}
+		var row := at + Vector2(16.0, 60.0 + i * row_height)
+		var card := _button(Rect2(row, Vector2(423, row_height-5.0)), "", _enter.bind("training", mission, takeoff and i == 0))
+		card.tooltip_text = lesson[0]
+		_chrome_icon(card, Rect2(9,5,92,row_height-15.0), Rect2(87*i,460,85,40))
+		_text(row + Vector2(107, 2), lesson[0], 19, Color("#ffe1a1"))
+		_text(row + Vector2(107, 27), lesson[1], 15, Color("#e0f2ff"))
+	var toggle := _button(Rect2(at + Vector2(16,height-53.0),Vector2(423,40)), "起飞方式  ·  %s     »" % ("跑道" if takeoff else "空中"), _toggle_takeoff)
+	toggle.add_theme_stylebox_override("normal", CarrierLobby.border_style(true))
+
 func _aircraft_details(sidebar: Vector2, width: float, viewport_size: Vector2) -> void:
 	var spec := catalogue.aircraft(viewed_plane)
-	_panel(Rect2(sidebar, Vector2(width, 365)))
-	_text(sidebar + Vector2(21, 14), str(spec.name), 28)
-	_text(sidebar + Vector2(21, 53), "%s · %s" % [spec.origin, spec.role], 16, Color("#a4c4d9"))
 	var owned: bool = viewed_plane in profile.state.unlocked
 	if not panel_mods or not owned:
-		_text(sidebar + Vector2(21, 105), "翼展 %.1f 米   ·   机长 %.1f 米\n最高速度 %d 公里/时\n机体耐久 %d" % [spec.span, spec.length, spec.maxSpeed * 3.6, spec.durability], 18)
+		var left := menu_safe.position.x + 183.0
+		var shelf := Vector2(left,viewport_size.y-232.0)
+		var span := viewport_size.x-left-20.0
+		_panel(Rect2(shelf,Vector2(span,102)))
+		_chrome_icon(view, Rect2(shelf+Vector2(17,15),Vector2(64,64)), Rect2(505,419,44,44))
+		_text(shelf+Vector2(91,12),str(spec.name),26)
+		_text(shelf+Vector2(91,52),"%s · %s" % [spec.origin,spec.role],15,Color("#c1e9fa"))
+		var stats := shelf + Vector2(maxf(312.0,span*0.35),15)
+		_stat_line(stats,"极速",float(spec.maxSpeed)*3.6,1750.0,"%d 公里/时" % (spec.maxSpeed*3.6))
+		_stat_line(stats+Vector2(0,24),"耐久",float(spec.durability),4450.0,str(spec.durability))
+		_stat_line(stats+Vector2(0,48),"翼展",float(spec.span),24.0,"%.1f 米" % spec.span)
 		var selection := "已选择" if viewed_plane == profile.state.selected else ("选择战机" if owned else ("未解锁 · %d 信用点" % Data.AIRCRAFT_PRICE))
-		_button(Rect2(sidebar + Vector2(21, 227), Vector2(190, 40)), selection, _select_plane, viewed_plane != profile.state.selected)
+		_button(Rect2(shelf+Vector2(span-201.0,12),Vector2(185,34)),selection,_select_plane,viewed_plane != profile.state.selected)
 		if owned and viewed_plane == profile.state.selected:
-			_button(Rect2(sidebar + Vector2(226, 227), Vector2(165, 40)), "进入改装", _toggle_mods)
+			var mods := _button(Rect2(shelf+Vector2(span-201.0,53),Vector2(185,35)),"改装升级  »",_toggle_mods)
+			mods.add_theme_stylebox_override("normal",CarrierLobby.border_style(true))
 	else:
+		_panel(Rect2(sidebar, Vector2(width, 365)))
+		_text(sidebar + Vector2(21, 14), str(spec.name), 28)
+		_text(sidebar + Vector2(21, 53), "%s · %s" % [spec.origin, spec.role], 16, Color("#a4c4d9"))
 		_button(Rect2(sidebar + Vector2(295, 49), Vector2(114, 32)), "查看机体", _toggle_mods)
 		var index := 0
 		for part in Data.UPGRADE_LABELS:
@@ -294,23 +295,56 @@ func _aircraft_details(sidebar: Vector2, width: float, viewport_size: Vector2) -
 			_button(Rect2(sidebar + Vector2(18, 232 + index * 36), Vector2(388, 32)), "%s · %s · %.2f 公里" % [item.label, status, item.range / 1000.0], _equip.bind(id), catalogue.missile_compatible(spec, id) and mounted != id)
 			index += 1
 	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(201, viewport_size.y - 97.0)
-	scroll.size = Vector2(viewport_size.x - 222.0, 69.0)
+	scroll.position = Vector2(menu_safe.position.x+184,viewport_size.y-124.0)
+	scroll.size = Vector2(viewport_size.x-scroll.position.x-21.0,97.0)
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 9)
-	for plane in catalogue.source.fleet:
+	var roster: Array = [catalogue.aircraft("j20")]
+	for item: Dictionary in catalogue.source.fleet:
+		if item.id != "j20":
+			roster.append(item)
+	for plane: Dictionary in roster:
 		if plane.support:
 			continue
 		var button := Button.new()
-		button.text = "%s\n%s" % [plane.name, "已选择" if plane.id == viewed_plane else ("可使用" if plane.id in profile.state.unlocked else "未解锁")]
-		button.custom_minimum_size = Vector2(150, 49)
+		var card_state := "已选择" if plane.id == viewed_plane else ("可使用" if plane.id in profile.state.unlocked else "未解锁")
+		button.tooltip_text = "%s  ·  %s" % [plane.name,card_state]
+		var artwork := ["j20","a10","alphajet","bf109"].find(plane.id)
+		if artwork >= 0:
+			_chrome_icon(button,Rect2(24,8,145,40),Rect2(122*artwork,419,120,35))
+		else:
+			_chrome_icon(button,Rect2(74,6,45,44),Rect2(505,419,44,44))
+		var title := Label.new()
+		title.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		title.text=button.tooltip_text
+		title.position=Vector2(7,52)
+		title.size=Vector2(179,24)
+		title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+		title.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.add_theme_font_size_override("font_size",13)
+		button.add_child(title)
+		button.custom_minimum_size = Vector2(193,81)
+		button.add_theme_stylebox_override("normal",CarrierLobby.border_style(plane.id == viewed_plane))
+		button.add_theme_stylebox_override("hover",button_styles.hover)
+		button.add_theme_stylebox_override("pressed",button_styles.pressed)
 		button.pressed.connect(_browse_plane.bind(str(plane.id)))
 		bar.add_child(button)
 	scroll.add_child(bar)
 	view.add_child(scroll)
 	scroll.set_deferred("scroll_horizontal", card_scroll)
 	scroll.get_h_scroll_bar().value_changed.connect(func(value): card_scroll = int(value))
+
+func _stat_line(at: Vector2, label: String, value: float, range_max: float, display: String) -> void:
+	_text(at,label,14,Color("#dff2fd"))
+	for active in [false,true]:
+		var bar := ColorRect.new()
+		bar.color=Color("#75d8fd") if active else Color("#163548")
+		bar.position=at+Vector2(55,8)
+		bar.size=Vector2(128.0*(clampf(value/range_max,0,1) if active else 1.0),5)
+		bar.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		view.add_child(bar)
+	_text(at+Vector2(196,0),display,14,Color("#eefbff"))
 
 func _toggle_mods() -> void:
 	panel_mods = not panel_mods
@@ -356,8 +390,6 @@ func _setting_items(lobby: bool) -> Array:
 func _apply_settings() -> void:
 	Engine.max_fps = mini(int(profile.state.settings.fps), 60) if thermal_limited else int(profile.state.settings.fps)
 	get_viewport().scaling_3d_scale = float(profile.state.settings.quality)
-	if is_instance_valid(lobby_viewport):
-		lobby_viewport.scaling_3d_scale = float(profile.state.settings.quality)
 	if is_instance_valid(current_battle):
 		current_battle.audio.mute = profile.state.settings.mute
 
@@ -416,124 +448,32 @@ func _show_carrier_lobby() -> void:
 	}
 	lobby_screen = CarrierLobby.new()
 	view.add_child(lobby_screen)
-	lobby_screen.configure(font, lobby_viewport.get_texture(), details, handlers)
+	lobby_screen.configure(font, details, handlers, route)
 
 func _build_showcase() -> void:
 	showcase = Node3D.new()
+	showcase.name = "SharedCarrierShowcase"
 	add_child(showcase)
-	var camera := Camera3D.new()
-	preview_camera = camera
-	showcase.add_child(camera)
-	camera.current = true
-	camera.fov = 34.0
-	camera.far = 18000.0
-	var at := Vector3(-340.0, Landscape.APRON_HEIGHT, 350.0)
-	showcase_environment = Landscape.add_environment(showcase, catalogue.source.theatres[0], true)
-	showcase_lights.clear()
-	for child in showcase.get_children():
-		if child is DirectionalLight3D:
-			showcase_lights.append(child)
+	preview_camera = Camera3D.new()
+	preview_camera.far = 18000.0
+	preview_camera.near = 0.32
+	showcase.add_child(preview_camera)
+	showcase_stage = CarrierStage.new()
+	showcase_stage.name = "CarrierStage"
+	showcase.add_child(showcase_stage)
+	showcase_stage.setup(preview_camera, catalogue.source.theatres[0])
 	showcase_aircraft = Node3D.new()
-	showcase_aircraft.position = at + Vector3(0.0, 1.5, 0.0)
+	showcase_aircraft.position.y = CarrierStage.DECK_Y + 1.75
 	showcase.add_child(showcase_aircraft)
-	lobby_shadow = MeshInstance3D.new()
-	lobby_shadow.mesh = PlaneMesh.new()
-	lobby_shadow.position = at + Vector3(0.0, 0.03, 0.0)
-	lobby_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var contact_shadow := ShaderMaterial.new()
-	contact_shadow.shader = preload("res://shaders/lobby_shadow.gdshader")
-	lobby_shadow.material_override = contact_shadow
-	showcase.add_child(lobby_shadow)
-	_sync_showcase_stage()
 	_set_showcase_aircraft(str(profile.state.selected))
+	_sync_showcase_stage()
 
 func _sync_showcase_stage() -> void:
-	var carrier := route == "lobby"
-	if carrier:
-		if not is_instance_valid(lobby_viewport):
-			lobby_viewport = SubViewport.new()
-			lobby_viewport.size = Vector2i(1280, 720)
-			lobby_viewport.own_world_3d = true
-			lobby_viewport.transparent_bg = true
-			lobby_viewport.msaa_3d = Viewport.MSAA_2X
-			lobby_viewport.scaling_3d_scale = float(profile.state.settings.quality)
-			add_child(lobby_viewport)
-		if showcase.get_parent() != lobby_viewport:
-			showcase.reparent(lobby_viewport, false)
-		if is_instance_valid(showcase_stage):
-			showcase_stage.hide()
-		lobby_shadow.show()
-		lobby_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-	else:
-		if showcase.get_parent() != self:
-			showcase.reparent(self, false)
-		if not is_instance_valid(showcase_stage):
-			_build_showcase_stage()
-		showcase_stage.show()
-		lobby_shadow.hide()
-	showcase_environment.background_mode = Environment.BG_CLEAR_COLOR if carrier else Environment.BG_SKY
-	showcase_environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY if carrier else Environment.REFLECTION_SOURCE_BG
-	showcase_environment.ambient_light_energy = 0.62 if carrier else 0.82
-	showcase_environment.tonemap_exposure = 0.90 if carrier else 0.97
-	var sun_angle := Vector3(0.21, 0.16, -0.96) if carrier else Vector3(0.47, 0.11, 0.876)
-	showcase_environment.sky_rotation.y = 0.100 * TAU - atan2(sun_angle.x, -sun_angle.z)
-	showcase_lights[0].look_at_from_position(sun_angle * 100.0, Vector3.ZERO)
-	showcase_lights[0].light_energy = 1.05 if carrier else 1.18
-	showcase_lights[1].light_energy = 0.67 if carrier else 0.76
-	showcase_lights[1].light_color = Color("#9cbedc") if carrier else Color("#d5e4f2")
-	preview_camera.h_offset = -1.08 if carrier else 0.0
-	preview_camera.v_offset = -0.97 if carrier else 0.0
+	preview_camera.fov = 34.0 if route in ["lobby", "hangar"] else 38.0
+	preview_camera.h_offset = -0.4 if route in ["lobby", "hangar"] else 4.2
+	preview_camera.v_offset = -0.32 if route != "hangar" else -1.12
 	preview_camera.make_current()
 	_tick_orbit(0.0, true)
-
-func _build_showcase_stage() -> void:
-	showcase_stage = Node3D.new()
-	showcase.add_child(showcase_stage)
-	var at := Vector3(-340.0, Landscape.APRON_HEIGHT, 350.0)
-	var ridges := (load("res://assets/environment/airfield-ridges.glb") as PackedScene).instantiate() as Node3D
-	ridges.position = at
-	var baked := StandardMaterial3D.new()
-	baked.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	baked.vertex_color_use_as_albedo = true
-	for surface in ridges.find_children("*", "MeshInstance3D", true, false):
-		surface.material_override = baked
-		surface.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	showcase_stage.add_child(ridges)
-	var airfield := MeshInstance3D.new()
-	var tarmac := PlaneMesh.new()
-	tarmac.size = Vector2(260.0, 120)
-	airfield.mesh = tarmac
-	airfield.position = at + Vector3(0.0, 0.08, 0.0)
-	var wet := ORMMaterial3D.new()
-	wet.albedo_texture = preload("res://assets/studio/tarmac.webp")
-	wet.albedo_color = Color("#929ba4")
-	wet.orm_texture = preload("res://assets/studio/tarmac-orm.png")
-	wet.normal_enabled = true
-	wet.normal_scale = 0.19
-	wet.normal_texture = preload("res://assets/studio/tarmac-normal.png")
-	wet.uv1_scale = Vector3(3.8, 1.8, 1.0)
-	airfield.material_override = wet
-	showcase_stage.add_child(airfield)
-	var architecture: Node3D = (load("res://assets/studio/hangar-dusk.glb") as PackedScene).instantiate()
-	architecture.position = at + Vector3(86.0, 0.3, 12.0)
-	architecture.scale = Vector3.ONE * 0.73
-	showcase_stage.add_child(architecture)
-	var lamps := StandardMaterial3D.new()
-	lamps.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	lamps.emission_enabled = true
-	lamps.emission = Color("#ffb87e")
-	lamps.emission_energy_multiplier = 4.5
-	var lens := SphereMesh.new()
-	lens.radius = 0.18
-	lens.height = 0.36
-	lens.radial_segments = 8
-	lens.rings = 4
-	lens.material = lamps
-	for i in 14:
-		var inst := MeshInstance3D.new()
-		inst.mesh = lens
-		inst.position = at + Vector3(4 + i * 4.1, 0.27, -27.0)
-		showcase_stage.add_child(inst)
 
 func _set_showcase_aircraft(id: String) -> void:
 	if id == preview_id and showcase_aircraft.get_child_count() > 0:
@@ -543,11 +483,14 @@ func _set_showcase_aircraft(id: String) -> void:
 		showcase_aircraft.remove_child(child)
 		child.queue_free()
 	var spec := catalogue.aircraft(id)
-	var plane: Node3D = catalogue.mesh(id)
+	var specimen := id == "j20"
+	var plane: Node3D = CarrierStage.SAMPLE.instantiate() if specimen else catalogue.mesh(id)
 	showcase_aircraft.add_child(plane)
-	catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
-	showcase_aircraft.position.y = Landscape.APRON_HEIGHT + maxf(0.8, spec.gearClearance)
-	(lobby_shadow.mesh as PlaneMesh).size = Vector2(float(spec.span) * 0.98, float(spec.length) * 1.12)
+	if not specimen:
+		catalogue.set_gear(catalogue.gear_tracks(plane), 1.0)
+	for surface: MeshInstance3D in plane.find_children("*", "MeshInstance3D", true, false):
+		surface.layers = 2
+	showcase_aircraft.position.y = CarrierStage.DECK_Y + (1.75 if specimen else maxf(0.8, spec.gearClearance))
 	orbit_distance = 27.7 * clampf(maxf(spec.length, spec.span) / 20.0, 0.55, 1.85)
 	_tick_orbit(0.0, true)
 
@@ -588,9 +531,6 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 		showcase.get_parent().remove_child(showcase)
 		showcase.queue_free()
 		showcase = null
-	if is_instance_valid(lobby_viewport):
-		lobby_viewport.queue_free()
-		lobby_viewport = null
 	route = "battle"
 	current_battle = Battle.new()
 	add_child(current_battle)
@@ -770,7 +710,7 @@ func _input(event: InputEvent) -> void:
 		_resume()
 		get_viewport().set_input_as_handled()
 		return
-	if route not in ["lobby", "hangar"] or loading or not is_instance_valid(showcase_aircraft):
+	if route not in ["lobby", "hangar", "training"] or loading or not is_instance_valid(showcase_aircraft):
 		return
 	if event is InputEventScreenTouch:
 		if event.pressed and not event.canceled:
@@ -812,10 +752,10 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _orbit_clear(at: Vector2) -> bool:
-	if is_instance_valid(lobby_screen):
-		return not lobby_screen.blocks_orbit(at)
+	if is_instance_valid(lobby_screen) and lobby_screen.blocks_orbit(at):
+		return false
 	for control in view.get_children():
-		if (control is Panel or control is BaseButton or control is ScrollContainer or control is CutButton) and control.visible and control.get_global_rect().has_point(at):
+		if (control is Panel or control is BaseButton or control is ScrollContainer) and control.visible and control.get_global_rect().has_point(at):
 			return false
 	return true
 
@@ -845,22 +785,21 @@ func _tick_orbit(delta: float, snap := false) -> void:
 	var tilt := orbit_display.y
 	var spin := orbit_display.x
 	var distance := orbit_distance * orbit_display.z
-	if route == "lobby":
-		spin += 3.49
-		tilt += 0.118
-		distance *= 1.04
+	spin += 3.48 if route != "training" else 3.17
+	tilt += 0.011 if route == "lobby" else 0.071
+	if route == "training":
+		distance *= 1.12
 	var offset := Vector3(sin(spin) * cos(tilt), sin(tilt), cos(spin) * cos(tilt)) * distance
 	var at := target_point + offset
-	at.y = maxf(at.y, Landscape.APRON_HEIGHT + 0.85)
+	at.y = maxf(at.y, CarrierStage.DECK_Y + 0.85)
 	if not snap and preview_camera.position.is_equal_approx(at):
 		return
 	preview_camera.position = at
 	preview_camera.look_at(target_point, Vector3.UP)
-	if route == "lobby" and is_instance_valid(lobby_viewport):
-		lobby_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	showcase_stage.follow_view(at)
 
 func _process(delta: float) -> void:
-	if route in ["lobby", "hangar"] and not loading:
+	if route in ["lobby", "hangar", "training"] and not loading:
 		_tick_orbit(delta)
 	if OS.has_feature("android") and is_instance_valid(current_battle):
 		_adapt_resolution(delta)

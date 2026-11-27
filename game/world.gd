@@ -171,7 +171,8 @@ static func prepare_relief(seed_id: int) -> void:
 				ClassDB.class_call_static("SkyTerrainKernel", "load_alpine_ground", accumulation)
 		relief_ready[seed_id] = true
 
-static func add_environment(host: Node3D, theatre: Dictionary, studio := false) -> Environment:
+static func add_environment(host: Node3D, theatre: Dictionary, studio_sky: ShaderMaterial = null) -> Environment:
+	var studio := studio_sky != null
 	var storm: bool = int(theatre.seed) == 116
 	var daylight: bool = theatre.snow
 	var light := Color(1.0, 0.81, 0.65) if studio else (Color(1.0, 0.956, 0.88) if daylight else Color(1.0, 0.87, 0.73))
@@ -186,11 +187,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	elif storm:
 		bearing = Vector3(0.50, 0.218, -0.84).normalized()
 		photo_sun = 0.59
-	if studio:
-		bearing = Vector3(0.47, 0.11, 0.876).normalized()
-		photo_sun = 0.600
 	var yaw := photo_sun - (atan2(bearing.x, -bearing.z) / TAU + 0.5)
-	var image: Texture2D = load("res://assets/environment/%s.png" % ("sunset" if studio else ("dusk" if storm else "day")))
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
 	env_node.environment = env
@@ -199,12 +196,9 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio := false) 
 	env.sky.process_mode = Sky.PROCESS_MODE_QUALITY if studio else Sky.PROCESS_MODE_INCREMENTAL
 	env.sky.radiance_size = Sky.RADIANCE_SIZE_128
 	if studio:
-		var photo := PanoramaSkyMaterial.new()
-		photo.panorama = image
-		photo.energy_multiplier = 0.34 * PANORAMA_RANGE
-		env.sky.sky_material = photo
-		env.sky_rotation.y = yaw * TAU
+		env.sky.sky_material = studio_sky
 	else:
+		var image: Texture2D = load("res://assets/environment/%s.png" % ("dusk" if storm else "day"))
 		var panorama := ShaderMaterial.new()
 		panorama.shader = SKY
 		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "density":_load_cloud_field(), "scattering":ATMOSPHERE,

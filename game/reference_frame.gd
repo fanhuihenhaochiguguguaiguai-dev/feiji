@@ -9,6 +9,7 @@ static var cached_face: Font
 static var cached_distance_field: Font
 var frame := Control.new()
 var typeface: Font
+var full_bleed: ShaderMaterial
 
 func mount(art: Texture2D, face: Font) -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -21,23 +22,41 @@ func mount(art: Texture2D, face: Font) -> void:
 			distance_field.multichannel_signed_distance_field = true
 			cached_distance_field = distance_field
 		typeface = cached_distance_field
-	var border := ColorRect.new()
-	border.color = Color("#061429")
-	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(border)
-	border.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if art:
+		var background := ColorRect.new()
+		background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		full_bleed = ShaderMaterial.new()
+		full_bleed.shader = preload("res://shaders/full_bleed_loading.gdshader")
+		full_bleed.set_shader_parameter("artwork", art)
+		background.material = full_bleed
+		add_child(background)
+		background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	frame.size = CANVAS
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.clip_contents = true
 	add_child(frame)
-	picture(Rect2(Vector2.ZERO, CANVAS), art)
 	resized.connect(_fit)
 	_fit()
 
 func _fit() -> void:
-	var factor := minf(size.x / CANVAS.x, size.y / CANVAS.y)
+	var safe := safe_bounds(self, size)
+	var factor := maxf(0.001, minf(safe.size.x / CANVAS.x, safe.size.y / CANVAS.y))
 	frame.scale = Vector2.ONE * factor
-	frame.position = (size - CANVAS * factor) * 0.5
+	frame.position = safe.position + (safe.size - CANVAS * factor) * 0.5
+	if full_bleed:
+		full_bleed.set_shader_parameter("drawable_ratio", size / (CANVAS * factor))
+		full_bleed.set_shader_parameter("artwork_centre", safe.get_center() / size.max(Vector2.ONE))
+
+static func safe_bounds(host: Control, fallback: Vector2) -> Rect2:
+	if not OS.has_feature("android"):
+		return Rect2(Vector2.ZERO, fallback)
+	var window := host.get_window()
+	var physical := Rect2i(window.position, window.size)
+	var exposed := physical.intersection(DisplayServer.get_display_safe_area())
+	if not exposed.has_area():
+		return Rect2(Vector2.ZERO, fallback)
+	var units := fallback / Vector2(physical.size)
+	return Rect2(Vector2(exposed.position - physical.position) * units, Vector2(exposed.size) * units)
 
 func picture(area: Rect2, art: Texture2D) -> TextureRect:
 	var item := TextureRect.new()

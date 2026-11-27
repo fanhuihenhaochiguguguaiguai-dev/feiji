@@ -3,3 +3,8 @@ https://polyhaven.com/a/rock_04
 https://polyhaven.com/a/gravelly_sand
 https://polyhaven.com/license
 CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+
+Carrier studio HDRI: Kloppenheim 06 (Pure Sky), Greg Zaal and Jarod Guest, 1K.
+https://polyhaven.com/a/kloppenheim_06_puresky
+Original HDR MD5: 995d68b1656f26452572645c0ffe898b
+CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/

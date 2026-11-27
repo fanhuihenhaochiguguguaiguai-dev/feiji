@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://chxavrhpivew6"
-path="res://.godot/imported/hangar-dusk.glb-f3f7ee27020df8459c3073d44fb2a35d.scn"
+uid="uid://cfseds3w3u0hw"
+path="res://.godot/imported/carrier-stage.glb-5646183f88c0179048905cb1584386f9.scn"
 
 [deps]
 
-source_file="res://assets/studio/hangar-dusk.glb"
-dest_files=["res://.godot/imported/hangar-dusk.glb-f3f7ee27020df8459c3073d44fb2a35d.scn"]
+source_file="res://assets/studio/carrier-stage.glb"
+dest_files=["res://.godot/imported/carrier-stage.glb-5646183f88c0179048905cb1584386f9.scn"]
 
 [params]
 

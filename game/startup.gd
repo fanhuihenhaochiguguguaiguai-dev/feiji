@@ -4,6 +4,7 @@ const Screen = preload("res://game/loading_screen.gd")
 const Data = preload("res://game/catalogue.gd")
 const Pilot = preload("res://game/profile.gd")
 const MAIN := "res://scenes/main.tscn"
+const STUDIO := "res://assets/studio/carrier-stage.glb"
 
 var presentation := Screen.new()
 var retry := Button.new()
@@ -34,24 +35,24 @@ func _load_game() -> void:
 	await get_tree().process_frame
 	var catalogue := Data.new()
 	var profile := Pilot.new(catalogue)
-	var selected := str(profile.state.selected)
-	var aircraft := Data.mesh_path(selected)
-	if ResourceLoader.load_threaded_request(aircraft, "PackedScene") != OK:
+	# The geometry-only carrier has no nested image dependency on the GPU
+	# thread. Its separate material and aircraft resources are resolved later.
+	if ResourceLoader.load_threaded_request(STUDIO, "PackedScene") != OK:
 		_show_failure()
 		return
 	var progress: Array = []
-	var state := ResourceLoader.load_threaded_get_status(aircraft, progress)
+	var state := ResourceLoader.load_threaded_get_status(STUDIO, progress)
 	while state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
 		presentation.meter.value = maxf(presentation.meter.value, float(progress[0]))
 		await get_tree().process_frame
-		state = ResourceLoader.load_threaded_get_status(aircraft, progress)
+		state = ResourceLoader.load_threaded_get_status(STUDIO, progress)
 	if state != ResourceLoader.THREAD_LOAD_LOADED:
 		_show_failure()
 		return
-	catalogue.scenes[selected] = ResourceLoader.load_threaded_get(aircraft)
+	var geometry := ResourceLoader.load_threaded_get(STUDIO) as PackedScene
 	presentation.meter.value = 1.0
 	await get_tree().process_frame
-	# Load the scripted scene on the main thread, after the aircraft's imported asset.
+	# Resolve the scripted scene and the selected aircraft on the main thread.
 	var game_scene := load(MAIN) as PackedScene
 	if not game_scene:
 		_show_failure()
@@ -66,6 +67,7 @@ func _load_game() -> void:
 	game.catalogue = catalogue
 	game.profile = profile
 	get_tree().root.add_child(game)
+	geometry = null
 	presentation.meter.value = 3.0
 	get_tree().current_scene = game
 	queue_free()

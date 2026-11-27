@@ -74,6 +74,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("masters", type=Path)
     parser.add_argument("screenshots", type=Path)
+    parser.add_argument("--loading-only", action="store_true",
+                        help="Check the two unchanged static masters with the geometric studio enabled")
     options = parser.parse_args()
     torch.set_num_threads(4)
     for screen, digest in MASTERS.items():
@@ -84,7 +86,7 @@ def main():
     static = np.ones(SIZE[::-1], dtype=bool)
     dynamic = aircraft_mask()
     results = {}
-    for screen in SCREENS:
+    for screen in SCREENS[:2] if options.loading_only else SCREENS:
         with Image.open(options.masters / f"{screen}.png") as master, Image.open(options.screenshots / f"{screen}.png") as frame:
             maps = compare(master, frame, net)
         foreground = screen == "03_lobby"
