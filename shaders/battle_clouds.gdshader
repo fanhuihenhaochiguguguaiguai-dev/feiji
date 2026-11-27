@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled;
+render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, shadows_disabled;
 
 uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
 uniform sampler3D cloud_field : filter_linear, repeat_enable;
@@ -40,8 +40,9 @@ void fragment() {
 
 	float span = last - first;
 	int samples = min(cloud_samples, max(3, int(ceil(span / 138.0))));
-	float jitter = mix(0.38, 0.62, fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715)))));
+	float jitter = mix(0.43, 0.57, fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715)))));
 	float transmit = 1.0;
+	float front = last;
 	vec3 glow = vec3(0.0);
 	vec3 origin = vec3((eye.xz + field_origin) / field_period, (eye.y - altitude_range.x) / height);
 	vec3 direction = vec3(ray.xz / field_period, ray.y / height);
@@ -62,6 +63,9 @@ void fragment() {
 		float fade = 1.0 - smoothstep(10500.0, 17000.0, t);
 		float optical = field.r * density_gain * stride * (0.52 + 0.48 * (lo + hi)) * fade * 0.0035;
 		float opacity = 1.0 - exp(-optical);
+		if (opacity > 0.003) {
+			front = min(front, t);
+		}
 		vec3 cloud = indirect + lit * field[light_channel] * (0.70 + phase * 0.22);
 		cloud = mix(cloud, air_color.rgb * 0.87, 1.0 - exp(-t * 0.000028));
 		glow += cloud * opacity * transmit;
@@ -69,6 +73,10 @@ void fragment() {
 	}
 	float coverage = 1.0 - transmit;
 	if (coverage < 0.002) { discard; }
+	// Also depth-test the visible cloud front against hardware depth. Some
+	// Mobile buffers expose a cleared sampled depth at scaled resolutions.
+	vec4 clip = PROJECTION_MATRIX * vec4(ray_view * max(front, 0.58), 1.0);
+	DEPTH = clip.z / clip.w;
 	ALBEDO = glow / coverage;
 	ALPHA = coverage;
 }
