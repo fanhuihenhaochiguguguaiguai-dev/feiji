@@ -138,7 +138,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	camera.current = true
 	var absolute_start := start_position(selected_mode, operation, use_runway)
 	world.configure(catalogue.source.theatres[int(task.get("region", 0))], camera, absolute_start, prepared)
-	effects.pool(world.cloud_material, camera)
+	effects.pool(world.sky_material, camera, Landscape.smoke_noise())
 	effects.water_impact.connect(world.ocean.add_impact)
 	var p := world.local_position(absolute_start)
 	player = _make_plane(str(profile.state.selected), 0)

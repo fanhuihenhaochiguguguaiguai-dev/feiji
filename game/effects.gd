@@ -82,12 +82,12 @@ func jet_plume(extent: Vector3, missile := false) -> MeshInstance3D:
 	plume.scale = extent
 	return plume
 
-func pool(sky: ShaderMaterial, camera: Camera3D) -> void:
+func pool(sky: ShaderMaterial, camera: Camera3D, noise: Texture3D) -> void:
 	view = camera
 	tracer = emissive(Color(1.0, 0.74, 0.34), 6.0)
 	glow = emissive(Color(0.38, 0.59, 1.0), 5.8)
 	add_child(trails)
-	trails.setup(sky.get_shader_parameter("density"), sky.get_shader_parameter("sun_color"), sky.get_shader_parameter("sun_direction"))
+	trails.setup(noise, sky.get_shader_parameter("sun_color"), sky.get_shader_parameter("sun_direction"))
 	puff_quad.size = Vector2(2, 2)
 	_prepare_projectiles()
 	_prepare_impacts()

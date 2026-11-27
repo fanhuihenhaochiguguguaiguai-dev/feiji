@@ -16,6 +16,7 @@ const RESIDENT_MIN := Vector2i(-20, -24)
 const RESIDENT_SIDE := 48
 const RESIDENT_SHADER = preload("res://shaders/terrain_resident.gdshader")
 const SKY = preload("res://shaders/sky.gdshader")
+const CLOUDS = preload("res://shaders/battle_clouds.gdshader")
 const Ocean = preload("res://game/ocean.gd")
 const ROCK = preload("res://assets/environment/rock-height.webp")
 const LOWLAND = preload("res://assets/environment/sand-height.webp")
@@ -31,11 +32,12 @@ const FINE_PACK_MAGIC := 0x34465453
 const FINE_TILE_BYTES := 4 + SIZE * SIZE * 2
 static var relief_ready := {}
 
-const CLOUD_SIZE := Vector2i(96, 64)
-const CLOUD_LAYERS := 32
-const CLOUD_PERIOD := Vector2(10100.0, 7450.0)
+const CLOUD_SIZE := Vector2i(128, 96)
+const CLOUD_LAYERS := 48
+const CLOUD_PERIOD := Vector2(24000.0, 18000.0)
 static var cloud_slices: Array[Image] = []
 static var cloud_field: ImageTexture3D
+static var smoke_noise_field: ImageTexture3D
 
 var terrain: Terrain3D
 var rider: Node3D
@@ -65,6 +67,10 @@ var coast_cell := Vector2i.MAX
 var coast_corner := Vector2.ZERO
 var coast_enabled := false
 var cloud_material: ShaderMaterial
+var sky_material: ShaderMaterial
+var cloud_altitudes := Vector2(1040.0, 3200.0)
+var cloud_layout := Vector2.ZERO
+var cloud_strength := 1.0
 var flight_environment: Environment
 var cloud_drift := Vector2.ZERO
 var local_cloud := 0.0
@@ -91,7 +97,6 @@ func local_position(absolute_position: Vector3) -> Vector3:
 func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared := {}) -> void:
 	climate = theatre
 	flight_view = camera
-	RenderingServer.global_shader_parameter_set("cloud_drift", Vector2.ZERO)
 	coast_enabled = DisplayServer.get_name() != "headless"
 	seed_value = int(theatre.seed)
 	prepare_relief(seed_value)
@@ -100,11 +105,11 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	if not relief_color:
 		relief_color = load_relief_color(seed_value)
 	flight_environment = add_environment(self, theatre)
-	cloud_material = flight_environment.sky.sky_material
+	sky_material = flight_environment.sky.sky_material
 	rider = Node3D.new()
 	add_child(rider)
 	origin = Vector2i(floori(start.x / TILE), floori(start.z / TILE))
-	cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
+	_add_cloud_layer(camera)
 	rider.position = local_position(start)
 	terrain = Terrain3D.new()
 	terrain.region_size = SIZE
@@ -201,7 +206,7 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio_sky: Shade
 		var image: Texture2D = load("res://assets/environment/%s.png" % ("dusk" if storm else "day"))
 		var panorama := ShaderMaterial.new()
 		panorama.shader = SKY
-		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "density":_load_cloud_field(), "scattering":ATMOSPHERE,
+		var parameters := {"panorama":image, "panorama_range":PANORAMA_RANGE, "scattering":ATMOSPHERE,
 			"sun_direction":bearing, "sun_color":light, "air_color":air, "panorama_offset":yaw, "storm":float(storm)}
 		for key in parameters:
 			panorama.set_shader_parameter(key, parameters[key])
@@ -237,30 +242,93 @@ static func add_environment(host: Node3D, theatre: Dictionary, studio_sky: Shade
 		fill.rotation_degrees = Vector3(-31, -42, 0)
 	return env
 
-static func _load_cloud_field() -> ImageTexture3D:
-	if cloud_field:
-		return cloud_field
+static func smoke_noise() -> ImageTexture3D:
+	if smoke_noise_field:
+		return smoke_noise_field
 	var atlas := (load("res://assets/environment/cloud-volume.png") as Texture2D).get_image()
 	atlas.convert(Image.FORMAT_R8)
+	var size := Vector2i(96, 64)
+	var slices: Array[Image] = []
+	for layer in 32:
+		slices.append(atlas.get_region(Rect2i(Vector2i(layer % 8, layer / 8) * size, size)))
+	smoke_noise_field = ImageTexture3D.new()
+	smoke_noise_field.create(Image.FORMAT_R8, size.x, size.y, 32, false, slices)
+	return smoke_noise_field
+
+static func _load_battle_clouds() -> ImageTexture3D:
+	if cloud_field:
+		return cloud_field
+	var atlas := (load("res://assets/environment/battle-clouds.png") as Texture2D).get_image()
+	atlas.convert(Image.FORMAT_RGBA8)
 	for layer in CLOUD_LAYERS:
 		cloud_slices.append(atlas.get_region(Rect2i(Vector2i(layer % 8, layer / 8) * CLOUD_SIZE, CLOUD_SIZE)))
 	cloud_field = ImageTexture3D.new()
-	cloud_field.create(Image.FORMAT_R8, CLOUD_SIZE.x, CLOUD_SIZE.y, CLOUD_LAYERS, false, cloud_slices)
+	cloud_field.create(Image.FORMAT_RGBA8, CLOUD_SIZE.x, CLOUD_SIZE.y, CLOUD_LAYERS, false, cloud_slices)
 	return cloud_field
+
+func _add_cloud_layer(camera: Camera3D) -> void:
+	var light_channel := 1
+	if seed_value == 704:
+		cloud_altitudes = Vector2(1310.0, 3580.0)
+		cloud_layout = Vector2(4900.0, -5100.0)
+		light_channel = 2
+	elif seed_value == 116:
+		cloud_altitudes = Vector2(650.0, 3150.0)
+		cloud_layout = Vector2(18300.0, 6500.0)
+		cloud_strength = 1.3
+		light_channel = 3
+	cloud_material = ShaderMaterial.new()
+	cloud_material.shader = CLOUDS
+	cloud_material.render_priority = -32
+	var parameters := {
+		"cloud_field": _load_battle_clouds(), "altitude_range": cloud_altitudes,
+		"field_period": CLOUD_PERIOD, "field_origin": _cloud_origin(), "density_gain": cloud_strength,
+		"light_channel": light_channel, "air_color": flight_environment.fog_light_color,
+		"sun_direction": sky_material.get_shader_parameter("sun_direction"),
+		"sun_color": sky_material.get_shader_parameter("sun_color"),
+	}
+	for key in parameters:
+		cloud_material.set_shader_parameter(key, parameters[key])
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)
+	var layer := MeshInstance3D.new()
+	layer.name = "BattleClouds"
+	layer.mesh = quad
+	layer.material_override = cloud_material
+	layer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	layer.ignore_occlusion_culling = true
+	layer.extra_cull_margin = 4.0
+	camera.add_child(layer)
+	layer.position.z = -2.0
+
+func _cloud_origin() -> Vector2:
+	return (Vector2(origin) * TILE + cloud_drift + cloud_layout).posmodv(CLOUD_PERIOD)
+
+static func _cloud_slice_density(layer: int, cell: Vector2i, blend: Vector2) -> float:
+	var slice := cloud_slices[layer]
+	var x := posmod(cell.x, CLOUD_SIZE.x)
+	var y := posmod(cell.y, CLOUD_SIZE.y)
+	var next_x := (x + 1) % CLOUD_SIZE.x
+	var next_y := (y + 1) % CLOUD_SIZE.y
+	return lerpf(lerpf(slice.get_pixel(x, y).r, slice.get_pixel(next_x, y).r, blend.x),
+		lerpf(slice.get_pixel(x, next_y).r, slice.get_pixel(next_x, next_y).r, blend.x), blend.y)
 
 func _update_cloud_visibility(at: Vector3, dt: float) -> void:
 	cloud_drift += Vector2(8.0, 4.0) * dt
-	RenderingServer.global_shader_parameter_set("cloud_drift", cloud_drift)
+	var offset := _cloud_origin()
+	cloud_material.set_shader_parameter("field_origin", offset)
 	var storm := seed_value == 116
-	var height := (at.y - (680.0 if storm else 1080.0)) / (1260.0 if storm else 820.0)
+	var height := inverse_lerp(cloud_altitudes.x, cloud_altitudes.y, at.y)
 	var sample_density := 0.0
 	if height > 0.0 and height < 1.0:
-		var point := (Vector2(at.x, at.z) + Vector2(origin) * TILE + cloud_drift) / CLOUD_PERIOD
-		var coords := Vector2i((point.posmodv(Vector2.ONE) * Vector2(CLOUD_SIZE)).floor())
+		var point := ((Vector2(at.x, at.z) + offset) / CLOUD_PERIOD).posmodv(Vector2.ONE)
+		var pixel := point * Vector2(CLOUD_SIZE) - Vector2(0.5, 0.5)
+		var cell := pixel.floor()
 		var level := height * (CLOUD_LAYERS - 1)
 		var index := floori(level)
-		var raw := lerpf(cloud_slices[index].get_pixelv(coords).r, cloud_slices[index + 1].get_pixelv(coords).r, level - index)
-		sample_density = smoothstep(0.20, 0.66, raw * (1.34 if storm else 1.0))
+		var raw := lerpf(_cloud_slice_density(index, Vector2i(cell), pixel - cell),
+			_cloud_slice_density(index + 1, Vector2i(cell), pixel - cell), level - index)
+		sample_density = smoothstep(0.20, 0.66, raw * cloud_strength)
 	local_cloud = lerpf(local_cloud, sample_density, 1.0 - exp(-dt * 4.5))
 	var clear_fog := 0.000049 if storm else 0.000022
 	flight_environment.fog_density = clear_fog * lerpf(1.0, 0.58, smoothstep(1800.0, 4500.0, at.y)) + local_cloud * 0.00135
@@ -517,8 +585,8 @@ func _add_resident_ground() -> void:
 func _set_aerial_transport(material: ShaderMaterial) -> void:
 	material.set_shader_parameter("air_column", AIR_COLUMN)
 	material.set_shader_parameter("air_color", flight_environment.fog_light_color)
-	material.set_shader_parameter("solar_color", cloud_material.get_shader_parameter("sun_color"))
-	material.set_shader_parameter("solar_direction", cloud_material.get_shader_parameter("sun_direction"))
+	material.set_shader_parameter("solar_color", sky_material.get_shader_parameter("sun_color"))
+	material.set_shader_parameter("solar_direction", sky_material.get_shader_parameter("sun_direction"))
 	material.set_shader_parameter("aerosol_extinction", 0.000034 if seed_value == 116 else 0.000014)
 
 func _sync_resident_ground() -> void:
@@ -573,7 +641,7 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 		if cliff:
 			cliff.position = local_position(CLIFF_SITE)
 			cliff_world_bounds = cliff.transform * cliff_bounds
-		cloud_material.set_shader_parameter("terrain_origin", Vector2(origin) * TILE)
+		cloud_material.set_shader_parameter("field_origin", _cloud_origin())
 		for coord in previous:
 			if Vector2i(coord - here).length_squared() <= 20:
 				var tile: Terrain3DRegion = previous[coord]
@@ -629,7 +697,7 @@ static func _bake_shallows(corner: Vector2, side: int, step: float, seed_id: int
 	return Image.create_from_data(side, side, false, Image.FORMAT_R8, depth)
 
 func set_quality(scale_value: float) -> void:
-	cloud_material.set_shader_parameter("cloud_samples", 3 if scale_value < 0.74 else 4)
+	cloud_material.set_shader_parameter("cloud_samples", 14 if scale_value < 0.74 else 20)
 	ocean.set_quality(scale_value)
 
 func set_background_budget(over_budget: bool, hot: bool) -> void:

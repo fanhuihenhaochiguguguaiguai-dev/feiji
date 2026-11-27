@@ -1,0 +1,74 @@
+shader_type spatial;
+render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled;
+
+uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
+uniform sampler3D cloud_field : filter_linear, repeat_enable;
+uniform vec2 field_origin;
+uniform vec2 field_period;
+uniform vec2 altitude_range;
+uniform vec3 sun_direction;
+uniform vec4 sun_color : source_color;
+uniform vec4 air_color : source_color;
+uniform int light_channel = 1;
+uniform int cloud_samples = 20;
+uniform float density_gain = 1.0;
+
+void vertex() {
+	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
+}
+
+void fragment() {
+	vec2 ndc = SCREEN_UV * 2.0 - 1.0;
+	vec3 ray_view = normalize((INV_PROJECTION_MATRIX * vec4(ndc, 0.0, 1.0)).xyz);
+	vec3 ray = mat3(INV_VIEW_MATRIX) * ray_view;
+	vec3 eye = INV_VIEW_MATRIX[3].xyz;
+	float height = altitude_range.y - altitude_range.x;
+	float dy = mix(-1.0, 1.0, step(0.0, ray.y)) * max(abs(ray.y), 0.0001);
+	vec2 hit = (altitude_range - eye.y) / dy;
+	float first = max(0.0, min(hit.x, hit.y));
+	float last = min(max(hit.x, hit.y), 17000.0);
+	if (last - first < 1.0) { discard; }
+
+	// Clamp the integration at the surface so a cloud can hide a distant
+	// ridge or ocean from above while leaving the aircraft in front intact.
+	float depth = texture(scene_depth, SCREEN_UV).r;
+	if (depth > 0.0) {
+		vec4 opaque = INV_PROJECTION_MATRIX * vec4(ndc, depth, 1.0);
+		last = min(last, length(opaque.xyz / opaque.w));
+	}
+	if (last - first < 1.0) { discard; }
+
+	float span = last - first;
+	int samples = min(cloud_samples, max(3, int(ceil(span / 138.0))));
+	float jitter = mix(0.38, 0.62, fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715)))));
+	float transmit = 1.0;
+	vec3 glow = vec3(0.0);
+	vec3 origin = vec3((eye.xz + field_origin) / field_period, (eye.y - altitude_range.x) / height);
+	vec3 direction = vec3(ray.xz / field_period, ray.y / height);
+	// Small steps near the eye, broad steps at distance.
+	float stride = span / float(samples);
+	float phase = pow(max(0.0, dot(ray, sun_direction)), 5.0);
+	vec3 indirect = mix(vec3(0.34, 0.42, 0.54), air_color.rgb, 0.23);
+	vec3 lit = sun_color.rgb * (0.66 + phase * 0.30);
+	for (int i = 0; i < 20; ++i) {
+		if (i >= samples || transmit < 0.035) { break; }
+		float lo = float(i) / float(samples);
+		float hi = lo + 1.0 / float(samples);
+		float t = first + span * mix(mix(lo, lo * lo, 0.48), mix(hi, hi * hi, 0.48), jitter);
+		vec3 point = origin + direction * t;
+		point.z = (clamp(point.z, 0.0, 1.0) * 47.0 + 0.5) / 48.0;
+		vec4 field = textureLod(cloud_field, point, 0.0);
+		if (field.r < 0.005) { continue; }
+		float fade = 1.0 - smoothstep(10500.0, 17000.0, t);
+		float optical = field.r * density_gain * stride * (0.52 + 0.48 * (lo + hi)) * fade * 0.0035;
+		float opacity = 1.0 - exp(-optical);
+		vec3 cloud = indirect + lit * field[light_channel] * (0.70 + phase * 0.22);
+		cloud = mix(cloud, air_color.rgb * 0.87, 1.0 - exp(-t * 0.000028));
+		glow += cloud * opacity * transmit;
+		transmit *= 1.0 - opacity;
+	}
+	float coverage = 1.0 - transmit;
+	if (coverage < 0.002) { discard; }
+	ALBEDO = glow / coverage;
+	ALPHA = coverage;
+}
