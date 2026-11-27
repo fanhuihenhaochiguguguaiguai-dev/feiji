@@ -55,15 +55,15 @@ var target: Airframe:
 			locked_time = 0.0
 			contact_lost_at = -INF
 var locked_time := 0.0
-var queued_missile_target: Airframe
-var queued_missile_life := -1
 var seek_due := 0.0
 var launched_from_runway := false
 var participated := false
 var incoming_heading := Vector3.ZERO
 var closest_incoming := INF
 var countered_until := 0.0
-var lead := Vector3.ZERO
+var reticle_point := Vector3.ZERO
+var gun_mount_index := 0
+var missile_mount_index := 0
 var missile: Dictionary
 var radar_range := 6000.0
 var time := 0.0
@@ -162,7 +162,7 @@ func setup(db: RefCounted, save: RefCounted, selected_mode: String, operation: D
 	elif mode == "campaign" or task.get("lesson", "") != "flight":
 		_spawn_wave()
 	ready_for_play = true
-	_refresh_gun_marker()
+	_refresh_fire_control()
 	_render_pose(0.016)
 
 func _make_plane(id: String, side: int) -> Airframe:
@@ -219,6 +219,8 @@ func _change_plane(jet: Airframe, id: String) -> void:
 			hit_proxies.append(part.transform.affine_inverse())
 	jet.rig.hit_proxies = hit_proxies
 	jet.rig.hit_bounds = bounds
+	var radius := jet.hit_extent.length() if hit_proxies.is_empty() else bounds.position.abs().max(bounds.end.abs()).length()
+	jet.hit_padding = Vector3.ONE * radius
 	jet.rig.last_gear = -1.0
 	var skin: Array[MeshInstance3D] = []
 	if DisplayServer.get_name() != "headless":
@@ -352,7 +354,7 @@ func _physics_process(dt: float) -> void:
 		elif mode == "free" and time >= jet.until_respawn:
 			_spawn_free(jet, false)
 	_update_shots(dt)
-	_refresh_gun_marker()
+	_refresh_fire_control()
 	if mode == "campaign":
 		var count := alive_enemies()
 		if count == 0 and next_wave == 0.0:
@@ -457,9 +459,9 @@ func _gun_solution(start: Vector3, mark: Airframe) -> Dictionary:
 	var direction := player.forward
 	var travel := 650.0 / maxf(1.0, speed + inherited.dot(direction))
 	var assisted := false
-	if mark and mark == target and is_locked():
-		var offset := mark.position - start
-		var relative := mark.velocity - inherited
+	if mark and mark == fire_control_target():
+		var offset := _tracked_position(mark) - start
+		var relative := _tracked_velocity(mark) - inherited
 		if offset.length_squared() <= GUN_ASSIST_RANGE * GUN_ASSIST_RANGE:
 			var candidate := _intercept_time(offset, relative, speed)
 			if candidate < 1.5 and candidate > 0.0:
@@ -474,14 +476,15 @@ func _gun_solution(start: Vector3, mark: Airframe) -> Dictionary:
 	var point := start + (direction * speed + inherited) * travel - Vector3.UP * (4.905 * travel * travel)
 	return {"direction":direction, "point":point, "assisted":assisted}
 
-func _refresh_gun_marker() -> void:
+func _refresh_fire_control() -> void:
 	var guns: Array = player.type.guns
 	if guns.is_empty():
-		lead = player.position + player.forward * 650.0
+		var contact := fire_control_target()
+		reticle_point = _tracked_position(contact) if contact else player.position + player.forward * 650.0
 		return
-	var muzzle: Array = guns[total_fired % guns.size()]
+	var muzzle: Array = guns[gun_mount_index % guns.size()]
 	var start := player.position + player.attitude * Vector3(muzzle[0], muzzle[1], muzzle[2])
-	lead = _gun_solution(start, target).point
+	reticle_point = _gun_solution(start, fire_control_target()).point
 
 func lock_fraction() -> float:
 	return clampf(locked_time / float(missile.acquire), 0.0, 1.0) if target else 0.0
@@ -490,9 +493,6 @@ func set_weapon_trigger(weapon: String, pressed: bool) -> void:
 	action[weapon] = pressed
 	if pressed:
 		action[weapon + "_queued"] = time + 0.19
-		if weapon == "missile":
-			queued_missile_target = target if is_locked() else null
-			queued_missile_life = queued_missile_target.life_id if queued_missile_target else -1
 
 func _trigger_held(weapon: String, key: Key) -> bool:
 	return bool(action.get(weapon, false)) or time <= float(action.get(weapon + "_queued", -1.0)) or Input.is_physical_key_pressed(key)
@@ -505,13 +505,23 @@ func _reset_player_spawn() -> void:
 	wreck_focus = null
 	target = null
 	locked_time = 0.0
-	queued_missile_target = null
 	countered_until = 0.0
 	action.clear()
 	stick = Vector2.ZERO
 
 func is_locked() -> bool:
-	return target != null and contact_lost_at == -INF and locked_time >= missile.acquire
+	return fire_control_target() != null
+
+func fire_control_target() -> Airframe:
+	if locked_time >= missile.acquire and (contact_lost_at == -INF or time - contact_lost_at < CONTACT_GRACE):
+		return target
+	return null
+
+func _tracked_position(contact: Airframe) -> Vector3:
+	return contact.position if contact_lost_at == -INF else observed_contact + observed_velocity * (time - contact_lost_at)
+
+func _tracked_velocity(contact: Airframe) -> Vector3:
+	return contact.velocity if contact_lost_at == -INF else observed_velocity
 
 static func flight_input(raw: Vector2) -> Vector2:
 	var amount := raw.length()
@@ -525,11 +535,12 @@ func _update_player(dt: float) -> void:
 	steering_amount = steering.length()
 	var response := flight_input(steering)
 	var control := Vector3(response.y, response.x, 0.0)
-	if is_locked() and not player.grounded and time >= player.evade_until:
+	var contact := fire_control_target()
+	if contact and not player.grounded and time >= player.evade_until:
 		var follow_gain := AUTO_TRACK_GAIN * (1.0 - smoothstep(0.055, 0.43, steering_amount))
-		var offset := target.position - player.position
+		var offset := _tracked_position(contact) - player.position
 		var direction := offset.normalized()
-		var relative := target.velocity - player.velocity
+		var relative := _tracked_velocity(contact) - player.velocity
 		var crossing := relative - direction * relative.dot(direction)
 		var aim := (offset + crossing * clampf(offset.length() * 0.00066, 0.16, 0.46)).normalized()
 		var bearing := player.attitude.inverse() * aim
@@ -580,19 +591,20 @@ func _update_player(dt: float) -> void:
 		else:
 			_destroy(player, null)
 			return
-	if _trigger_held("gun", KEY_SPACE) and time >= player.shot_at:
-		action.erase("gun_queued")
-		_fire(player, false, target if contact_lost_at == -INF else null)
-	if _trigger_held("missile", KEY_F) and time >= player.missile_at:
-		var intended := target if is_locked() else null
-		if time <= float(action.get("missile_queued", -1.0)) and queued_missile_target:
-			if queued_missile_target.hp > 0.0 and queued_missile_target.life_id == queued_missile_life:
-				intended = queued_missile_target
-		if _fire(player, true, intended):
-			action.erase("missile_queued")
-			queued_missile_target = null
+	_fire_player_weapons()
 	if mode == "training" and task.lesson == "flight" and time >= 15.0 and miles >= 320.0 and not player.grounded:
 		finish(true)
+
+func _fire_player_weapons() -> void:
+	var gun_ready := time >= player.shot_at and _trigger_held("gun", KEY_SPACE)
+	var missile_ready := time >= player.missile_at and _trigger_held("missile", KEY_F)
+	if not gun_ready and not missile_ready:
+		return
+	var contact := fire_control_target()
+	if gun_ready and _fire(player, false, contact):
+		action.erase("gun_queued")
+	if missile_ready and _fire(player, true, contact):
+		action.erase("missile_queued")
 
 func _update_bot(jet: Airframe, dt: float) -> void:
 	var ground := world.height(jet.position)
@@ -635,7 +647,8 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 			return false
 		guns = [[0, -0.45, -3]]
 	var slot: int = shot_slots.pop_back()
-	var mount: Array = guns[total_fired % guns.size()]
+	var index := (missile_mount_index if guided else gun_mount_index) if originator == player else total_fired
+	var mount: Array = guns[index % guns.size()]
 	var n: Vector3 = originator.forward
 	if guided and mode == "training" and originator != player and intended:
 		n = (intended.position - originator.position).normalized()
@@ -649,7 +662,7 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 		if originator == player:
 			var solution := _gun_solution(start, intended)
 			n = solution.direction
-			if solution.assisted and intended == target:
+			if intended and intended == fire_control_target():
 				assist_budget = GUN_CORRECTION_BUDGET
 		if originator != player and intended:
 			n = n.lerp((intended.position + intended.velocity * 0.25 - start).normalized(), 0.34).normalized()
@@ -669,6 +682,10 @@ func _fire(originator: Airframe, guided: bool, intended: Airframe) -> bool:
 		originator.missile_at = time + (MISSILE_CYCLE if originator == player else (8.0 if mode == "training" else 12.0 + (originator.index % 3) * 0.42))
 	if originator == player:
 		total_fired += 1
+		if guided:
+			missile_mount_index += 1
+		else:
+			gun_mount_index += 1
 	shots.append({"active":true, "active_index":shots.size(), "slot":slot, "owner":originator, "target":intended, "position":start, "previous":start, "velocity":velocity, "nose":n,
 		"missile":guided, "target_life":intended.life_id if intended else -1, "profile":setup, "damage":power, "fuel":setup.life if guided else 2.1,
 		"age":0.0, "ignited":false, "decoy":false,
@@ -681,6 +698,10 @@ func _update_shots(dt: float) -> void:
 	var warning_before := warning
 	closest_incoming = INF
 	incoming_heading = Vector3.ZERO
+	if not shots.is_empty():
+		for jet in fleet:
+			jet.swept_hit_min = jet.previous.min(jet.position) - jet.hit_padding
+			jet.swept_hit_max = jet.previous.max(jet.position) + jet.hit_padding
 	for i in range(shots.size() - 1, -1, -1):
 		var cast := shots[i]
 		cast.age += dt
@@ -731,8 +752,8 @@ func _update_shots(dt: float) -> void:
 			velocity.y -= 9.81 * dt
 			direction = velocity.normalized()
 		var toward := at + velocity * dt
-		var minimum := at.min(toward) - Vector3.ONE * 29.0
-		var maximum := at.max(toward) + Vector3.ONE * 29.0
+		var minimum := at.min(toward)
+		var maximum := at.max(toward)
 		var first_hit := INF
 		var victim: Airframe
 		var surface := Vector3.ZERO
@@ -740,8 +761,9 @@ func _update_shots(dt: float) -> void:
 		for jet in fleet:
 			if jet.hp <= 0.0 or jet.side == cast.owner.side:
 				continue
-			var point := jet.position
-			if point.x < minimum.x or point.x > maximum.x or point.y < minimum.y or point.y > maximum.y or point.z < minimum.z or point.z > maximum.z:
+			var swept_min := jet.swept_hit_min
+			var swept_max := jet.swept_hit_max
+			if swept_max.x < minimum.x or swept_min.x > maximum.x or swept_max.y < minimum.y or swept_min.y > maximum.y or swept_max.z < minimum.z or swept_min.z > maximum.z:
 				continue
 			var inverse := jet.attitude.inverse()
 			var previous_inverse := inverse if jet.rig.hit_proxies.is_empty() else jet.previous_attitude.inverse()
@@ -800,7 +822,7 @@ func _correct_cannon(cast: Dictionary, at: Vector3, direction: Vector3, speed: f
 	var scatter: Vector3 = cast.scatter
 	var aimed := ((offset + mark.velocity * travel + Vector3.UP * (4.905 * travel * travel)).normalized() + scatter).normalized()
 	var angle := direction.angle_to(aimed)
-	if angle <= 0.00001 or angle > GUN_LAUNCH_LIMIT:
+	if angle <= 0.00001 or angle > LOCK_ANGLE * 1.38:
 		return direction * speed
 	var turn := minf(angle, minf(float(cast.assist_budget), GUN_CORRECTION_RATE * dt))
 	cast.assist_budget -= turn
@@ -1036,7 +1058,8 @@ func _render_pose(dt: float) -> void:
 	var focus := origin + forward * (span * 3.1) - Vector3.UP * (span * 0.23)
 	var chase := origin - forward * (span * 1.46 + player.boost * 1.35) + Vector3.UP * (span * 0.37) + up * (span * 0.08)
 	var chase_enabled := not manual_cockpit and not player.grounded and time >= player.evade_until
-	var tracking: bool = chase_enabled and target != null and locked_time >= float(missile.acquire)
+	var tracked := fire_control_target()
+	var tracking := chase_enabled and tracked != null
 	var watching_wreck := chase_enabled and target == null and wreck_focus != null and time < wreck_focus_until
 	var manual_weight := 1.0 - smoothstep(0.04, 0.46, steering_amount)
 	var loss := clampf(time - contact_lost_at, 0.0, CONTACT_GRACE) if contact_lost_at != -INF else 0.0
@@ -1048,8 +1071,8 @@ func _render_pose(dt: float) -> void:
 	camera_lock = 0.0 if manual_cockpit else lerpf(camera_lock, zoom_request, 1.0 - exp(-dt * 6.0))
 	var pair_fov := 0.0
 	if tracking or watching_wreck:
-		var contact := wreck_focus.position if watching_wreck else (target.previous.lerp(target.position, alpha)
-			if is_locked() else observed_contact + observed_velocity * loss)
+		var contact := wreck_focus.position if watching_wreck else (tracked.previous.lerp(tracked.position, alpha)
+			if contact_lost_at == -INF else _tracked_position(tracked))
 		var normal_view := focus - chase
 		var target_view := (contact - chase).normalized() * normal_view.length()
 		var own_view := (origin - chase).normalized()

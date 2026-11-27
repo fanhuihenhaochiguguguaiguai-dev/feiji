@@ -229,6 +229,17 @@ func run() -> void:
 	(shell.pause_ui.body.get_node("返回暂停") as Button).pressed.emit()
 	(shell.pause_ui.body.get_node("继续飞行") as Button).pressed.emit()
 	check(not fight.paused, "Resume did not unpause the battle")
+	await process_frame
+	var credits: int = shell.profile.state.credits
+	var aborts: int = shell.profile.state.modes.get("free", {}).get("aborts", 0)
+	shell.active_hud.input_actions.pause.pressed.emit()
+	(shell.pause_ui.body.get_node("退出本局") as Button).pressed.emit()
+	check(shell.route == "lobby" and shell.pause_ui == null and shell.active_hud == null and shell.current_battle == null,
+		"A single exit action did not return straight to the lobby")
+	check(shell.profile.state.credits == credits and shell.profile.state.modes.free.aborts == aborts + 1,
+		"Exit did not record exactly one unrewarded abort")
+	await process_frame
+	check(not is_instance_valid(fight) and is_instance_valid(shell.showcase), "Exit left the battle alive or did not restore the hangar")
 	shell.queue_free()
 	await process_frame
 	print(JSON.stringify({"failures":failures,"bank_peak":rad_to_deg(largest_bank),"climb_peak":rad_to_deg(highest_pitch),"dive_peak":rad_to_deg(lowest_pitch),"neutral_heading_change_degrees":neutral_heading_change,"pursuit_cap":cap,"concurrent_targets":active}))

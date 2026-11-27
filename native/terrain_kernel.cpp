@@ -66,13 +66,41 @@ double relief_mask(double x, double z, int field) {
     return weight * smooth((dx*dx + dz*dz - 3700.0*3700.0) / (4900.0*4900.0 - 3700.0*3700.0));
 }
 
+double relief_tangent(int before, int at, int after) {
+    const int left = at - before, right = after - at;
+    if (left > 0 && right > 0) return left < right ? left : right;
+    if (left < 0 && right < 0) return left > right ? left : right;
+    return 0.0;
+}
+
 double relief_sample(double x, double z, int field) {
-    x = bound((x-relief_x) * (relief_side-1) / relief_size, 0, relief_side-1.00001);
-    z = bound((z-relief_z) * (relief_side-1) / relief_size, 0, relief_side-1.00001);
-    const auto a = ilower(x), b = ilower(z);
+    constexpr int last = relief_side - 1;
+    x = bound((x-relief_x) * last / relief_size, 0, last);
+    z = bound((z-relief_z) * last / relief_size, 0, last);
+    const int a = x == last ? last - 1 : static_cast<int>(x);
+    const int b = z == last ? last - 1 : static_cast<int>(z);
+    const double u = x-a, v = z-b;
     const int16_t *row = relief[field] + b * relief_side + a;
-    return 0.25 * blend(blend(row[0], row[1], x-a),
-        blend(row[relief_side], row[relief_side+1], x-a), z-b);
+    if (u == 0.0 && v == 0.0) return 0.25 * row[0];
+    const int west = a > 0 ? -1 : 0, east = a + 1 < last ? 2 : 1;
+    const int north = b > 0 ? -relief_side : 0, south = b + 1 < last ? 2 * relief_side : relief_side;
+    const double hu = u*u*(3-2*u), hv = v*v*(3-2*v);
+    const double ux0 = u*(1-u)*(1-u), ux1 = -u*u*(1-u);
+    const double vz0 = v*(1-v)*(1-v), vz1 = -v*v*(1-v);
+    const int16_t *near = row + relief_side;
+    const double top = blend(row[0], row[1], hu)
+        + ux0 * relief_tangent(row[west], row[0], row[1])
+        + ux1 * relief_tangent(row[0], row[1], row[east]);
+    const double bottom = blend(near[0], near[1], hu)
+        + ux0 * relief_tangent(near[west], near[0], near[1])
+        + ux1 * relief_tangent(near[0], near[1], near[east]);
+    const double dz0 = blend(relief_tangent(row[north], row[0], near[0]),
+        relief_tangent(row[north+1], row[1], near[1]), hu);
+    const double dz1 = blend(relief_tangent(row[0], near[0], row[south]),
+        relief_tangent(row[1], near[1], row[south+1]), hu);
+    // Adjacent cells share node tangents and zero mixed derivatives. The limited tangents
+    // keep the bicubic Bezier control points within the four measured corner elevations.
+    return 0.25 * (blend(top, bottom, hv) + vz0 * dz0 + vz1 * dz1);
 }
 
 double thermal_flux(double difference) {

@@ -26,6 +26,7 @@ func run() -> void:
 		results.append(_check(fight, scenario))
 	results.append(_check_touch_lock(fight))
 	results.append(_check_contact(fight))
+	results.append(_check_moving_airframe_contact(fight))
 	var surface_fixture := SurfaceFixture.new()
 	var ridge := surface_fixture.trace_surface(Vector3(0, 2, 0), Vector3(12, 2, 0)).w
 	var sea := surface_fixture.trace_surface(Vector3(-12, 3, 0), Vector3(-12, -3, 0)).w
@@ -37,6 +38,7 @@ func run() -> void:
 	results.append(_check_lock_camera(fight))
 	results.append(_check_target_continuity(fight))
 	results.append(_check_hidden_contact(fight))
+	results.append(_check_shared_fire_control(fight))
 	results.append(_check_wreck(fight))
 	results.append(_check_j20_geometry(fight))
 	results.append(_check_incoming_warning(fight))
@@ -106,11 +108,11 @@ func _check_cannon(fight: BATTLE, locked: bool, evade: bool) -> Dictionary:
 	fight.time = 31.0
 	fight.target = mark
 	fight.locked_time = float(fight.missile.acquire) if locked else 0.0
-	var mount: Array = fight.player.type.guns[fight.total_fired % fight.player.type.guns.size()]
+	var mount: Array = fight.player.type.guns[fight.gun_mount_index % fight.player.type.guns.size()]
 	var muzzle := start + fight.player.attitude * Vector3(mount[0], mount[1], mount[2])
 	var solution := fight._gun_solution(muzzle, mark)
-	fight._refresh_gun_marker()
-	var marker_matches := fight.lead.is_equal_approx(solution.point)
+	fight._refresh_fire_control()
+	var marker_matches := fight.reticle_point.is_equal_approx(solution.point)
 	fight._fire(fight.player, false, mark)
 	var cast := fight.shots[0]
 	var nominal: Vector3 = solution.direction
@@ -255,7 +257,7 @@ func _check_touch_lock(fight: Node) -> Dictionary:
 	hud._input(touch)
 	touch.pressed = false
 	hud._input(touch)
-	# A locked contact crosses the cone boundary between the tap and the firing tick.
+	# A locked contact leaves the capture cone but remains within the retention cone.
 	opponent.position = at + Vector3(302, 0, -920)
 	fight._physics_process(STEP)
 	var cast: Dictionary = fight.shots[0] if not fight.shots.is_empty() else {}
@@ -273,7 +275,7 @@ func _check_touch_lock(fight: Node) -> Dictionary:
 	if not ok:
 		failed += 1
 	hud.free()
-	return {"scenario":"touch_lock_lost_before_fire", "displayed_lock":displayed_lock,"target_bound":bound,"turn_deg":turn,"hit":hit,"passed":ok}
+	return {"scenario":"touch_lock_retained", "displayed_lock":displayed_lock,"target_bound":bound,"turn_deg":turn,"hit":hit,"passed":ok}
 
 func _check_contact(fight: Node) -> Dictionary:
 	while not fight.shots.is_empty():
@@ -306,6 +308,25 @@ func _check_contact(fight: Node) -> Dictionary:
 		failed += 1
 	return {"scenario":"contact_and_particle_timing", "no_effect_on_near_miss":clean_miss, "impact_on_same_step":immediate,
 		"trail_tip_surface_error":hull_error, "passed":ok}
+
+func _check_moving_airframe_contact(fight: BATTLE) -> Dictionary:
+	while not fight.shots.is_empty():
+		fight._expire(fight.shots.back())
+	var start := Vector3(730, 2300, 630)
+	var mark := fight.fleet[1]
+	fight.player.reset(start, Vector3.FORWARD, 220.0, 4200.0)
+	mark.reset(start + Vector3(-48, 0, -5), Vector3.FORWARD, 0.0, 2000.0)
+	mark.position.x += 96.0
+	fight._fire(fight.player, true, null)
+	var shot: Dictionary = fight.shots.back()
+	shot.position = start
+	shot.age = 0.16
+	shot.velocity = Vector3.FORWARD * 920.0
+	fight._update_shots(STEP)
+	var contact := start.distance_to(fight.hit_position)
+	var ok: bool = not shot.active and mark.hp < 2000.0 and contact > 0.0 and contact < 11.0
+	failed += int(not ok)
+	return {"scenario":"moving_airframe_contact", "impact_distance_m":contact, "passed":ok}
 
 func _check_lock_camera(fight: Node) -> Dictionary:
 	var at: Vector3 = fight.world.local_position(Vector3(11450.0, 1900.0, 5150.0))
@@ -384,7 +405,7 @@ func _check_hidden_contact(fight: Node) -> Dictionary:
 	mark.position = at + Vector3(530, 0, -610)
 	fight.time += 0.09
 	fight._targeting(STEP)
-	var held: bool = fight.target == mark and not fight.is_locked()
+	var held: bool = fight.contact_lost_at != -INF and fight.fire_control_target() == mark
 	mark.position = original
 	fight.time += 0.10
 	fight._targeting(STEP)
@@ -399,3 +420,41 @@ func _check_hidden_contact(fight: Node) -> Dictionary:
 		failed += 1
 	return {"scenario":"hidden_contact", "locked":locked,"retains_brief_loss":held,
 		"reacquires_same_contact":recovered,"manual_breaks_tracking":released,"passed":ok}
+
+func _check_shared_fire_control(fight: BATTLE) -> Dictionary:
+	while not fight.shots.is_empty():
+		fight._expire(fight.shots.back())
+	var at := Vector3(730.0, 2500.0, 630.0)
+	var mark := fight.fleet[1]
+	fight.player.reset(at, Vector3.FORWARD, 220.0, 4200.0)
+	mark.reset(at + Vector3(153, 0, -900), Vector3.FORWARD, 0.0, 2000.0)
+	fight._reset_player_spawn()
+	fight.time = 100.0
+	fight.target = mark
+	fight.locked_time = fight.missile.acquire
+	var initial_lock: float = fight.locked_time
+	var launch := fight._gun_solution(at, mark)
+	var gun_barrel := fight.gun_mount_index
+	fight.set_weapon_trigger("missile", true)
+	fight.set_weapon_trigger("missile", false)
+	fight._fire_player_weapons()
+	var missile := fight.shots[0]
+	var dedicated_mounts := gun_barrel == fight.gun_mount_index
+	fight.set_weapon_trigger("gun", true)
+	fight.set_weapon_trigger("gun", false)
+	fight._fire_player_weapons()
+	var shell := fight.shots[1]
+	var shared: bool = missile.target == shell.target and shell.target == mark and fight.locked_time == initial_lock
+	var budget: float = shell.assist_budget
+	fight._update_shots(STEP)
+	var follows_after_launch := not bool(launch.assisted) and float(shell.assist_budget) < budget
+	fight.set_weapon_trigger("missile", true)
+	fight.set_weapon_trigger("missile", false)
+	fight.player.missile_at = fight.time
+	mark.reset(mark.position, Vector3.FORWARD, 0.0, 2000.0)
+	fight._fire_player_weapons()
+	var refuses_stale_target: bool = not fight.is_locked() and fight.shots.back().target == null
+	var ok := shared and dedicated_mounts and follows_after_launch and refuses_stale_target
+	failed += int(not ok)
+	return {"scenario":"shared_fire_control", "same_target_across_weapons":shared, "independent_mounts":dedicated_mounts,
+		"follows_after_unadjusted_launch":follows_after_launch, "queued_shot_rejects_old_life":refuses_stale_target, "passed":ok}

@@ -17,6 +17,7 @@ func run() -> void:
 		var start := Vector3(11450, 3100, 5150)
 		var seed_id := int(sector.seed)
 		WORLD.prepare_relief(seed_id)
+		var reconstruction := _relief_reconstruction(seed_id) if WORLD.FIELDS.has(seed_id) else {}
 		var fine_index := WORLD.fine_tile_index(seed_id)
 		var decode_us := 0
 		var generate_us := 0
@@ -66,6 +67,7 @@ func run() -> void:
 				aligned = aligned and map.residency.get_pixelv(index).r > 0.5
 		var success := aligned and rebases > 0 and coverage_gaps == 0 and map.resident.get_child_count() == 16
 		success = success and fine_index.size() == 50 and error_m <= 0.03125 and seam_error <= 0.001
+		success = success and reconstruction.get("passed", true)
 		if seed_id == 704:
 			success = success and alpine.valley < 0.04 and alpine.summit > 0.47 and alpine.cliff < alpine.summit
 		if seed_id == 413:
@@ -84,12 +86,57 @@ func run() -> void:
 			"max_coverage_seam_error_m":seam_error, "offline_tiles":fine_index.size(),
 			"max_codec_error_m":error_m, "decode_ms":float(decode_us) * 0.001 / maxi(1, fine_index.size()),
 			"generate_ms":float(generate_us) * 0.001 / maxi(1, fine_index.size()), "max_follow_ms":worst_usec * 0.001,
-			"alpine_profile":alpine, "cliff_probe":cliff_probe})
+			"alpine_profile":alpine, "cliff_probe":cliff_probe, "relief_reconstruction":reconstruction})
 		map.queue_free()
 		eye.queue_free()
 		await process_frame
 	print(JSON.stringify({"terrain":summary,"failures":failures}))
 	quit(int(failures > 0))
+
+func _relief_reconstruction(seed_id: int) -> Dictionary:
+	const SIDE := 1025
+	const ORIGIN := Vector2(-6250.0, -6200.0)
+	const SPACING := 24.0
+	const PROBE := 0.0625
+	var path := "res://assets/environment/%s.height" % WORLD.FIELDS[seed_id]
+	var raw := FileAccess.get_file_as_bytes(path).decompress(SIDE * SIDE * 2, FileAccess.COMPRESSION_GZIP)
+	var elevation := func(x: int, z: int) -> float: return raw.decode_s16((z * SIDE + x) * 2) * 0.25
+	var sample := func(at: Vector2) -> float:
+		return float(ClassDB.class_call_static("SkyTerrainKernel", "height_m", at.x, at.y, seed_id))
+	var knot_error := 0.0
+	var overshoot := 0.0
+	var linear_jump := 0.0
+	var measured_jump := 0.0
+	var count := 0
+	for z in range(520, 900, 19):
+		for x in range(474, 900, 23):
+			var at := ORIGIN + Vector2(x, z) * SPACING
+			var corner: float = elevation.call(x, z)
+			knot_error = maxf(knot_error, absf(float(sample.call(at)) - corner))
+			var corners := [corner, elevation.call(x + 1, z), elevation.call(x, z + 1), elevation.call(x + 1, z + 1)]
+			for offset in [Vector2(0.25, 0.25), Vector2(0.73, 0.37), Vector2(0.3, 0.84)]:
+				var actual: float = sample.call(at + offset * SPACING)
+				overshoot = maxf(overshoot, maxf(actual - float(corners.max()), float(corners.min()) - actual))
+			for axis in [Vector2i.RIGHT, Vector2i.DOWN]:
+				var right := Vector2(axis)
+				var along := Vector2(right.y, right.x)
+				var on_edge := at + along * 9.0
+				var centre: float = sample.call(on_edge)
+				var before: float = sample.call(on_edge - right * PROBE)
+				var after: float = sample.call(on_edge + right * PROBE)
+				var measured := (before + after - 2.0 * centre) / PROBE
+				var edge_jump := func(p: Vector2i) -> float:
+					return (float(elevation.call(p.x - axis.x, p.y - axis.y)) + float(elevation.call(p.x + axis.x, p.y + axis.y))
+						- 2.0 * float(elevation.call(p.x, p.y))) / SPACING
+				var linear := lerpf(edge_jump.call(Vector2i(x, z)), edge_jump.call(Vector2i(x, z) + Vector2i(along)), 9.0 / SPACING)
+				linear_jump += linear * linear
+				measured_jump += measured * measured
+				count += 1
+	var rms_old := sqrt(linear_jump / count)
+	var rms_new := sqrt(measured_jump / count)
+	return {"passed":knot_error < 0.00001 and overshoot < 0.00001 and rms_new < rms_old * 0.05,
+		"edge_probes":count,"max_knot_error_m":knot_error,"overshoot_m":overshoot,
+		"bilinear_edge_slope_rms":rms_old,"bicubic_edge_slope_rms":rms_new}
 
 func _cliff_probe(map: Node3D) -> Dictionary:
 	if not map.cliff or not map.cliff_collision:

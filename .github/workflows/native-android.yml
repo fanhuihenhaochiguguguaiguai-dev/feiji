@@ -66,6 +66,7 @@ jobs:
           godot --headless --script res://qa/refinement.gd
           godot --headless --script res://qa/campaign.gd
           godot --headless --script res://qa/missile.gd
+          godot --headless --script res://qa/fleet_assets.gd
           godot --headless --script res://qa/world_coverage.gd
       - name: Gradle export and signature verification
         if: env.CUSTOM_RELEASE != 'true'

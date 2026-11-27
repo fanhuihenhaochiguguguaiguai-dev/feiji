@@ -62,7 +62,8 @@ func run() -> void:
 	var wake = battle.effects.trails.emitters[int(missile.slot)]
 	battle._expire(missile)
 	check(wake.closed and battle.effects.trails.slots[wake.row] == wake, "Missile trail survives projectile retirement")
-	battle.effects.trails.advance(2.59)
+	var trail_time: float = battle.effects.trails.LIFETIME[wake.style] - (battle.effects.trails.now - wake.touched)
+	battle.effects.trails.advance(trail_time - 0.01)
 	check(battle.effects.trails.slots[wake.row] == wake, "Missile smoke remains until the end of its decay")
 	battle.effects.trails.advance(0.04)
 	check(battle.effects.trails.slots[wake.row] == null, "Expired missile smoke returns its slot at the next trail update")

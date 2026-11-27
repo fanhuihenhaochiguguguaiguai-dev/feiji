@@ -66,3 +66,5 @@ godot --headless --script res://qa/fleet_assets.gd
 ```
 
 编译需要 NumPy 和 SciPy。可用 `--only f16 b2 spitfire` 选择机型，或附加 `--master` 生成离线高密度资产。在 Blender 检查高密度 GLB 时，将同机型的原纹理保留在资产同目录。
+
+[V18.3 持续整改验收清单](验收清单.md)记录源码、实拍和测试可证明的范围。

@@ -73,7 +73,6 @@ class ActionButton extends Button:
 		return PackedVector2Array([Vector2(a.x + cut, a.y), Vector2(b.x - cut, a.y), Vector2(b.x, a.y + cut), Vector2(b.x, b.y - cut), Vector2(b.x - cut, b.y), Vector2(a.x + cut, b.y), Vector2(a.x, b.y - cut), Vector2(a.x, a.y + cut)])
 
 var header := "战斗暂停"
-var notice := ""
 var typeface: Font
 var body := Control.new()
 
@@ -130,5 +129,3 @@ func _draw() -> void:
 			var a := Vector2(mid + side * (186 + line * 4), 24.0)
 			draw_line(a, a + Vector2(side * 26, 19), Color(EDGE, 0.11), 1.0, true)
 	draw_string(typeface, Vector2(0, 82), header, HORIZONTAL_ALIGNMENT_CENTER, int(FRAME.x), 42, INK)
-	if not notice.is_empty():
-		draw_string(typeface, Vector2(0, 171), notice, HORIZONTAL_ALIGNMENT_CENTER, int(FRAME.x), 21, INK)

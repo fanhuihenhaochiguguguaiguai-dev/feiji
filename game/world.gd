@@ -25,6 +25,8 @@ const ATMOSPHERE = preload("res://assets/environment/air-scattering.png")
 const AIR_COLUMN = preload("res://assets/environment/air-column.png")
 const PANORAMA_RANGE := 2.34
 const FIELDS := {413:"bay", 704:"frost"}
+const RELIEF_COLOR_ORIGIN := Vector2(-6144.0, -6144.0)
+const RELIEF_COLOR_STEP := 24.0
 const FINE_PACK_MAGIC := 0x34465453
 const FINE_TILE_BYTES := 4 + SIZE * SIZE * 2
 static var relief_ready := {}
@@ -324,8 +326,9 @@ static func read_region(coord: Vector2i, seed_id: int, index: Dictionary, color_
 		var controls := snow_controls(Vector2(coord) * TILE, SIZE, STEP, heights)
 		data.control = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RF, controls)
 	if color_source:
-		const SAMPLES := SIZE / 4
-		var source := Rect2i(coord * SAMPLES + Vector2i(255, 255), Vector2i.ONE * (SAMPLES + 2))
+		const SAMPLES := int(TILE / RELIEF_COLOR_STEP)
+		var offset := Vector2i(-RELIEF_COLOR_ORIGIN / RELIEF_COLOR_STEP) - Vector2i.ONE
+		var source := Rect2i(coord * SAMPLES + offset, Vector2i.ONE * (SAMPLES + 2))
 		if Rect2i(Vector2i.ZERO, color_source.get_size()).encloses(source):
 			var colors := color_source.get_region(source)
 			colors.resize(SIZE + 8, SIZE + 8, Image.INTERPOLATE_BILINEAR)

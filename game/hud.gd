@@ -277,12 +277,13 @@ func _draw() -> void:
 		if edge.length_squared() > 0.0001:
 			var p := aim + edge * (radius + 12.0)
 			draw_colored_polygon(PackedVector2Array([p - edge * 8.0, p + edge.rotated(0.88) * 7.0, p + edge.rotated(-0.88) * 7.0]), pink)
-	var reticle: Vector2 = _aim_at(fight.lead) if not fight.camera.is_position_behind(fight.lead) else aim
-	draw_arc(reticle, 17, 0.0, TAU, 36, Color(cyan, 0.69), 1.0, true)
+	var reticle: Vector2 = _aim_at(fight.reticle_point) if not fight.camera.is_position_behind(fight.reticle_point) else aim
+	var reticle_color := Color("#79f0a6") if locked else Color(cyan, 0.69)
+	draw_arc(reticle, radius if locked else 17.0, 0.0, TAU, 64 if locked else 36, reticle_color, 1.2, true)
 	for n in 4:
 		var a := Vector2.RIGHT.rotated(n * PI * 0.5)
-		draw_line(reticle + a * 14, reticle + a * 25, cyan, 1, true)
-	draw_circle(reticle, 2.1, Color(cyan, 0.74), true, -1, true)
+		draw_line(reticle + a * 14, reticle + a * 25, reticle_color, 1, true)
+	draw_circle(reticle, 2.1, reticle_color, true, -1, true)
 	var revision := floori(now * 14.0)
 	if revision != contact_revision:
 		contact_visibility.clear()
@@ -319,9 +320,6 @@ func _draw() -> void:
 		var tint := (Color("#79f0a6") if locked else pink) if selected else Color(top_left, 0.64)
 		var frame_size := lerpf(h * 0.19, 24.0, smoothstep(0.0, 1.0, acquired)) if selected and not locked else 19.0
 		var corner_length := maxf(8.0, frame_size * 0.25) if selected else 8.0
-		if selected and locked:
-			draw_arc(p, radius, 0.0, TAU, 64, Color(tint, 0.48), 1.3, true)
-			draw_polyline(PackedVector2Array([p + Vector2(0, -15), p + Vector2(15, 0), p + Vector2(0, 15), p + Vector2(-15, 0), p + Vector2(0, -15)]), tint, 1.3, true)
 		for corner in [Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1), Vector2(1,1)]:
 			var base: Vector2 = p + corner * frame_size
 			draw_line(base, base - Vector2(corner.x * corner_length, 0), tint, 1.8 if selected else 1.1, true)
@@ -340,7 +338,7 @@ func _draw() -> void:
 				for direction in [Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1), Vector2(1,1)]:
 					draw_line(contact + direction * 6.0, contact + direction * 10.0, mark, 1.7, true)
 	for item in artifacts:
-		_draw_action(item)
+		_draw_action(item, locked)
 	if fight.warning:
 		_draw_incoming_warning(jet, now)
 	if now < 13.0:
@@ -367,7 +365,7 @@ func _draw_incoming_warning(jet: RefCounted, now: float) -> void:
 		draw_line(icon + Vector2(0, -5), icon + Vector2(0, 1), Color("#290d15"), 2.0, true)
 		draw_circle(icon + Vector2(0, 5), 1.1, Color("#290d15"), true, -1.0, true)
 
-func _draw_action(item: Dictionary) -> void:
+func _draw_action(item: Dictionary, locked: bool) -> void:
 	var name: String = item.action
 	var side := name in ["gun", "missile"]
 	var jet: RefCounted = fight.player
@@ -376,7 +374,7 @@ func _draw_action(item: Dictionary) -> void:
 	var active: bool = item.button.button_pressed or name in weapon_fingers.values()
 	if name == "boost":
 		active = bool(fight.action.get("boost", false))
-	var color := Color("#8ae7ff") if name == "missile" and fight.is_locked() else Color("#a8c5d8")
+	var color := Color("#8ae7ff") if side and locked else Color("#a8c5d8")
 	var label := Color(top_left, 0.40) if item.button.disabled else top_left
 	if item.button.disabled:
 		color.a *= 0.4
@@ -388,8 +386,6 @@ func _draw_action(item: Dictionary) -> void:
 	if side:
 		draw_circle(at, radius, Color("#143044d9") if active else Color("#0e1e30c2"), true, -1, true)
 		draw_arc(at, radius, 0, TAU, 65, Color(color, 0.72), 1.2, true)
-		if name == "missile" and fight.is_locked():
-			draw_arc(at, radius - 2, -PI * 0.58, PI * 0.16, 30, cyan, 3.0, true)
 	else:
 		_panel(Rect2(at - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), 9.0, Color("#153249e0") if active else Color("#0e1e30bf"), Color(color, 0.43))
 	_symbol(at + Vector2(0, -10), item.icon, color)

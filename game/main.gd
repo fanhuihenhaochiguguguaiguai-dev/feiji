@@ -644,7 +644,7 @@ func _pause_panel(page: String) -> void:
 	var panel := PausePanel.new()
 	pause_ui = panel
 	panel.typeface = font
-	panel.header = "战斗暂停" if page == "pause" else ("飞行设置" if page == "settings" else "退出本局")
+	panel.header = "战斗暂停" if page == "pause" else "飞行设置"
 	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	view.add_child(panel)
 	match page:
@@ -655,17 +655,13 @@ func _pause_panel(page: String) -> void:
 			panel.action(Rect2(41, 230, 482, 46), "收放起落架", "gear", func():
 				_resume()
 				current_battle.action.gear = true)
-			panel.action(Rect2(41, 292, 482, 46), "退出本局", "leave", _pause_panel.bind("leave"))
+			panel.action(Rect2(41, 292, 482, 46), "退出本局", "leave", _abort_battle)
 		"settings":
 			var i := 0
 			for item in _setting_items(false):
 				panel.action(Rect2(41, 106 + i * 59, 482, 45), item[0], "", _set_setting.bind(item[1], item[2]))
 				i += 1
 			panel.action(Rect2(41, 289, 482, 45), "返回暂停", "", _pause_panel.bind("pause"))
-		"leave":
-			panel.notice = "退出后返回大厅，本局不结算奖励。"
-			panel.action(Rect2(41, 228, 231, 46), "取消", "", _pause_panel.bind("pause"))
-			panel.action(Rect2(292, 228, 231, 46), "确认退出", "leave", _abort_battle)
 
 func _resume() -> void:
 	if is_instance_valid(active_hud):

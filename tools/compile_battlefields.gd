@@ -16,6 +16,8 @@ func compile() -> void:
 		var seed_id := int(theatre.seed)
 		if "--frost-only" in OS.get_cmdline_user_args() and seed_id != 704:
 			continue
+		if "--survey-only" in OS.get_cmdline_user_args() and not WORLD.FIELDS.has(seed_id):
+			continue
 		WORLD.prepare_relief(seed_id)
 		if not "--coverage-only" in OS.get_cmdline_user_args() and not _compile_detail(seed_id):
 			push_error("Could not save fine terrain for %d" % seed_id)
@@ -158,8 +160,7 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 func _surface_color(at: Vector2, normal: Vector3, powder: float, rock: Color, sun: Vector3, geology: Image, snow: bool) -> Color:
 	var base := rock.lerp(Color(0.56, 0.63, 0.70), powder)
 	if geology:
-		var field_origin := Vector2(6144, 6144) if snow else Vector2(6250, 6200)
-		var cell := Vector2i(((at + field_origin) / 24.0).round())
+		var cell := Vector2i(((at - WORLD.RELIEF_COLOR_ORIGIN) / WORLD.RELIEF_COLOR_STEP).round())
 		if Rect2i(Vector2i.ZERO, geology.get_size()).has_point(cell):
 			var tint := geology.get_pixelv(cell).srgb_to_linear()
 			base *= Color.WHITE.lerp(tint, 0.48)
