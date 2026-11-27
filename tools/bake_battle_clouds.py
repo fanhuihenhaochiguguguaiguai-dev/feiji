@@ -15,7 +15,9 @@ layer, row, column = np.mgrid[:SLICES, :DEPTH, :WIDTH].astype(np.float32)
 x = (column + .5) / WIDTH * PERIOD_X
 z = (row + .5) / DEPTH * PERIOD_Z
 y = layer / (SLICES - 1)
-bank = np.zeros_like(x)
+# Preserve empty space as well as the occupied lobes. Starting at the
+# surface value would turn positive detail noise into a map-wide fog layer.
+bank = np.full_like(x, -1.0)
 
 
 def noise(size):
