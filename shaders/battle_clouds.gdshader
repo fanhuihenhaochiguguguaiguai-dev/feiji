@@ -3,6 +3,7 @@ render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, shadows_dis
 
 uniform sampler2D scene_depth : hint_depth_texture, repeat_disable, filter_nearest;
 uniform sampler3D cloud_field : filter_linear, repeat_enable;
+uniform sampler2D clearance_map : filter_linear, repeat_enable;
 uniform vec2 field_origin;
 uniform vec2 field_period;
 uniform vec2 altitude_range;
@@ -10,7 +11,7 @@ uniform vec3 sun_direction;
 uniform vec4 sun_color : source_color;
 uniform vec4 air_color : source_color;
 uniform int light_channel = 1;
-uniform int cloud_samples = 20;
+uniform float step_scale = 1.0;
 uniform float density_gain = 1.0;
 
 void vertex() {
@@ -38,36 +39,40 @@ void fragment() {
 	}
 	if (last - first < 1.0) { discard; }
 
-	float span = last - first;
-	int samples = min(cloud_samples, max(3, int(ceil(span / 138.0))));
 	float jitter = mix(0.43, 0.57, fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715)))));
 	float transmit = 1.0;
 	float front = last;
 	vec3 glow = vec3(0.0);
 	vec3 origin = vec3((eye.xz + field_origin) / field_period, (eye.y - altitude_range.x) / height);
 	vec3 direction = vec3(ray.xz / field_period, ray.y / height);
-	// Small steps near the eye, broad steps at distance.
-	float stride = span / float(samples);
 	float phase = pow(max(0.0, dot(ray, sun_direction)), 5.0);
-	vec3 indirect = mix(vec3(0.34, 0.42, 0.54), air_color.rgb, 0.23);
+	vec3 indirect = mix(vec3(0.19, 0.245, 0.315), air_color.rgb, 0.21);
 	vec3 lit = sun_color.rgb * (0.66 + phase * 0.30);
-	for (int i = 0; i < 20; ++i) {
-		if (i >= samples || transmit < 0.035) { break; }
-		float lo = float(i) / float(samples);
-		float hi = lo + 1.0 / float(samples);
-		float t = first + span * mix(mix(lo, lo * lo, 0.48), mix(hi, hi * hi, 0.48), jitter);
-		vec3 point = origin + direction * t;
+	float t = first;
+	for (int i = 0; i < 58; ++i) {
+		if (t >= last || transmit < 0.035) { break; }
+		vec3 ray_start = origin + direction * t;
+		float stride = mix(107.0, 278.0, smoothstep(2500.0, 12600.0, t)) * step_scale;
+		float clearance = textureLod(clearance_map, ray_start.xy, 0.0).r * 4000.0;
+		if (clearance > stride) {
+			t += clearance;
+			continue;
+		}
+		stride = min(stride, last - t);
+		float sample_at = t + stride * jitter;
+		vec3 point = ray_start + direction * (stride * jitter);
 		point.z = (clamp(point.z, 0.0, 1.0) * 47.0 + 0.5) / 48.0;
 		vec4 field = textureLod(cloud_field, point, 0.0);
+		t += stride;
 		if (field.r < 0.005) { continue; }
-		float fade = 1.0 - smoothstep(10500.0, 17000.0, t);
-		float optical = field.r * density_gain * stride * (0.52 + 0.48 * (lo + hi)) * fade * 0.0035;
+		float fade = 1.0 - smoothstep(10500.0, 17000.0, sample_at);
+		float optical = field.r * density_gain * stride * fade * 0.0035;
 		float opacity = 1.0 - exp(-optical);
 		if (opacity > 0.003) {
-			front = min(front, t);
+			front = min(front, sample_at);
 		}
 		vec3 cloud = indirect + lit * field[light_channel] * (0.70 + phase * 0.22);
-		cloud = mix(cloud, air_color.rgb * 0.87, 1.0 - exp(-t * 0.000028));
+		cloud = mix(cloud, air_color.rgb * 0.87, 1.0 - exp(-sample_at * 0.000028));
 		glow += cloud * opacity * transmit;
 		transmit *= 1.0 - opacity;
 	}

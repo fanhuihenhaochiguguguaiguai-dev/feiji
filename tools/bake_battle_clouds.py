@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import gaussian_filter, map_coordinates
+from scipy.ndimage import distance_transform_edt, gaussian_filter, map_coordinates
 
 ASSET = Path(__file__).resolve().parents[1] / "assets/environment/battle-clouds.png"
 WIDTH, DEPTH, SLICES = 128, 96, 48
@@ -79,4 +79,14 @@ def sunlight(direction, thickness):
 channels = [density, *(sunlight(v, thickness) for v, thickness in zip(SUN, (2.16, 2.27, 2.50)))]
 voxels = np.rint(np.stack(channels, axis=-1) * 255).astype(np.uint8)
 atlas = voxels.reshape(6, 8, DEPTH, WIDTH, 4).transpose(0, 2, 1, 3, 4).reshape(6 * DEPTH, 8 * WIDTH, 4)
-Image.fromarray(atlas, "RGBA").save(ASSET, optimize=True)
+image = Image.new("RGBA", (atlas.shape[1], atlas.shape[0] + DEPTH))
+image.paste(Image.fromarray(atlas, "RGBA"))
+
+# Conservative horizontal free distance for ray skipping. Periodic padding
+# keeps jumps consistent across tiled weather cells and floating origins.
+empty = np.tile(density.max(axis=0) < .004, (3, 3))
+spacing = (PERIOD_Z / DEPTH, PERIOD_X / WIDTH)
+distance = distance_transform_edt(empty, sampling=spacing)[DEPTH:2 * DEPTH, WIDTH:2 * WIDTH]
+distance = np.clip((distance - 1.65 * np.hypot(*spacing)) / 4.0, 0.0, 1.0)
+image.paste(Image.fromarray(np.uint8(np.floor(distance * 255))).convert("RGBA"), (0, atlas.shape[0]))
+image.save(ASSET, optimize=True)

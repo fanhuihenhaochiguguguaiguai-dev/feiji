@@ -37,6 +37,7 @@ const CLOUD_LAYERS := 48
 const CLOUD_PERIOD := Vector2(24000.0, 18000.0)
 static var cloud_slices: Array[Image] = []
 static var cloud_field: ImageTexture3D
+static var cloud_clearance: ImageTexture
 static var smoke_noise_field: ImageTexture3D
 
 var terrain: Terrain3D
@@ -264,6 +265,9 @@ static func _load_battle_clouds() -> ImageTexture3D:
 		cloud_slices.append(atlas.get_region(Rect2i(Vector2i(layer % 8, layer / 8) * CLOUD_SIZE, CLOUD_SIZE)))
 	cloud_field = ImageTexture3D.new()
 	cloud_field.create(Image.FORMAT_RGBA8, CLOUD_SIZE.x, CLOUD_SIZE.y, CLOUD_LAYERS, false, cloud_slices)
+	var clearance := atlas.get_region(Rect2i(Vector2i(0, CLOUD_SIZE.y * (CLOUD_LAYERS / 8)), CLOUD_SIZE))
+	clearance.convert(Image.FORMAT_L8)
+	cloud_clearance = ImageTexture.create_from_image(clearance)
 	return cloud_field
 
 func _add_cloud_layer(camera: Camera3D) -> void:
@@ -280,8 +284,9 @@ func _add_cloud_layer(camera: Camera3D) -> void:
 	cloud_material = ShaderMaterial.new()
 	cloud_material.shader = CLOUDS
 	cloud_material.render_priority = -32
+	var field := _load_battle_clouds()
 	var parameters := {
-		"cloud_field": _load_battle_clouds(), "altitude_range": cloud_altitudes,
+		"cloud_field": field, "clearance_map": cloud_clearance, "altitude_range": cloud_altitudes,
 		"field_period": CLOUD_PERIOD, "field_origin": _cloud_origin(), "density_gain": cloud_strength,
 		"light_channel": light_channel, "air_color": flight_environment.fog_light_color,
 		"sun_direction": sky_material.get_shader_parameter("sun_direction"),
@@ -697,7 +702,7 @@ static func _bake_shallows(corner: Vector2, side: int, step: float, seed_id: int
 	return Image.create_from_data(side, side, false, Image.FORMAT_R8, depth)
 
 func set_quality(scale_value: float) -> void:
-	cloud_material.set_shader_parameter("cloud_samples", 14 if scale_value < 0.74 else 20)
+	cloud_material.set_shader_parameter("step_scale", 1.32 if scale_value < 0.74 else 1.0)
 	ocean.set_quality(scale_value)
 
 func set_background_budget(over_budget: bool, hot: bool) -> void:
