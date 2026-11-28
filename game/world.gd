@@ -148,6 +148,7 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	# Terrain3D reads the images back to assemble its arrays. These five
 	# textures use lossless imports so driver-side format fallback cannot
 	# break readback. Install both slots in one array rebuild.
+	rock.set_id(1)
 	terrain.assets.set_texture_list([lowland, rock])
 	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
 	if not snow:
