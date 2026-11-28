@@ -70,6 +70,18 @@ CANOPY = spline([
     (.315, .567, .472), (.357, .541, .398), (.406, .329, .176),
     (.447, .021, .012),
 ])
+# Aircraft 04: the slim radome grows into an upper deck and a recessed
+# lower bevel. The side elevation fixes the extent of each transition.
+NOSE_REFINEMENT = spline([
+    (0., 1., 0.), (.036, .88, .67), (.079, .83, 1.),
+    (.125, .90, .90), (.168, 1., .52), (.234, 1., 0.), (1., 1., 0.),
+])
+# Section offsets in metres, measured inboard from the unchanged wing join.
+# Keep the outermost station fixed so the original airfoils still fit.
+NOSE_CROWN_OFFSET = np.array([-.045, -.041, -.027, -.005, .017, .005, -.008, 0.])
+NOSE_BELLY_OFFSET = np.array([-.011, -.012, -.019, -.031, -.027, -.008, .003, 0.])
+DECK_OFFSET = np.array([.028, .039, .067, .120, .130, .036, -.013, 0.])
+BELLY_OFFSET = np.array([-.036, -.050, -.070, -.105, -.056, .004, .017, 0.])
 
 
 def clampstep(low, high, value):
@@ -139,6 +151,20 @@ def normals_for(points, triangles):
     return normals / np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
 
 
+def refine_core(q, core_x, core_y, nose, top):
+    # The glass sill and the inlet and gear openings are inherited fixtures.
+    shoulder = clampstep(.155, .31, q) * (1.0 - clampstep(.67, .87, q))
+    if top:
+        sill = CANOPY(np.clip(q, .168, .447))[0]
+        sill_blend = 1.0 - clampstep(.447, .49, q)
+        shoulder *= 1.0 - sill_blend * (1.0 - clampstep(sill + .04, sill + .22, core_x))
+        nose *= 1.0 - clampstep(.145, .168, q) * (1.0 - clampstep(sill + .04, sill + .18, core_x))
+    else:
+        shoulder *= 1.0 - clampstep(.31, .36, q) + clampstep(.50, .58, q)
+    return core_y + nose * (NOSE_CROWN_OFFSET if top else NOSE_BELLY_OFFSET) + shoulder * (
+        DECK_OFFSET if top else BELLY_OFFSET)
+
+
 def ship_skin(asset):
     stations = np.unique(np.round(np.concatenate((
         np.linspace(0., .984, 75), PLANFORM[:, 0], BODY.x, CANOPY.x,
@@ -155,6 +181,7 @@ def ship_skin(asset):
         for top in (True, False):
             eps = 1. if top else -1.
             rows = []
+            refined_rows = []
             for q in stations:
                 w = span_at(q)
                 b, root_chine, crown, belly, center = cross_section(q, w)
@@ -168,22 +195,38 @@ def ship_skin(asset):
                 thickness = clampstep(.026, 1.0, local_span) * (.175 if top else .19)
                 root_blend = (core_y[-1] - root_chine) * (1.0 - beyond) ** 3
                 wing_y = root_chine + wing_fold(outside_x) - wing_fold(b) + root_blend + eps * wave * thickness
-                x = sign * np.concatenate((b*FUSELAGE_X, outside_x))
+                core_x = b * FUSELAGE_X
+                x = sign * np.concatenate((core_x, outside_x))
                 y = np.concatenate((core_y, wing_y))
-                rows.extend(zip(x, y, np.full(columns, NOSE + q*LENGTH)))
-            vertices = np.asarray(rows)
+                z = np.full(columns, NOSE + q*LENGTH)
+                rows.extend(zip(x, y, z))
+                width_scale, nose = NOSE_REFINEMENT(q)
+                refined_y = np.concatenate((refine_core(q, core_x, core_y, nose, top), wing_y))
+                refined_rows.extend(zip(x * width_scale, refined_y, z))
+            original = np.asarray(rows)
+            vertices = np.asarray(refined_rows)
             triangles = patch_indices(len(stations), columns, (sign == 1) != top)
-            centers = vertices[triangles].mean(axis=1)
+            centers = original[triangles].mean(axis=1)
             w = abs(centers[:, 0])
             q = (centers[:, 2] - NOSE) / LENGTH
             normals = normals_for(vertices, triangles)
             vertex_q = (vertices[:, 2] - NOSE) / LENGTH
+            vertex_panel = np.tile(np.arange(columns), len(stations))
             soften = clampstep(.24, .54, vertex_q)[:, None]
+            # Preserve the authored longitudinal shoulder through the
+            # midbody. Blend it out before the unmodified aft shell.
+            crease = (clampstep(.14, .31, vertex_q) *
+                      (1.0 - clampstep(.66, .865, vertex_q)))[:, None]
+            core_soften = soften * (1.0 - .72 * crease)
+            original_normals = normals_for(original, triangles)
+            pinned = ((vertex_q >= .168) & (vertex_panel >= len(FUSELAGE_X) - 1)) | (vertex_q >= .87)
             smoothing = []
-            for cheek in (panel < 4, (panel >= 4) & (panel < 7), panel >= 7):
-                # Share positions along the forebody crease, with separate
-                # normals that converge through the blended wing root.
-                angled = normals_for(vertices, triangles[cheek]) * (1.0 - soften) + normals * soften
+            for cheek, blend in ((panel < 4, core_soften),
+                                 ((panel >= 4) & (panel < 7), core_soften),
+                                 (panel >= 7, soften)):
+                angled = normals_for(vertices, triangles[cheek]) * (1.0 - blend) + normals * blend
+                original_angled = normals_for(original, triangles[cheek]) * (1.0 - soften) + original_normals * soften
+                angled[pinned] = original_angled[pinned]
                 angled /= np.maximum(np.linalg.norm(angled, axis=1, keepdims=True), 1e-12)
                 smoothing.append((cheek, angled))
             # Material and moving panel borders follow whole rows and columns.
@@ -516,8 +559,8 @@ def reconstruct(source, output, normal_map, orm_map):
     glass = asset.materials[asset.names[GLASS]]["pbrMetallicRoughness"]
     glass["baseColorFactor"] = [.055, .226, .198, .39]
     glass["roughnessFactor"] = .105
-    metadata["reference_fighter_fit_version"] = 4
-    metadata["reference_fighter_fit"] = "Aircraft/01–04; creased skin, open intake, faceted aft housings"
+    metadata["reference_fighter_fit_version"] = 5
+    metadata["reference_fighter_fit"] = "Aircraft/01–04; faceted radome and shouldered centrebody"
     prune_nodes(asset)
     write_model(output, asset.doc, asset.compact())
     bake_panel_maps(normal_map, orm_map)
