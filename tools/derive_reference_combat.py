@@ -48,12 +48,13 @@ def transfer_materials(target, source):
     return mapping
 
 
-def append_mesh(target, source, nodes, materials, scale, name, local=False):
+def append_mesh(target, source, nodes, materials, scale, name, local=False, inside=False):
     groups = defaultdict(lambda: ([], [], [], [], []))
     for node in nodes:
         if "rotation" in node or "matrix" in node or "scale" in node:
             raise ValueError(f"{node['name']} should be baked in airframe coordinates")
         origin = (0, 0, 0) if local else node.get("translation", (0, 0, 0))
+        inner_glass = inside and node["name"] == "Canopy single pane"
         for component in source.meshes[node["mesh"]]["primitives"]:
             pos, normal, uv, colors, indices = groups[materials[component["material"]]]
             attr = component["attributes"]
@@ -62,14 +63,18 @@ def append_mesh(target, source, nodes, materials, scale, name, local=False):
             pos.extend(tuple((v + b) * s for v, b, s in zip(p, origin, scale)) for p in points)
             for n in source.read(attr["NORMAL"]):
                 vector = tuple(v / s for v, s in zip(n, scale))
-                length = max(1e-8, sqrt(sum(v*v for v in vector)))
+                length = max(1e-8, sqrt(sum(v*v for v in vector))) * (-1.0 if inner_glass else 1.0)
                 normal.append(tuple(v / length for v in vector))
             uv.extend(source.read(attr["TEXCOORD_0"]) if "TEXCOORD_0" in attr else [(0, 0)] * len(points))
             if "COLOR_0" in attr or colors:
                 if not colors:
                     colors.extend([(1, 1, 1, 1)] * offset)
                 colors.extend(source.read(attr["COLOR_0"]) if "COLOR_0" in attr else [(1, 1, 1, 1)] * len(points))
-            indices.extend((i+offset,) for i, in source.read(component["indices"]))
+            faces = source.read(component["indices"])
+            if inner_glass:
+                for corner in range(0, len(faces), 3):
+                    faces[corner + 1], faces[corner + 2] = faces[corner + 2], faces[corner + 1]
+            indices.extend((i+offset,) for i, in faces)
     primitives = []
     for material, (pos, normal, uv, colors, indices) in groups.items():
         attributes = {"POSITION": target.append(pos, "VEC3"), "NORMAL": target.append(normal, "VEC3"),
@@ -129,8 +134,8 @@ def derive(sample, inherited, output):
             level["children"] = [len(dst.nodes)]
             # Keep the camera anchor but express the same cabin in its eye space.
             design_eye = (0.0, .649, -4.08)
-            dst.nodes.append({"name": "Reference pilot cabin",
-                              "mesh": append_mesh(dst, src, fittings, materials, scale, "Reference pilot cabin"),
+            cockpit = append_mesh(dst, src, fittings, materials, scale, "Reference pilot cabin", inside=True)
+            dst.nodes.append({"name": "Reference pilot cabin", "mesh": cockpit,
                               "translation": [-coordinate * factor for coordinate, factor in zip(design_eye, scale)]})
         if name not in ("Exterior", "Combat", "LOD"):
             continue

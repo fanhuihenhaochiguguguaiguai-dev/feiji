@@ -301,7 +301,7 @@ def glazing(asset):
                      (-x*.88, y-.027, z), (-x, y+.014, z)])
     normal_tint = np.tile(abs(across) ** 3.4, len(rows))
     colors = np.column_stack((1.0 - .31 * normal_tint, 1.0 - .16 * normal_tint,
-                              1.0 - .08 * normal_tint, .49 + .48 * normal_tint))
+                              1.0 - .08 * normal_tint, .33 + .58 * normal_tint))
     put_mesh(asset, "Canopy single pane", glass, patch_indices(len(rows), len(across), True), GLASS, colors=colors)
     rim = np.asarray(rim)
     for side in (-1., 1.):
@@ -314,7 +314,7 @@ def glazing(asset):
     strip = []
     for wave in np.linspace(0., 1., 32):
         along = .218 + .193 * wave
-        lateral = .30 + .24 * np.sin(2.6 * np.pi * wave)
+        lateral = .55 + .22 * np.sin(2.6 * np.pi * wave)
         w, rise = CANOPY(along)
         half_width = .005 / w
         strip.append([canopy_point(along, w, rise, u) + [0., .003, 0.]
@@ -344,6 +344,11 @@ def cockpit_block(asset, name, rows, material, lateral=0.):
 
 
 def cockpit_fittings(asset):
+    deck = []
+    for q in np.linspace(.168, .278, 11):
+        edge = skin_point(q, .85 * CANOPY(q)[0]) - [0., .013, 0.]
+        deck.append([edge * [-1., 1., 1.], edge])
+    loft(asset, "Cockpit forward deck", np.asarray(deck), SEAL)
     cockpit_block(asset, "Cockpit seat rails", [(-4.13, .19, -.04, .10), (-3.07, .18, -.05, .09)], SEAL)
     cockpit_block(asset, "Cockpit inclined seat", [
         (-4.11, .193, .065, .163), (-3.72, .206, .063, .172), (-3.49, .215, .075, .325),
@@ -661,9 +666,9 @@ def reconstruct(source, output, normal_map, orm_map):
                        metallicFactor=.95 if key in (EDGE, CHINE) else .82)
     skin = asset.materials[asset.names[SKIN]]["pbrMetallicRoughness"]
     skin["baseColorFactor"] = [.046, .054, .066, 1.]
-    glass = asset.materials[asset.names[GLASS]]["pbrMetallicRoughness"]
-    glass["baseColorFactor"] = [.12, .315, .29, .50]
-    glass["roughnessFactor"] = .135
+    glass = asset.materials[asset.names[GLASS]]
+    glass["doubleSided"] = False
+    glass["pbrMetallicRoughness"].update(baseColorFactor=[.10, .28, .26, .44], roughnessFactor=.135)
     metadata["reference_fighter_fit_version"] = 6
     metadata["reference_fighter_fit"] = "Aircraft/01–04; embedded bubble canopy and local shell relief"
     prune_nodes(asset)
