@@ -180,8 +180,8 @@ func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, 
 	var coast := seed_id == 413
 	var division := 4 if coast else 2
 	var sample_step := SPACING / float(division)
-	var edge_error := 5.0 if coast else 7.0
-	var interior_error := 6.0 if coast else 9.0
+	var edge_error := 7.0
+	var interior_error := 8.0 if coast else 9.0
 	var dense_side := (side - 1) * division + 1
 	var dense: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "height_tile",
 		patch_origin.x, patch_origin.y, dense_side, sample_step, seed_id)
@@ -240,6 +240,10 @@ func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, 
 				if error <= edge_error:
 					continue
 				for sample in samples:
+					# Keep 48 m edge samples for the sharpest parts. Moderate
+					# relief uses the shared 96 m midpoint.
+					if coast and error < 13.0 and sample != dense_corners[i] + 2 * increments[i]:
+						continue
 					if not middle_vertices.has(sample):
 						middle_vertices[sample] = points.size()
 						add_detail.call(sample)

@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode cull_disabled, shadows_disabled, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, shadows_disabled, diffuse_burley, specular_disabled;
 #include "air_transport.gdshaderinc"
 #include "terrain_coverage.gdshaderinc"
 
@@ -41,14 +41,27 @@ void fragment() {
 	vec3 tint = texture(geology_colors, lattice_uv(survey, 1025.0)).rgb;
 	// Match the two close-range scan families in projection and material
 	// scale. Offset rock sampling along the incline to limit vertical stretch.
-	vec2 slope_uv = ground_at + point.y * vec2(0.79, -0.43) * smoothstep(0.06, 0.40, steepness);
-	vec3 rock = texture(rock_scan, slope_uv * (0.155 / 6.0)).rgb * rock_tint.rgb;
-	vec3 scree = texture(scree_scan, ground_at * (0.14 / 6.0)).rgb * scree_tint.rgb;
-	ALBEDO = mix(scree, rock, stone) * mix(vec3(1.0), tint, on_survey);
+	vec2 rock_uv = (ground_at + point.y * vec2(0.79, -0.43) * smoothstep(0.06, 0.40, steepness)) * (0.155 / 6.0);
+	vec2 scree_uv = ground_at * (0.14 / 6.0);
+	vec2 rock_dx = dFdx(rock_uv);
+	vec2 rock_dy = dFdy(rock_uv);
+	vec2 scree_dx = dFdx(scree_uv);
+	vec2 scree_dy = dFdy(scree_uv);
+	vec3 surface_color;
+	if (stone < 0.065) {
+		surface_color = textureGrad(scree_scan, scree_uv, scree_dx, scree_dy).rgb * scree_tint.rgb;
+	} else if (stone > 0.935) {
+		surface_color = textureGrad(rock_scan, rock_uv, rock_dx, rock_dy).rgb * rock_tint.rgb;
+	} else {
+		vec3 rock = textureGrad(rock_scan, rock_uv, rock_dx, rock_dy).rgb * rock_tint.rgb;
+		vec3 scree = textureGrad(scree_scan, scree_uv, scree_dx, scree_dy).rgb * scree_tint.rgb;
+		surface_color = mix(scree, rock, smoothstep(0.065, 0.935, stone));
+	}
+	ALBEDO = surface_color * mix(vec3(1.0), tint, on_survey);
 	ROUGHNESS = mix(0.92, 0.81, stone);
-	SPECULAR = 0.20;
+	SPECULAR = 0.0;
 	// Baked visibility only affects the survey and is phased out at its edge.
-	AO = mix(1.0, surface.a, on_survey);
-	AO_LIGHT_AFFECT = 0.78;
+	AO = mix(1.0, surface.a, on_survey * 0.72);
+	AO_LIGHT_AFFECT = 0.56;
 	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, point);
 }
