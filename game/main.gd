@@ -589,63 +589,43 @@ func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dicti
 			ids.append("shade-drone")
 	else:
 		ids.append("j10")
-	var requests := {}
+	var aircraft_paths := {}
 	for id in ids:
-		if catalogue.scenes.has(id) or requests.has(id):
-			continue
-		var path := Data.mesh_path(id)
-		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
-			return {}
-		requests[id] = path
-	if seed_value == 413:
-		var path := Landscape.COASTAL_CLIFF
-		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
-			return {}
-		requests[path] = path
-	var total := tiles.size() + requests.size() + 1
+		if not catalogue.scenes.has(id):
+			aircraft_paths[id] = Data.mesh_path(id)
+	var total := tiles.size() + aircraft_paths.size() + 1 + int(seed_value == 413)
 	var meter := loading_screen.meter
 	meter.max_value = total
 	var ready := {}
-	var workers := {}
-	var failure := false
-	while not tiles.is_empty() or not requests.is_empty() or not workers.is_empty():
-		for coord in workers.keys():
-			var job: Thread = workers[coord]
-			if not job.is_alive():
-				var data: Dictionary = job.wait_to_finish()
-				workers.erase(coord)
-				if data.is_empty():
-					failure = true
-				else:
-					ready[coord] = data
-					meter.value += 1
-		for id in requests.keys():
-			var path: String = requests[id]
-			var state := ResourceLoader.load_threaded_get_status(path)
-			if state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-				continue
-			if state == ResourceLoader.THREAD_LOAD_LOADED:
-				var resource := ResourceLoader.load_threaded_get(path)
-				if id == Landscape.COASTAL_CLIFF:
-					ready[id] = resource
-				else:
-					catalogue.scenes[id] = resource
-				meter.value += 1
-			else:
-				failure = true
-			requests.erase(id)
-		while workers.size() < 3 and not tiles.is_empty():
-			var coord: Vector2i = tiles.pop_front()
-			var job := Thread.new()
-			if job.start(Landscape.read_region.bind(coord, seed_value, fine_tiles, relief_color)) == OK:
-				workers[coord] = job
-			else:
-				failure = true
+	# Serialize the GPU-facing imports. The same material or texture can be
+	# shared by several scenes and the renderer needs frames to service it.
+	for id in aircraft_paths:
+		loading_screen.set_status("正在加载%s" % catalogue.aircraft(id).name)
+		var scene := await Data.load_scene(get_tree(), aircraft_paths[id])
+		if not scene:
+			return {}
+		catalogue.scenes[id] = scene
+		meter.value += 1
+	if seed_value == 413:
+		loading_screen.set_status("正在加载海岸场景")
+		var cliff := await Data.load_scene(get_tree(), Landscape.COASTAL_CLIFF)
+		if not cliff:
+			return {}
+		ready[Landscape.COASTAL_CLIFF] = cliff
+		meter.value += 1
+	# These are CPU-side tile decodes. Yield after each to keep the loading
+	# screen repainting without a second queue to join or abandon on retry.
+	for coord in tiles:
+		var data := Landscape.read_region(coord, seed_value, fine_tiles, relief_color)
+		if data.is_empty():
+			return {}
+		ready[coord] = data
+		meter.value += 1
 		loading_screen.set_status("已准备 %d / %d 项" % [int(meter.value), total])
 		await get_tree().process_frame
-	if not failure and relief_color:
+	if relief_color:
 		ready["relief_color"] = relief_color
-	return {} if failure else ready
+	return ready
 
 func show_pause(show: bool) -> void:
 	if not show:

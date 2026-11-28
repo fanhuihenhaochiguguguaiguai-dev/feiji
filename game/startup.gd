@@ -30,37 +30,33 @@ func _ready() -> void:
 
 func _load_game() -> void:
 	retry.hide()
-	presentation.set_status("")
+	presentation.set_status("正在加载航母")
 	presentation.meter.value = 0.0
 	await get_tree().process_frame
 	var catalogue := Data.new()
 	var profile := Pilot.new(catalogue)
-	# The geometry-only carrier has no nested image dependency on the GPU
-	# thread. Its separate material and aircraft resources are resolved later.
-	if ResourceLoader.load_threaded_request(STUDIO, "PackedScene") != OK:
-		_show_failure("航母场景", STUDIO)
-		return
-	var progress: Array = []
-	var state := ResourceLoader.load_threaded_get_status(STUDIO, progress)
-	while state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-		if not progress.is_empty():
-			presentation.meter.value = maxf(presentation.meter.value, float(progress[0]))
-		await get_tree().process_frame
-		state = ResourceLoader.load_threaded_get_status(STUDIO, progress)
-	var geometry: PackedScene
-	if state == ResourceLoader.THREAD_LOAD_LOADED:
-		geometry = ResourceLoader.load_threaded_get(STUDIO) as PackedScene
-	if not geometry or not geometry.can_instantiate():
+	var geometry := await Data.load_scene(get_tree(), STUDIO, func(ratio: float):
+		presentation.meter.value = ratio)
+	if not geometry:
 		_show_failure("航母场景", STUDIO)
 		return
 	presentation.meter.value = 1.0
 	await get_tree().process_frame
-	# Resolve the scripted scene and the selected aircraft on the main thread.
 	var game_scene := load(MAIN) as PackedScene
 	if not game_scene or not game_scene.can_instantiate():
 		_show_failure("游戏场景", MAIN)
 		return
+	var selected: String = profile.state.selected
+	var aircraft_path := Data.mesh_path(selected)
+	presentation.set_status("正在加载展示战机")
+	var aircraft := await Data.load_scene(get_tree(), aircraft_path, func(ratio: float):
+		presentation.meter.value = 1.0 + ratio)
+	if not aircraft:
+		_show_failure("展示战机", aircraft_path)
+		return
+	catalogue.scenes[selected] = aircraft
 	presentation.meter.value = 2.0
+	presentation.set_status("正在启动大厅")
 	await get_tree().process_frame
 	var game := game_scene.instantiate()
 	if not game or not game.has_method("_open"):

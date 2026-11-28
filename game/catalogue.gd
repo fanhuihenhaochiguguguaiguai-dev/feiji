@@ -40,6 +40,35 @@ static func upgrade_price(level_now: int) -> int:
 static func mesh_path(id: String) -> String:
 	return "res://assets/fleet/%s.glb" % id
 
+static func load_scene(tree: SceneTree, path: String, report: Callable = Callable()) -> PackedScene:
+	# Loading meshes on the main thread can block the renderer's first material
+	# compilation. Keep drawing while the resource worker resolves the scene.
+	var state := ResourceLoader.load_threaded_get_status(path)
+	if state != ResourceLoader.THREAD_LOAD_IN_PROGRESS and state != ResourceLoader.THREAD_LOAD_LOADED:
+		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
+			return null
+	var progress: Array = []
+	var last_ratio := -1.0
+	var deadline := Time.get_ticks_msec() + 25000
+	state = ResourceLoader.load_threaded_get_status(path, progress)
+	while state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		var ratio := float(progress[0]) if not progress.is_empty() else 0.0
+		if ratio > last_ratio:
+			last_ratio = ratio
+			deadline = Time.get_ticks_msec() + 25000
+			if report.is_valid():
+				report.call(ratio)
+		elif Time.get_ticks_msec() >= deadline:
+			push_error("Timed out loading scene: " + path)
+			return null
+		await tree.process_frame
+		state = ResourceLoader.load_threaded_get_status(path, progress)
+	if state == ResourceLoader.THREAD_LOAD_LOADED:
+		var scene := ResourceLoader.load_threaded_get(path) as PackedScene
+		if scene and scene.can_instantiate():
+			return scene
+	return null
+
 func mesh(id: String) -> Node3D:
 	if not scenes.has(id):
 		scenes[id] = load(mesh_path(id))
