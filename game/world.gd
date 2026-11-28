@@ -138,7 +138,6 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	if coast:
 		lowland.set_detiling_rotation(0.09)
 		lowland.set_detiling_shift(0.27)
-	terrain.assets.set_texture_asset(0, lowland)
 	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (COAST_ROCK if coast else Color("#a6aaa5")),
 		0.57 if snow else 0.155, ROCK, NORMAL_ROCK)
 	if snow or coast:
@@ -146,7 +145,10 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 		rock.set_detiling_rotation(0.16)
 		rock.set_detiling_shift(0.29)
 		terrain.material.projection_enabled = true
-	terrain.assets.set_texture_asset(1, rock)
+	# Terrain3D reads the images back to assemble its arrays. These five
+	# textures use lossless imports so driver-side format fallback cannot
+	# break readback. Install both slots in one array rebuild.
+	terrain.assets.set_texture_list([lowland, rock])
 	# The overlay collects on flatter surfaces. Exposed faces use the scan in slot 1.
 	if not snow:
 		terrain.material.set_shader_param("auto_base_texture", 1 if coast else 0)
