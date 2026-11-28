@@ -23,7 +23,7 @@ varying vec3 water_point;
 
 const float OUTER_GAIN = 0.68;
 const float INNER_GAIN = 0.34;
-const float CAPILLARY_GAIN = 0.50;
+const float CAPILLARY_GAIN = 0.43;
 
 vec2 sea_state(vec2 point) {
 	// The blue and alpha channels carry independent kilometre-scale wave groups.
@@ -78,7 +78,9 @@ vec4 water_impact(vec2 point) {
 vec2 shore_sample(vec2 point) {
 	vec2 coord = (point - coast_area.xy) * coast_area.z;
 	vec2 margin = min(coord, vec2(1.0) - coord);
-	float influence = smoothstep(0.0, 0.12, min(margin.x, margin.y));
+	float edge = min(margin.x, margin.y);
+	if (edge <= 0.0) { return vec2(-32.0, 0.0); }
+	float influence = smoothstep(0.0, 0.12, edge);
 	float elevation = textureLod(coast_depth, coord + vec2(coast_area.w * 0.5), 0.0).r * 63.75 - 32.0;
 	return vec2(elevation, influence);
 }
@@ -87,12 +89,13 @@ vec2 shore_sample(vec2 point) {
 // Return height, attenuation of offshore waves and foam from the same crest.
 vec3 shore_wave(vec2 point, vec2 bed, vec2 state) {
 	float depth = max(0.0, -bed.x);
+	if (bed.y <= 0.0 || depth >= 15.0) { return vec3(0.0, 1.0, 0.0); }
 	float shoaling = smoothstep(0.22, 1.6, depth) * (1.0 - smoothstep(3.0, 15.0, depth)) * bed.y;
 	float bottom_phase = 1.26 * sqrt(depth + 0.3);
 	float phase = dot(point, vec2(0.062, -0.049)) - bottom_phase - TIME * 1.26;
 	float interruption = 0.17 * sin(dot(point, vec2(0.28, 0.19))) + 0.12 * sin(dot(point, vec2(0.09, -0.33)));
 	float crest = 0.5 + 0.5 * cos(phase + interruption);
-	float height = (pow(crest, 3.0) - 0.16) * shoaling * (0.55 + state.x * 0.24);
+	float height = (crest * crest * crest - 0.16) * shoaling * (0.55 + state.x * 0.24);
 	float attenuate = 1.0 - 0.73 * bed.y * (1.0 - smoothstep(0.7, 8.5, depth));
 	float breaks = 1.0 - smoothstep(1.1, 6.3, depth);
 	float foam = smoothstep(0.78, 0.98, crest + interruption * 0.39)
@@ -183,7 +186,7 @@ void fragment() {
 			gradient += inner.xy * scaled.y * visible_spectral.y;
 			foam += inner.w * inner_resolved * state.y * 0.49;
 		}
-		foam = smoothstep(0.34, 0.92, foam) * spectral_weight * breaker.y;
+		foam = smoothstep(0.38, 0.94, foam) * spectral_weight * breaker.y;
 	}
 	if (spectral_weight < 1.0 && outer_resolved > 0.0) {
 		gradient += analytical_swell(uv, state).yz * (outer_resolved * (1.0 - spectral_weight) * breaker.y);
@@ -199,7 +202,7 @@ void fragment() {
 	if (wake_strength > 0.0 && interaction > 0.0) {
 		vec3 local_wave = aircraft_wake(uv);
 		gradient += vec2(-wake.w, wake.z) * local_wave.y * interaction * inner_resolved;
-		foam += local_wave.z * (0.44 + fine.y * 1.35) * interaction;
+		foam += local_wave.z * (0.60 + fine.y) * interaction;
 	}
 	if (impact_age < 3.8 && interaction > 0.0) {
 		vec4 ripple = water_impact(uv);
@@ -235,6 +238,6 @@ void fragment() {
 	METALLIC = 0.0;
 	float broad_lobe = smoothstep(0.045, 0.21, sigma);
 	EMISSION = air_color.rgb * reflection * (0.14 + 0.47 * broad_lobe) * distant_reflection * (1.0 - 0.75 * foam);
-	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.18);
+	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.38);
 	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, vec3(uv.x - world_offset.x, water_point.y, uv.y - world_offset.y));
 }
