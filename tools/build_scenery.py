@@ -34,16 +34,29 @@ def survey_heights(name, smoothing):
     return map_coordinates(source, (rows, cols), order=3)
 
 
-def relief():
+def coastal_relief():
     ground = survey_heights("glacier-bay.tif", 1.05)
+    surveyed = survey_heights("glacier-bay.tif", 0.30)
+    residual = surveyed - ground
     # Preserve the coastline. Water depth here is an authored approximation.
     land = ground >= 2.0
     ground = np.where(land, np.maximum(ground - 1.5, 0) * 0.48, -np.minimum(88, distance_transform_edt(~land) * 2.4))
     # Bring the main ridges up while retaining the surveyed shoreline and low islands.
     ranged = np.clip((ground - 125) / 420, 0, 1)
     battle = ground + np.maximum(ground, 0) * 0.17 * ranged * ranged * (3 - 2 * ranged)
+    # Keep the authored large forms. Restore the measured ridge and gully
+    # residual above the coast, where smoothing hid the exposed relief.
+    dz, dx = np.gradient(surveyed * .48, 24)
+    exposed = smooth_band(62.0, 190.0, battle) * smooth_band(.13, .52, np.hypot(dx, dz))
+    battle += np.clip(residual * .51, -17., 17.) * exposed
     (OUTPUT / "bay.height").write_bytes(gzip.compress(np.rint(battle * 4).astype("<i2").tobytes(), mtime=0))
     relief_colors(battle, "bay")
+    coastal_surface(battle)
+    return ground
+
+
+def relief():
+    ground = coastal_relief()
     # Use the inland massif for the alpine route. The valley floor remains open at the entry.
     massif = survey_heights("alpine-relief.tif", .56)
     ridge_detail = gaussian_filter(massif, 1.15) - gaussian_filter(massif, 8.5)
@@ -58,6 +71,40 @@ def relief():
     (OUTPUT / "frost.height").write_bytes(gzip.compress(np.rint(frost * 4).astype("<i2").tobytes(), mtime=0))
     relief_colors(frost, "frost")
     return ground
+
+
+def coastal_surface(ground):
+    """Pack surveyed slope, debris coverage and sun visibility in world space."""
+    spacing = 48
+    side = 513
+    axis = np.arange(side) * spacing - 6144
+    x, z = np.meshgrid(axis, axis)
+    detail = gaussian_filter(ground, .46)
+    h = map_coordinates(detail, ((z + 6200) / 24, (x + 6250) / 24), order=1, mode="nearest")
+    dz, dx = np.gradient(h, spacing)
+    length = np.sqrt(1 + dx*dx + dz*dz)
+    # Two-channel upward octahedral encoding, relative to the same lattice
+    # as the terrain color map and the floating-origin stable coordinates.
+    l1 = 1 + np.abs(dx) + np.abs(dz)
+    nx, nz = -.5 * dx / l1 + .5, -.5 * dz / l1 + .5
+    concavity = gaussian_filter(h, 2.1) - h
+    stone = smooth_band(.080, .35, 1 - 1 / length)
+    stone = np.clip(stone - smooth_band(5, 24, concavity) * .27, 0, 1)
+
+    # Approximate low-sun self-shadowing by tracing towards the existing
+    # coastal key light once, during production, at several distances.
+    row, col = np.indices(h.shape, dtype=np.float32)
+    light_x, light_z = -.88, -.36
+    horizontal = np.hypot(light_x, light_z)
+    horizon = np.zeros_like(h)
+    for distance in (70, 130, 220, 340, 520, 770, 1090, 1530, 2100, 2900, 3950):
+        shift = distance / (spacing * horizontal)
+        rise = map_coordinates(h, (row + light_z * shift, col + light_x * shift), order=1, mode="nearest") - h
+        np.maximum(horizon, rise / distance, out=horizon)
+    solar_altitude = .31 / horizontal
+    visibility = 1.0 - smooth_band(solar_altitude - .055, solar_altitude + .070, horizon)
+    channels = np.stack((nx, nz, stone, .36 + visibility * .64), axis=-1)
+    Image.fromarray(np.rint(np.clip(channels, 0., 1.) * 255).astype(np.uint8)).save(OUTPUT / "bay-surface.png", optimize=True)
 
 
 def relief_colors(ground, name):
@@ -216,6 +263,10 @@ def pack_surfaces():
 
 
 OUTPUT.mkdir(parents=True, exist_ok=True)
+if "--coast-only" in sys.argv:
+    coastal_relief()
+    sys.exit()
+
 if "--alpine-surface-only" in sys.argv:
     heights = np.frombuffer(gzip.decompress((OUTPUT / "frost.height").read_bytes()), dtype="<i2")
     relief_colors(heights.reshape(EDGE, EDGE) / 4.0, "frost")

@@ -14,6 +14,8 @@ func _initialize() -> void:
 func compile() -> void:
 	for theatre in DATA.new().source.theatres:
 		var seed_id := int(theatre.seed)
+		if "--coast-only" in OS.get_cmdline_user_args() and seed_id != 413:
+			continue
 		if "--frost-only" in OS.get_cmdline_user_args() and seed_id != 704:
 			continue
 		if "--survey-only" in OS.get_cmdline_user_args() and not WORLD.FIELDS.has(seed_id):
@@ -109,6 +111,8 @@ func _encode_tile(heights: PackedFloat32Array) -> PackedByteArray:
 func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, stride: int, theatre: Dictionary, geology: Image, climate: PackedByteArray) -> ArrayMesh:
 	var points := PackedVector3Array()
 	var colors := PackedColorArray()
+	var normals := PackedVector3Array()
+	var coast := int(theatre.seed) == 413
 	var snow: bool = theatre.snow
 	var storm: bool = int(theatre.seed) == 116
 	var row_size := PATCH / stride + 1
@@ -129,6 +133,8 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 			var dx := (heights[z * EDGE + mini(EDGE - 1, x + 1)] - heights[z * EDGE + maxi(0, x - 1)]) / (2.0 * SPACING)
 			var dz := (heights[mini(EDGE - 1, z + 1) * EDGE + x] - heights[maxi(0, z - 1) * EDGE + x]) / (2.0 * SPACING)
 			var normal := Vector3(-dx, 1, -dz).normalized()
+			if coast:
+				normals.append(normal)
 			var powder := float((climate.decode_u32(i * 4) >> 14) & 255) / 255.0 if snow else 0.0
 			colors.append(_surface_color(at, normal, powder, rock, sun, geology, snow))
 	var arrays := []
@@ -136,15 +142,18 @@ func _patch(heights: PackedFloat32Array, origin: Vector2, start: Vector2i, strid
 	arrays[Mesh.ARRAY_VERTEX] = points
 	arrays[Mesh.ARRAY_COLOR] = colors
 	var faces := _faces(points, row_size, 1)
-	if stride == 1 and int(theatre.seed) == 704:
+	if stride == 1 and (coast or snow):
 		var patch_origin := origin + Vector2(start) * SPACING
 		if Rect2(patch_origin, Vector2.ONE * PATCH * SPACING).intersects(Rect2(-6250, -6200, 24576, 24576)):
-			var adaptive := _refine_survey_patch(points, colors, row_size, patch_origin, geology, rock, sun)
+			var adaptive := _refine_survey_patch(points, colors, normals, row_size, patch_origin, geology, rock, sun, int(theatre.seed))
 			points = adaptive.points
 			colors = adaptive.colors
+			normals = adaptive.normals
 			faces = adaptive.faces
 			arrays[Mesh.ARRAY_VERTEX] = points
 			arrays[Mesh.ARRAY_COLOR] = colors
+	if coast:
+		arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_INDEX] = faces
 	var resource := ArrayMesh.new()
 	resource.set_meta("boundary_side", row_size)
@@ -166,22 +175,30 @@ func _surface_color(at: Vector2, normal: Vector3, powder: float, rock: Color, su
 			base *= Color.WHITE.lerp(tint, 0.48)
 	return base * (0.59 + clampf(normal.dot(sun), 0.0, 1.0) * 0.52)
 
-func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, side: int,
-		patch_origin: Vector2, geology: Image, rock: Color, sun: Vector3) -> Dictionary:
-	const MID := SPACING * 0.5
-	const EDGE_ERROR := 7.0
-	const INTERIOR_ERROR := 9.0
-	var dense_side := (side - 1) * 2 + 1
+func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, normals: PackedVector3Array,
+		side: int, patch_origin: Vector2, geology: Image, rock: Color, sun: Vector3, seed_id: int) -> Dictionary:
+	var coast := seed_id == 413
+	var division := 4 if coast else 2
+	var sample_step := SPACING / float(division)
+	var edge_error := 5.0 if coast else 7.0
+	var interior_error := 6.0 if coast else 9.0
+	var dense_side := (side - 1) * division + 1
 	var dense: PackedFloat32Array = ClassDB.class_call_static("SkyTerrainKernel", "height_tile",
-		patch_origin.x, patch_origin.y, dense_side, MID, 704)
+		patch_origin.x, patch_origin.y, dense_side, sample_step, seed_id)
 	var survey := Rect2(-6250, -6200, 24576, 24576)
 	var survey_margin := survey.grow(SPACING)
-	var climate := WORLD.snow_controls(patch_origin, dense_side, MID, dense)
-	var tint := func(index: int, at: Vector2) -> Color:
-		var normal := Vector3(dense[index - 1] - dense[index + 1], SPACING,
+	var climate := PackedByteArray() if coast else WORLD.snow_controls(patch_origin, dense_side, sample_step, dense)
+	var point_at := func(index: int) -> Vector2:
+		return patch_origin + Vector2(index % dense_side, floori(float(index) / dense_side)) * sample_step
+	var add_detail := func(index: int) -> void:
+		var normal := Vector3(dense[index - 1] - dense[index + 1], sample_step * 2.0,
 			dense[index - dense_side] - dense[index + dense_side]).normalized()
-		var powder := float((climate.decode_u32(index * 4) >> 14) & 255) / 255.0
-		return _surface_color(at, normal, powder, rock, sun, geology, true)
+		var at: Vector2 = point_at.call(index)
+		var powder := 0.0 if coast else float((climate.decode_u32(index * 4) >> 14) & 255) / 255.0
+		points.append(Vector3(at.x, dense[index], at.y))
+		colors.append(_surface_color(at, normal, powder, rock, sun, geology, not coast))
+		if coast:
+			normals.append(normal)
 	var middle_vertices := {}
 	var faces := PackedInt32Array()
 	var refined := 0
@@ -191,45 +208,53 @@ func _refine_survey_patch(points: PackedVector3Array, colors: PackedColorArray, 
 			var b := a + 1
 			var c := a + side
 			var d := c + 1
-			var dense_a := z * 2 * dense_side + x * 2
-			var centre := dense_a + dense_side + 1
-			var centre_at := patch_origin + Vector2(x * 2 + 1, z * 2 + 1) * MID
+			var dense_a := z * division * dense_side + x * division
+			var centre := dense_a + (dense_side + 1) * (division / 2)
+			var centre_at: Vector2 = point_at.call(centre)
 			var centre_error := absf(dense[centre] - (points[b].y + points[c].y) * 0.5)
 			if not survey_margin.has_point(centre_at):
 				_push_face(faces, points, a, c, b)
 				_push_face(faces, points, b, c, d)
 				continue
 			var corners := [a, c, d, b]
-			var probes := [dense_a + dense_side, dense_a + dense_side * 2 + 1, dense_a + dense_side + 2, dense_a + 1]
+			var dense_corners := [dense_a, dense_a + dense_side * division,
+				dense_a + (dense_side + 1) * division, dense_a + division]
+			var increments := [dense_side, 1, -dense_side, -1]
 			var bounds := [x == 0, z == side - 2, x == side - 2, z == 0]
 			var contour := PackedInt32Array()
 			for i in 4:
 				var start: int = corners[i]
 				var next: int = corners[(i + 1) % 4]
-				var probe: int = probes[i]
 				contour.append(start)
-				var at := patch_origin + Vector2(probe % dense_side, floori(float(probe) / dense_side)) * MID
-				if bounds[i] or not survey.has_point(at):
+				if bounds[i]:
 					continue
-				if absf(dense[probe] - (points[start].y + points[next].y) * 0.5) <= EDGE_ERROR:
+				# Both cells sharing an edge make the same refinement decision.
+				var samples := PackedInt32Array()
+				var error := 0.0
+				for step in range(1, division):
+					var sample: int = dense_corners[i] + step * increments[i]
+					if not survey.has_point(point_at.call(sample)):
+						continue
+					samples.append(sample)
+					error = maxf(error, absf(dense[sample] - lerpf(points[start].y, points[next].y, float(step) / division)))
+				if error <= edge_error:
 					continue
-				if not middle_vertices.has(probe):
-					middle_vertices[probe] = points.size()
-					points.append(Vector3(at.x, dense[probe], at.y))
-					colors.append(tint.call(probe, at))
-				contour.append(middle_vertices[probe])
-			if contour.size() == 4 and (centre_error <= INTERIOR_ERROR or not survey.has_point(centre_at)):
+				for sample in samples:
+					if not middle_vertices.has(sample):
+						middle_vertices[sample] = points.size()
+						add_detail.call(sample)
+					contour.append(middle_vertices[sample])
+			if contour.size() == 4 and (centre_error <= interior_error or not survey.has_point(centre_at)):
 				_push_face(faces, points, a, c, b)
 				_push_face(faces, points, b, c, d)
 				continue
 			refined += 1
 			var centre_vertex := points.size()
-			points.append(Vector3(centre_at.x, dense[centre], centre_at.y))
-			colors.append(tint.call(centre, centre_at))
+			add_detail.call(centre)
 			for i in contour.size():
 				_push_face(faces, points, centre_vertex, contour[i], contour[(i + 1) % contour.size()])
 	print("Refined survey cells: ", refined, ", new vertices: ", points.size() - side * side)
-	return {"points":points, "colors":colors, "faces":faces}
+	return {"points":points, "colors":colors, "normals":normals, "faces":faces}
 
 func _push_face(faces: PackedInt32Array, points: PackedVector3Array, a: int, b: int, c: int) -> void:
 	if maxf(points[a].y, maxf(points[b].y, points[c].y)) > -4.0:

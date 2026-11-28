@@ -15,6 +15,9 @@ const RADIUS := 2
 const RESIDENT_MIN := Vector2i(-20, -24)
 const RESIDENT_SIDE := 48
 const RESIDENT_SHADER = preload("res://shaders/terrain_resident.gdshader")
+const COAST_SHADER = preload("res://shaders/terrain_coastal.gdshader")
+const COAST_ROCK := Color("#b5aea3")
+const COAST_SCREE := Color("#b6b3a3")
 const SKY = preload("res://shaders/sky.gdshader")
 const CLOUDS = preload("res://shaders/battle_clouds.gdshader")
 const Ocean = preload("res://game/ocean.gd")
@@ -129,13 +132,13 @@ func configure(theatre: Dictionary, camera: Camera3D, start: Vector3, prepared :
 	var coast := seed_value == 413
 	var ground: Texture2D = load("res://assets/environment/snow-height.webp") if snow else LOWLAND
 	var lowland := _surface("积雪" if snow else "砂砾地表",
-		Color("#fafcff") if snow else (Color("#b6b3a3") if coast else Color("#b3b9a8")),
+		Color("#fafcff") if snow else (COAST_SCREE if coast else Color("#b3b9a8")),
 		0.14, ground, NORMAL_LOWLAND, 0.19 if snow else 0.45)
 	if coast:
 		lowland.set_detiling_rotation(0.09)
 		lowland.set_detiling_shift(0.27)
 	terrain.assets.set_texture_asset(0, lowland)
-	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (Color("#b5aea3") if coast else Color("#a6aaa5")),
+	var rock := _surface("裸露岩层", Color("#d9dfe5") if snow else (COAST_ROCK if coast else Color("#a6aaa5")),
 		0.57 if snow else 0.155, ROCK, NORMAL_ROCK)
 	if snow or coast:
 		# Break the period of the scan and avoid stretching it across the exposed face.
@@ -572,11 +575,20 @@ func _add_resident_ground() -> void:
 	var compiled := load("res://assets/environment/world-%d.scn" % seed_value) as PackedScene
 	resident = compiled.instantiate() as Node3D
 	var material := ShaderMaterial.new()
-	material.shader = RESIDENT_SHADER
+	material.shader = COAST_SHADER if seed_value == 413 else RESIDENT_SHADER
 	_set_aerial_transport(material)
-	material.set_shader_parameter("geology_scan", ROCK)
-	material.set_shader_parameter("relief_color_strength", 0.23 if seed_value == 413 else 0.11)
-	material.set_shader_parameter("coastal_geology", 0.72 if seed_value == 413 else 0.0)
+	if seed_value == 413:
+		material.set_shader_parameter("surveyed_surface", load("res://assets/environment/bay-surface.png"))
+		material.set_shader_parameter("geology_colors", load("res://assets/environment/bay-color.png"))
+		material.set_shader_parameter("rock_scan", ROCK)
+		material.set_shader_parameter("scree_scan", LOWLAND)
+		material.set_shader_parameter("rock_tint", COAST_ROCK)
+		material.set_shader_parameter("scree_tint", COAST_SCREE)
+		material.set_shader_parameter("survey_origin", RELIEF_COLOR_ORIGIN)
+		material.set_shader_parameter("survey_span", 24576.0)
+	else:
+		material.set_shader_parameter("geology_scan", ROCK)
+		material.set_shader_parameter("relief_color_strength", 0.11)
 	material.set_shader_parameter("first_region", Vector2(RESIDENT_MIN))
 	material.set_shader_parameter("region_span", TILE)
 	residency = Image.create_empty(RESIDENT_SIDE, RESIDENT_SIDE, false, Image.FORMAT_R8)
