@@ -48,8 +48,7 @@ def spline(rows):
     return PchipInterpolator(entries[:, 0], entries[:, 1:], axis=0)
 
 
-# Width in the transverse direction, sampled against the design top view.
-# The low plateau after the forward strake is the gap before the main wing.
+# Original shell stations also locate the unchanged inlet and canopy fixtures.
 PLANFORM = np.array([
     (0, .006), (.075, .217), (.14, .48), (.215, .75), (.294, 1.03),
     (.338, 1.31), (.365, 1.62), (.405, 2.60), (.448, 3.17), (.461, 3.13),
@@ -58,6 +57,17 @@ PLANFORM = np.array([
     (.829, 7.25), (.865, 7.19), (.881, 6.97), (.883, 6.31),
     (.894, 5.12), (.903, 4.34), (.912, 3.31), (.927, 2.27), (.961, 1.75), (.985, 1.64),
 ])
+# Aircraft 02 top view. Retain the fuselage stations and replace the outboard
+# silhouette, including the two rear-edge slopes and the clipped tip.
+WING_OUTLINE = np.array([
+    (.338, 1.31), (.365, 1.60), (.405, 2.21), (.448, 2.39), (.461, 2.35),
+    (.466, 2.30), (.479, 2.23), (.525, 2.44), (.584, 2.98), (.623, 3.48),
+    (.682, 4.10), (.732, 4.72), (.762, 5.08), (.813, 5.50), (.829, 5.62),
+    (.865, 5.58), (.881, 5.36), (.883, 5.20), (.894, 4.21), (.903, 3.71),
+    (.912, 3.20), (.927, 2.36), (.961, 1.75), (.985, 1.64),
+])
+FOIL_CHORD = np.array([0., .055, .15, .31, .48, .65, .82, .95, 1.])
+FOIL_THICKNESS = np.array([0., .32, .77, 1., .91, .70, .40, .13, 0.])
 # Width at the chine, height of the crown above it, and underside depth.
 BODY = spline([
     (0, .005, .005, .006), (.075, .186, .089, .071),
@@ -86,6 +96,11 @@ def clampstep(low, high, value):
 
 def span_at(q):
     return np.interp(q, PLANFORM[:, 0], PLANFORM[:, 1])
+
+
+def wing_span_at(q):
+    return np.where(q < WING_OUTLINE[0, 0], span_at(q),
+                    np.interp(q, WING_OUTLINE[:, 0], WING_OUTLINE[:, 1]))
 
 
 def cross_section(q, w):
@@ -197,14 +212,18 @@ def ship_skin(asset):
                 w = span_at(q)
                 b, root_chine, crown, belly, center = cross_section(q, w)
                 core_x, core_y, original_y = skin_section(q, b, root_chine, crown, belly, center, top)
-                local_span = w - b
+                local_span = wing_span_at(q) - b
                 outside_x = b + local_span * beyond
-                # The inner blend shares the chine height, then tapers into
-                # the wing wedge while distinct span stations carry camber.
-                wave = np.interp(beyond, [0., .13, .40, .64, .86, 1.], [0., .45, .91, .69, .28, 0.])
-                thickness = clampstep(.026, 1.0, local_span) * (.175 if top else .19)
-                root_blend = (original_y[-1] - root_chine) * (1.0 - beyond) ** 3
-                wing_y = root_chine + wing_fold(outside_x) - wing_fold(b) + root_blend + eps * wave * thickness
+                # Grow the inner wing from the shell shoulder, then taper its
+                # thickness continuously toward the outer bevel.
+                main = clampstep(.479, .60, q) * (1.0 - clampstep(.847, .940, q))
+                inner = np.interp(beyond, [0., .09, .20, .34, .53, .72, .90, 1.],
+                                  [0., .23, .74, .93, .70, .39, .10, 0.])
+                prior = np.interp(beyond, [0., .13, .40, .64, .86, 1.], [0., .45, .91, .69, .28, 0.])
+                thickness = clampstep(.026, 1.0, local_span)
+                thickness *= (.175 if top else .19) * prior * (1.0 - main) + (.29 if top else .26) * inner * main
+                root_blend = (core_y[-1] - root_chine) * (1.0 - beyond) ** (3.0 - main)
+                wing_y = root_chine + wing_fold(outside_x) - wing_fold(b) + root_blend + eps * thickness
                 z = np.full(columns, NOSE + q*LENGTH)
                 rows.extend(zip(sign * np.concatenate((b * FUSELAGE_X, outside_x)),
                                 np.concatenate((original_y, wing_y)), z))
@@ -390,7 +409,7 @@ def fit_navigation_lights(asset):
         # Refit the retained airframe lamps to the new wing tip, using the same
         # edge geometry as the wing instead of the previous asset's coordinates.
         q = .841 + (points[:, 2] - 6.19) / LENGTH * .62
-        width = span_at(q)
+        width = wing_span_at(q)
         shift = np.max(abs(points[:, 0])) - abs(points[:, 0])
         points[:, 0] = np.sign(points[:, 0]) * (width - shift - .03)
         points[:, 1] += .241 + .065 - .11 * clampstep(.79, .966, q) + wing_fold(width)
@@ -474,37 +493,103 @@ def intakes(asset):
         loft(asset, "Inboard intake bulge", bulge, CHINE, sign > 0, True)
 
 
+def foil_shell(asset, name, halves, flip, accent_rows, accent_leading=False, skin=WING):
+    # Both sides meet at the chord edges. Only the narrow spanwise tip needs a cap.
+    for i, sections in enumerate(halves):
+        row_count = len(sections)
+        points = np.concatenate(sections)
+        faces = patch_indices(row_count, len(FOIL_CHORD), flip != bool(i))
+        rows = np.repeat(np.arange(row_count - 1), 2 * (len(FOIL_CHORD) - 1))
+        chord = np.tile(np.repeat(FOIL_CHORD[:-1], 2), row_count - 1)
+        accent = (rows >= accent_rows) | ((chord < .05) & accent_leading)
+        normals = normals_for(points, faces)
+        for material, selected in ((skin, ~accent), (EDGE, accent)):
+            put_mesh(asset, name, points, faces[selected], material,
+                     normals=normals, texcoords=skin_uv(points))
+    rim = np.vstack((halves[0][-1], halves[1][-1][-2:0:-1]))
+    center = rim.mean(axis=0)
+    near_tip = halves[0][-2].mean(axis=0)
+    faces = np.array([(len(rim), i, (i + 1) % len(rim)) for i in range(len(rim))])
+    if np.dot(np.cross(rim[0] - center, rim[1] - center), center - near_tip) < 0.:
+        faces = faces[:, ::-1]
+    vertices = np.vstack((rim, center))
+    put_mesh(asset, name, vertices, faces, EDGE, texcoords=skin_uv(vertices))
+
+
+def canards(asset):
+    # Aircraft 02 shows a long tapered canard, with the aft edge close to
+    # the main-wing shoulder and an upturned, thin tip in the frontal view.
+    # Span, axial bounds, leading-edge height, chord twist and half thickness.
+    profiles = [
+        (1.13, -3.06, -0.94, .212, -.024, .113),
+        (1.39, -2.93, -0.96, .229, -.041, .111),
+        (1.72, -2.66, -0.97, .239, -.059, .087),
+        (2.10, -2.28, -0.99, .248, -.076, .065),
+        (2.51, -1.86, -1.04, .264, -.094, .044),
+        (2.89, -1.48, -1.09, .292, -.099, .024),
+        (3.05, -1.34, -1.13, .309, -.097, .014),
+    ]
+    camber = np.sin(np.pi * FOIL_CHORD) * .025
+    for sign in (-1., 1.):
+        halves = [
+            [np.column_stack((np.full(len(FOIL_CHORD), x * sign),
+                              y + twist * FOIL_CHORD + camber + face * half * FOIL_THICKNESS,
+                              start + (end - start) * FOIL_CHORD))
+             for x, start, end, y, twist, half in profiles]
+            for face in (1., -1.)
+        ]
+        foil_shell(asset, "Tapered canard surfaces", halves, sign > 0, 4, True)
+        # Extend the upper material over the stationary shoulder; embed both
+        # edges so the fillet does not become an independent floating plate.
+        sections = []
+        for z, lift, width in [(-3.42, .008, .18), (-2.97, .071, .32), (-2.48, .136, .43),
+                               (-1.96, .153, .45), (-1.45, .131, .39), (-.99, .053, .33), (-.58, .005, .21)]:
+            q = (z - NOSE) / LENGTH
+            shoulder = cross_section(q, span_at(q))[0]
+            coords = []
+            for t, loft_height in [(-.90, -.025), (-.39, lift*.63), (.10, lift),
+                                    (.52, lift*.74), (1., -.024)]:
+                x = shoulder + t * width
+                pt = skin_point(q, x) + [0., loft_height, 0.]
+                coords.append(pt * [sign, 1., 1.])
+            sections.append(coords)
+        loft(asset, "Canard shoulder fillets", np.asarray(sections), CHINE, sign < 0, True)
+
+
 def tail_fins(asset):
-    chord_t = np.array([0., .07, .21, .43, .65, .87, .97, 1.])
-    cross = np.array([.07, .63, .95, 1., .86, .51, .26, .07])
-    rows = [(0., 1.30, .27, 4.84, 10.25, .22),
-            (.30, 1.45, 1.08, 5.76, 10.16, .207),
-            (.67, 1.66, 2.16, 7.20, 9.94, .14),
-            (.87, 1.78, 2.72, 7.97, 9.86, .098),
-            (1., 1.87, 3.02, 8.54, 9.71, .071)]
-    for sign in (-1, 1):
-        for side in (-1, 1):
-            verts = np.concatenate([
-                np.column_stack((sign * (x + side * thick * cross), np.full(len(chord_t), y),
-                                 z0 + (z1 - z0) * chord_t))
-                for _, x, y, z0, z1, thick in rows
-            ])
-            faces = patch_indices(len(rows), len(chord_t), sign * side < 0)
-            coords = verts[faces].mean(axis=1)
-            q = np.tile(np.repeat(chord_t[:-1], 2), len(rows) - 1)
-            bright = (coords[:, 1] > 2.15) | (q < .06)
-            n = normals_for(verts, faces)
-            for wanted, color in [(~bright, SKIN), (bright, EDGE)]:
-                put_mesh(asset, "Canted clipped fins", verts, faces[wanted], color, normals=n,
-                         texcoords=skin_uv(verts))
-        # Close the cap and two narrow bevels, so the fin still reads from the nose.
-        edges = []
-        for _, x, y, z0, z1, thick in rows:
-            edges.append(np.array([[sign*(x - thick*.07), y, z0], [sign*(x + thick*.07), y, z0],
-                                   [sign*(x + thick*.07), y, z1], [sign*(x - thick*.07), y, z1]]))
-        for left, right in [(0, 1), (2, 3)]:
-            loft(asset, "Fin edge bevels", [edge[[left, right]] for edge in edges], METAL, sign < 0)
-        loft(asset, "Fin edge bevels", [edges[-1][[0, 1]], edges[-1][[3, 2]]], METAL, sign > 0)
+    # The side view fixes the swept leading edge and the aft-raked cap;
+    # the front view fixes the outward lean independently of the sweep.
+    # Height above the attachment, front and rear bounds, half thickness.
+    rows = [
+        (.00, 5.51, 9.87, .194),
+        (.30, 5.83, 9.98, .183),
+        (.86, 6.65, 10.12, .144),
+        (1.67, 7.71, 10.32, .105),
+        (2.18, 8.43, 10.46, .075),
+        (2.56, 8.98, 10.55, .051),
+        (2.69, 9.17, 10.61, .038),
+        (2.78, 9.38, 10.55, .027),
+    ]
+    for sign in (-1., 1.):
+        halves = [
+            [np.column_stack((sign * (1.245 + height * .147 + face * half * FOIL_THICKNESS),
+                              np.full(len(FOIL_CHORD), .215 + height),
+                              start + (end - start) * FOIL_CHORD))
+             for height, start, end, half in rows]
+            for face in (1., -1.)
+        ]
+        foil_shell(asset, "Canted clipped fins", halves, sign < 0, 4, True, SKIN)
+        blend = []
+        for z, width, rise in [(4.76,.125,.006), (5.38,.235,.072), (6.25,.32,.17),
+                               (7.58,.34,.232), (8.71,.31,.198), (9.63,.269,.128), (10.05,.19,.016)]:
+            q = (z - NOSE) / LENGTH
+            row = []
+            for f, height in [(-1.,-.019),(-.54,.52),(-.16,1.),(.20,.96),(.59,.53),(1.,-.019)]:
+                pt = skin_point(q, 1.245 + width * f)
+                pt[1] += height if height < 0 else rise * height
+                row.append(pt * [sign, 1., 1.])
+            blend.append(row)
+        loft(asset, "Swept fin root fairings", np.asarray(blend), CHINE, sign < 0, True)
 
 
 def tail_and_nozzles(asset):
@@ -649,6 +734,7 @@ def reconstruct(source, output, normal_map, orm_map):
     glazing(asset)
     intakes(asset)
     access_panels(asset)
+    canards(asset)
     tail_fins(asset)
     tail_and_nozzles(asset)
     gear_panels(asset)
@@ -669,8 +755,8 @@ def reconstruct(source, output, normal_map, orm_map):
     glass = asset.materials[asset.names[GLASS]]
     glass["doubleSided"] = False
     glass["pbrMetallicRoughness"].update(baseColorFactor=[.10, .28, .26, .44], roughnessFactor=.135)
-    metadata["reference_fighter_fit_version"] = 6
-    metadata["reference_fighter_fit"] = "Aircraft/01–04; embedded bubble canopy and local shell relief"
+    metadata["reference_fighter_fit_version"] = 7
+    metadata["reference_fighter_fit"] = "Aircraft/01–04; tapered canards, clipped mainplane and swept fin roots"
     prune_nodes(asset)
     write_model(output, asset.doc, asset.compact())
     bake_panel_maps(normal_map, orm_map)
