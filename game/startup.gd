@@ -71,7 +71,11 @@ func _load_game() -> void:
 	game.catalogue = catalogue
 	game.profile = profile
 	get_tree().root.add_child(game)
-	if not is_instance_valid(game.get("lobby_screen")):
+	var stage := game.get("showcase_stage") as Node
+	var display := game.get("showcase_aircraft") as Node
+	if (not is_instance_valid(game.get("lobby_screen"))
+			or not stage or not stage.has_node("CarrierOcean")
+			or not display or display.get_child_count() == 0):
 		game.queue_free()
 		_show_failure("大厅", MAIN)
 		return

@@ -147,7 +147,7 @@ jobs:
           sed -i "/^\[preset.0.options\]$/a custom_template/release=\"$template\"" export_presets.cfg
           godot --headless --export-release 'Android ARM64' dist/skyblade-v18.3-arm64.apk
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/skyblade-v18.3-arm64.apk > dist/signature.txt
-          python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" > dist/build-comparison.json
+          python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" --startup-test > dist/build-comparison.json
       - uses: actions/upload-artifact@v4
         if: env.CUSTOM_RELEASE == 'true'
         with:

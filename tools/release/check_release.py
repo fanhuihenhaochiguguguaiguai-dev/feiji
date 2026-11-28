@@ -2,9 +2,12 @@
 import argparse
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
-from zipfile import ZipFile
+import subprocess
+from tempfile import TemporaryDirectory
+from zipfile import ZIP_STORED, ZipFile
 
 
 def referenced_resources(root):
@@ -39,10 +42,37 @@ def check_packed_resource(package, entries, resource, origin):
         assert all(f"assets/{target}" in entries for target in targets), f"Broken import/remap: {alias} → {targets}"
 
 
+def check_exported_startup(package, root):
+    # Run the APK's assets without the source tree as a fallback. Only the
+    # native libraries use desktop builds so this can run on the Linux runner.
+    with TemporaryDirectory(prefix="skyblade-startup-") as directory:
+        work = Path(directory)
+        runtime = work / "runtime"
+        game_pack = work / "exported-assets.zip"
+        for folder in ("addons/terrain_3d/bin", "native/bin"):
+            (runtime / folder).mkdir(parents=True)
+            for library in (root / folder).glob("*linux*x86_64.so"):
+                (runtime / folder / library.name).symlink_to(library)
+        with ZipFile(game_pack, "w", ZIP_STORED) as pack:
+            for entry in package.infolist():
+                if entry.filename.startswith("assets/") and not entry.is_dir():
+                    pack.writestr(entry.filename.removeprefix("assets/"), package.read(entry))
+        result = subprocess.run(
+            ["godot", "--headless", "--path", str(runtime), "--main-pack", str(game_pack),
+             "--script", str(root / "qa/reference_ui.gd")],
+            env={**os.environ, "XDG_DATA_HOME": str(work / "user-data")},
+            capture_output=True, text=True, timeout=100,
+        )
+        output = result.stdout + result.stderr
+        passed = result.returncode == 0 and '{"failures":[]}' in result.stdout and "ERROR:" not in output
+        assert passed, "Exported startup failed:\n" + output[:6000] + "\n" + output[-2000:]
+
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("stock", type=Path)
 parser.add_argument("built", type=Path)
 parser.add_argument("template", type=Path)
+parser.add_argument("--startup-test", action="store_true")
 args = parser.parse_args()
 godot_library = "lib/arm64-v8a/libgodot_android.so"
 
@@ -76,10 +106,13 @@ with ZipFile(args.stock) as stock, ZipFile(args.built) as built, ZipFile(args.te
         check_packed_resource(built, entries, resource, origin)
     for resource in re.findall(r'"res://([^"]+)"', selected[1]):
         check_packed_resource(built, entries, resource, preset.name)
+    if args.startup_test:
+        check_exported_startup(built, root)
     print(json.dumps({
         "stock_release_bytes":args.stock.stat().st_size,
         "custom_release_bytes":args.built.stat().st_size,
         "stock_engine_bytes":stock.getinfo(godot_library).file_size,
         "custom_engine_bytes":len(elf),
-        "custom_engine_sha256":sha256(elf).hexdigest()
+        "custom_engine_sha256":sha256(elf).hexdigest(),
+        "exported_startup_tested":args.startup_test
     }, indent=2))
