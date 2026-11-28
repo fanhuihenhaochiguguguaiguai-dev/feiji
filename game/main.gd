@@ -521,6 +521,9 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	loading = true
 	last_operation = {"mode":mode, "task":operation, "runway":runway}
 	_show_loading(str(operation.name))
+	# The opaque loading screen covers the carrier. Keep its 3D rendering
+	# from competing with texture uploads while the sortie is being prepared.
+	get_viewport().disable_3d = true
 	await get_tree().process_frame
 	var prepared: Dictionary = await _prepare_sortie(mode, operation, runway)
 	if prepared.is_empty():
@@ -541,6 +544,7 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 		_close_battle()
 		_sortie_load_failed("战场装配失败，请重试")
 		return
+	get_viewport().disable_3d = false
 	current_battle.paused = true
 	if DisplayServer.get_name() != "headless":
 		var camera := current_battle.camera
@@ -571,6 +575,7 @@ func _show_loading(title: String) -> void:
 	loading_screen.configure(preload("res://assets/loading/alpine.webp"), font, title)
 
 func _sortie_load_failed(message: String) -> void:
+	get_viewport().disable_3d = false
 	loading = false
 	loading_screen = null
 	_open("lobby")

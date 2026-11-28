@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile
 
@@ -63,14 +64,21 @@ def check_exported_startup(package, root, vulkan=False):
             modes.append(["--render-thread", "safe", "--rendering-method", "mobile", "--rendering-driver", "vulkan",
                           "--audio-driver", "Dummy", "--fixed-fps", "90", "--resolution", "640x360", *boot, "--", "--vulkan-launch"])
         for i, mode in enumerate(modes):
-            result = subprocess.run(
-                ["godot", *mode],
-                env={**os.environ, "XDG_DATA_HOME": str(work / f"user-data-{i}"), "XDG_CACHE_HOME": str(work / f"cache-{i}")},
-                capture_output=True, text=True, timeout=200,
-            )
+            renderer = "headless" if i == 0 else "Mobile Vulkan"
+            print(f"Checking the exported game with {renderer}", file=sys.stderr, flush=True)
+            try:
+                result = subprocess.run(
+                    ["godot", *mode],
+                    env={**os.environ, "XDG_DATA_HOME": str(work / f"user-data-{i}"), "XDG_CACHE_HOME": str(work / f"cache-{i}")},
+                    capture_output=True, text=True, timeout=200,
+                )
+            except subprocess.TimeoutExpired as error:
+                output = ((error.stdout or b"") + (error.stderr or b"")).decode(errors="replace")
+                raise AssertionError(f"Exported game timed out with {renderer}:\n{output[-6000:]}") from None
             output = result.stdout + result.stderr
             passed = result.returncode == 0 and '{"failures":[]}' in result.stdout and "ERROR:" not in output
-            assert passed, "Exported startup failed:\n" + output[:6000] + "\n" + output[-2000:]
+            assert passed, f"Exported startup failed with {renderer} (exit {result.returncode}):\n{output[-6000:]}"
+            print(f"Passed the exported lobby, sortie and return test with {renderer}", file=sys.stderr, flush=True)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
