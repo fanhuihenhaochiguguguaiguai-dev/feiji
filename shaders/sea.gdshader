@@ -9,7 +9,8 @@ uniform vec3 impact_centre;
 uniform float impact_age = 3.8;
 uniform vec4 deep : source_color = vec4(0.027, 0.090, 0.139, 1.0);
 uniform vec4 scatter_color : source_color = vec4(0.098, 0.264, 0.277, 1.0);
-uniform sampler2D shore_noise : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D ocean_fields : repeat_enable, filter_linear_mipmap;
+uniform vec4 slope_variance = vec4(0.0505, 0.0354, 0.0571, 0.0527);
 uniform sampler2D water_response : repeat_disable, filter_linear;
 uniform sampler2D coast_depth : repeat_disable, filter_linear;
 uniform vec4 coast_area = vec4(0.0);
@@ -20,25 +21,48 @@ uniform float spectral_weight = 0.0;
 uniform float distant_reflection = 1.0;
 varying vec3 water_point;
 
-const vec2 SWELL_AXIS = vec2(0.863, -0.505);
-const float SWELL_K = TAU / 93.0;
-const float OUTER_GAIN = 0.62;
-const float INNER_GAIN = 0.40;
+const float OUTER_GAIN = 0.68;
+const float INNER_GAIN = 0.34;
+const float CAPILLARY_GAIN = 0.50;
 
-// Height, transverse slope and aeration are derived from the same pressure field.
+vec2 sea_state(vec2 point) {
+	// The blue and alpha channels carry independent kilometre-scale wave groups.
+	vec2 fields = textureLod(ocean_fields, point / 5100.0, 0.0).ba;
+	return mix(vec2(0.68, 0.52), vec2(1.46, 1.53), smoothstep(vec2(0.15), vec2(0.85), fields));
+}
+
+vec3 wave_profile(vec2 point, vec2 axis, float wave_number, float height) {
+	float phase = dot(axis, point) * wave_number - TIME * sqrt(9.81 * wave_number);
+	return vec3(height * sin(phase), axis * (height * wave_number * cos(phase)));
+}
+
+vec3 analytical_swell(vec2 point, vec2 state) {
+	return wave_profile(point, vec2(0.863, -0.505), 0.06756, state.x * 0.53)
+		+ wave_profile(point, vec2(0.477, -0.879), 0.11855, state.x * 0.27)
+		+ wave_profile(point, vec2(0.975, 0.222), 0.26091, state.y * 0.13);
+}
+
+// Height and slope share the crest; travelling packets break up the foam.
 vec3 aircraft_wake(vec2 point) {
 	vec2 delta = point - wake.xy;
 	float travel = -dot(delta, wake.zw);
 	float across = dot(delta, vec2(-wake.w, wake.z));
-	if (travel <= 0.0 || travel >= 185.0 || abs(across) > 17.0) { return vec3(0.0); }
-	float spread = 1.3 + travel * 0.075;
-	float edge = abs(across) / spread;
-	float taper = smoothstep(0.0, 6.0, travel) * (1.0 - smoothstep(35.0, 185.0, travel));
-	float mask = exp(-edge * edge * 3.9) * taper * wake_strength;
-	float crest = 1.35 * abs(across) - 0.21 * travel;
-	float amplitude = mask * 0.31;
-	return vec3(sin(crest) * amplitude, sign(across) * 1.35 * cos(crest) * amplitude,
-		smoothstep(0.22, 0.93, sin(crest)) * mask);
+	if (travel <= 0.0 || travel >= 185.0 || abs(across) > 18.0) { return vec3(0.0); }
+	float drift = 0.9 * sin(0.057 * travel - TIME * 0.63) * smoothstep(6.0, 88.0, travel);
+	across -= drift;
+	float spread = 1.6 + travel * 0.072;
+	float edge = across / spread;
+	float taper = smoothstep(0.0, 7.0, travel) * (1.0 - smoothstep(27.0, 185.0, travel));
+	float mask = exp(-edge * edge * 3.2) * taper * wake_strength;
+	float packet = sin(0.29 * travel - TIME * 3.2 + across * 0.47)
+		+ 0.55 * sin(travel * 0.44 + across * 1.3);
+	float phase = 1.26 * abs(across) - 0.22 * travel + 0.34 * packet;
+	float crest = sin(phase);
+	float amplitude = mask * (0.21 + 0.047 * packet);
+	float transverse = sign(across) * 1.26 * cos(phase) * amplitude
+		- crest * amplitude * 6.4 * edge / spread;
+	float aeration = smoothstep(0.45, 0.93, crest) * smoothstep(-0.40, 1.25, packet) * mask;
+	return vec3(crest * amplitude, transverse, aeration);
 }
 
 vec4 water_impact(vec2 point) {
@@ -51,9 +75,29 @@ vec4 water_impact(vec2 point) {
 		strength * smoothstep(0.71, 1.0, sin(phase)));
 }
 
-float coast_crest(float terrain_height, vec2 uv) {
-	float crest = terrain_height * 0.66 + TIME * 1.6 + sin(dot(uv, vec2(0.071, -0.063))) * 0.48;
-	return 0.5 + 0.5 * sin(crest);
+vec2 shore_sample(vec2 point) {
+	vec2 coord = (point - coast_area.xy) * coast_area.z;
+	vec2 margin = min(coord, vec2(1.0) - coord);
+	float influence = smoothstep(0.0, 0.12, min(margin.x, margin.y));
+	float elevation = textureLod(coast_depth, coord + vec2(coast_area.w * 0.5), 0.0).r * 63.75 - 32.0;
+	return vec2(elevation, influence);
+}
+
+// Low-order shoaling: a shallower bottom slows and steepens the incoming crest.
+// Return height, attenuation of offshore waves and foam from the same crest.
+vec3 shore_wave(vec2 point, vec2 bed, vec2 state) {
+	float depth = max(0.0, -bed.x);
+	float shoaling = smoothstep(0.22, 1.6, depth) * (1.0 - smoothstep(3.0, 15.0, depth)) * bed.y;
+	float bottom_phase = 1.26 * sqrt(depth + 0.3);
+	float phase = dot(point, vec2(0.062, -0.049)) - bottom_phase - TIME * 1.26;
+	float interruption = 0.17 * sin(dot(point, vec2(0.28, 0.19))) + 0.12 * sin(dot(point, vec2(0.09, -0.33)));
+	float crest = 0.5 + 0.5 * cos(phase + interruption);
+	float height = (pow(crest, 3.0) - 0.16) * shoaling * (0.55 + state.x * 0.24);
+	float attenuate = 1.0 - 0.73 * bed.y * (1.0 - smoothstep(0.7, 8.5, depth));
+	float breaks = 1.0 - smoothstep(1.1, 6.3, depth);
+	float foam = smoothstep(0.78, 0.98, crest + interruption * 0.39)
+		* shoaling * breaks * state.x * 0.84;
+	return vec3(height, attenuate, foam);
 }
 
 void vertex() {
@@ -68,32 +112,33 @@ void vertex() {
 	float swell_geometry = 1.0 - smoothstep(120.0, 680.0, radius_m);
 	float ripple_geometry = 1.0 - smoothstep(42.0, 155.0, radius_m);
 	vec3 displacement = vec3(0.0);
-	if (spectral_enabled && spectral_weight > 0.0 && swell_geometry > 0.0) {
-		// The retained FFT packs the result of its last pass in transposed order.
-		displacement = textureLod(spectral_displacement, vec3(surface.yx / 160.0, 0), 0.0).xyz * (OUTER_GAIN * swell_geometry);
-		if (ripple_geometry > 0.0) {
-			displacement += textureLod(spectral_displacement, vec3(surface.yx / 39.0, 1), 0.0).xyz * (INNER_GAIN * ripple_geometry);
+	if (swell_geometry > 0.0) {
+		vec2 state = sea_state(surface);
+		if (spectral_enabled && spectral_weight > 0.0) {
+			// The final Stockham pass leaves the texture transposed.
+			displacement = textureLod(spectral_displacement, vec3(surface.yx / 160.0, 0), 0.0).xyz
+				* (OUTER_GAIN * state.x * swell_geometry);
+			if (ripple_geometry > 0.0) {
+				displacement += textureLod(spectral_displacement, vec3(surface.yx / 39.0, 1), 0.0).xyz
+					* (INNER_GAIN * state.y * ripple_geometry);
+			}
 		}
-	}
-	if (spectral_weight < 1.0 && swell_geometry > 0.0) {
-		float swell = sin(dot(SWELL_AXIS, surface) * SWELL_K + TIME * 0.79) * (0.65 * swell_geometry);
-		displacement = mix(vec3(0.0, swell, 0.0), displacement, spectral_weight);
+		if (spectral_weight < 1.0) {
+			float swell = analytical_swell(surface, state).x * swell_geometry;
+			displacement = mix(vec3(0.0, swell, 0.0), displacement, spectral_weight);
+		}
+		if (coast_area.w > 0.0) {
+			vec2 bed = shore_sample(surface);
+			vec3 break_water = shore_wave(surface, bed, state);
+			displacement *= break_water.y;
+			displacement.y += break_water.x * ripple_geometry;
+		}
 	}
 	if (wake_strength > 0.0 && ripple_geometry > 0.0) {
 		displacement.y += aircraft_wake(surface).x * ripple_geometry;
 	}
 	if (impact_age < 3.8 && ripple_geometry > 0.0) {
 		displacement.y += water_impact(surface).x * ripple_geometry;
-	}
-	if (coast_area.w > 0.5 && ripple_geometry > 0.0) {
-		vec2 coord = (surface - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
-		float edge = min(min(coord.x, coord.y), min(1.0 - coord.x, 1.0 - coord.y));
-		if (edge > 0.0) {
-			float elevation = textureLod(coast_depth, coord, 0.0).r * 63.75 - 32.0;
-			float shoal = smoothstep(-11.0, -3.0, elevation) * (1.0 - smoothstep(-1.0, 1.0, elevation));
-			float crest = coast_crest(elevation, surface);
-			displacement.y += (crest * crest * crest - 0.12) * 0.69 * shoal * ripple_geometry * smoothstep(0.0, 0.11, edge);
-		}
 	}
 	VERTEX += displacement;
 	water_point = vec3(surface.x, displacement.y, surface.y);
@@ -102,73 +147,94 @@ void vertex() {
 void fragment() {
 	float distance_m = length(VERTEX);
 	vec2 uv = water_point.xz;
-	// Migrate the subpixel slope energy to the reflection lobe using the pixel's world footprint.
-	float footprint = max(length(dFdx(uv)), length(dFdy(uv)));
-	float outer_resolved = 1.0 - smoothstep(1.2, 11.0, footprint);
-	float inner_resolved = 1.0 - smoothstep(0.34, 2.5, footprint);
-	float near_detail = 1.0 - smoothstep(550.0, 1850.0, distance_m);
-	vec2 flow = vec2(0.014, -0.009) * TIME;
-	vec2 fine = vec2(0.0);
-	if (inner_resolved > 0.0 && near_detail > 0.0) {
-		fine = (texture(shore_noise, uv * 0.17 + flow).rg - vec2(0.5)) * (0.094 * inner_resolved * near_detail);
+	vec2 dx = dFdx(uv);
+	vec2 dz = dFdy(uv);
+	float footprint = max(length(dx), length(dz));
+	float outer_resolved = 1.0 - smoothstep(1.40, 11.5, footprint);
+	float inner_resolved = 1.0 - smoothstep(0.34, 3.0, footprint);
+	float fine_resolved = 1.0 - smoothstep(0.12, 0.94, footprint);
+	float interaction = 1.0 - smoothstep(425.0, 1350.0, distance_m);
+	vec2 state = sea_state(uv);
+	vec2 bed = vec2(-32.0, 0.0);
+	vec3 breaker = vec3(0.0, 1.0, 0.0);
+	if (coast_area.w > 0.0 && distance_m < 6100.0) {
+		bed = shore_sample(uv);
+		bed.y *= 1.0 - smoothstep(4200.0, 6100.0, distance_m);
+		breaker = shore_wave(uv, bed, state);
 	}
-	vec2 gradient = fine;
+	vec2 fine = vec2(0.0);
+	if (fine_resolved > 0.0) {
+		vec2 flow = vec2(0.019, -0.012) * TIME;
+		fine = (textureGrad(ocean_fields, uv / 7.3 + flow, dx / 7.3, dz / 7.3).rg - vec2(0.5))
+			* (CAPILLARY_GAIN * fine_resolved * state.y);
+	}
+	vec2 gradient = vec2(0.0);
 	float foam = 0.0;
+	vec2 scaled = state * vec2(OUTER_GAIN, INNER_GAIN) * breaker.y;
+	vec2 visible_spectral = vec2(outer_resolved, inner_resolved) * spectral_weight;
 	if (spectral_enabled && spectral_weight > 0.0) {
 		if (outer_resolved > 0.0) {
 			vec4 outer = textureLod(spectral_normals, vec3(uv.yx / 160.0, 0), 0.0);
-			gradient += outer.xy * (OUTER_GAIN * outer_resolved * spectral_weight);
-			foam = outer.w * outer_resolved * 0.68;
+			gradient += outer.xy * scaled.x * visible_spectral.x;
+			foam = outer.w * outer_resolved * state.x * 0.68;
 		}
 		if (inner_resolved > 0.0) {
 			vec4 inner = textureLod(spectral_normals, vec3(uv.yx / 39.0, 1), 0.0);
-			gradient += inner.xy * (INNER_GAIN * inner_resolved * spectral_weight);
-			foam += inner.w * inner_resolved * 0.47;
+			gradient += inner.xy * scaled.y * visible_spectral.y;
+			foam += inner.w * inner_resolved * state.y * 0.49;
 		}
-		foam = smoothstep(0.26, 0.84, foam) * spectral_weight;
+		foam = smoothstep(0.34, 0.92, foam) * spectral_weight * breaker.y;
 	}
 	if (spectral_weight < 1.0 && outer_resolved > 0.0) {
-		gradient += SWELL_AXIS * cos(dot(SWELL_AXIS, uv) * SWELL_K + TIME * 0.79) *
-			(0.65 * SWELL_K * outer_resolved * (1.0 - spectral_weight));
+		gradient += analytical_swell(uv, state).yz * (outer_resolved * (1.0 - spectral_weight) * breaker.y);
 	}
-	if (wake_strength > 0.0 && near_detail > 0.0) {
+	gradient += fine * breaker.y;
+	vec2 dh = vec2(dFdx(breaker.x), dFdy(breaker.x));
+	float jacobian = dx.x * dz.y - dx.y * dz.x;
+	if (abs(jacobian) > 0.00001 && bed.y > 0.0) {
+		vec2 shore_slope = vec2(dh.x * dz.y - dh.y * dx.y, dx.x * dh.y - dz.x * dh.x) / jacobian;
+		gradient += clamp(shore_slope, vec2(-0.62), vec2(0.62)) * interaction * inner_resolved;
+		foam += breaker.z;
+	}
+	if (wake_strength > 0.0 && interaction > 0.0) {
 		vec3 local_wave = aircraft_wake(uv);
-		gradient += vec2(-wake.w, wake.z) * local_wave.y * near_detail * inner_resolved;
-		foam += (local_wave.z * 0.92 + abs(local_wave.x) * 0.41) * near_detail;
+		gradient += vec2(-wake.w, wake.z) * local_wave.y * interaction * inner_resolved;
+		foam += local_wave.z * (0.44 + fine.y * 1.35) * interaction;
 	}
-	if (impact_age < 3.8 && near_detail > 0.0) {
+	if (impact_age < 3.8 && interaction > 0.0) {
 		vec4 ripple = water_impact(uv);
-		gradient += ripple.yz * inner_resolved * near_detail;
-		foam += ripple.w * near_detail;
+		gradient += ripple.yz * inner_resolved * interaction;
+		foam += ripple.w * interaction;
 	}
 	vec3 normal_world = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	NORMAL = (VIEW_MATRIX * vec4(normal_world, 0.0)).xyz;
 	float angle = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	float unresolved = 0.042 * (1.0 - outer_resolved) + 0.035 * (1.0 - inner_resolved);
-	float sigma = sqrt(0.0025 + unresolved);
+
+	// Variance scales with amplitude squared. Only the portion that was not
+	// resolved as a normal feeds the broader statistical reflection.
+	vec2 hidden = vec2(1.0) - visible_spectral * visible_spectral;
+	vec2 missing = slope_variance.xy * (scaled.x * scaled.x * hidden.x)
+		+ slope_variance.zw * (scaled.y * scaled.y * hidden.y);
+	float fine_amplitude = CAPILLARY_GAIN * 0.155 * state.y;
+	missing += vec2(fine_amplitude * fine_amplitude * (1.0 - fine_resolved * fine_resolved));
+	vec2 world_view = (INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xz;
+	vec2 view_weight = world_view * world_view + vec2(0.001);
+	float sigma = sqrt(0.00036 + dot(missing, view_weight) / (view_weight.x + view_weight.y));
 	vec2 response = (vec2(angle, clamp(sigma / 0.32, 0.0, 1.0)) * vec2(95.0, 47.0) + 0.5) / vec2(96.0, 48.0);
 	float reflection = textureLod(water_response, response, 0.0).r;
-	vec3 water = (deep.rgb + air_color.rgb * 0.045) * (1.0 - reflection);
-	if (coast_area.w > 0.5 && distance_m < 6100.0) {
-		vec2 shore_uv = (uv - coast_area.xy) * coast_area.z + vec2(0.5 / 64.0);
-		float edge = min(min(shore_uv.x, shore_uv.y), min(1.0 - shore_uv.x, 1.0 - shore_uv.y));
-		if (edge > 0.0) {
-			float sea_floor = texture(coast_depth, shore_uv).r * 63.75 - 32.0;
-			float shore_weight = smoothstep(0.0, 0.12, edge) * (1.0 - smoothstep(4200.0, 6100.0, distance_m));
-			float shallows = smoothstep(-20.0, -1.0, sea_floor) * (1.0 - smoothstep(1.0, 8.0, sea_floor)) * shore_weight;
-			float immersion = max(0.3, -sea_floor) / max(0.72, angle);
-			vec3 bottom = scatter_color.rgb * exp(-vec3(0.26, 0.091, 0.079) * immersion);
-			water += bottom * ((0.75 - 0.42 * reflection) * shore_weight);
-			float breaker = coast_crest(sea_floor, uv) + fine.x * 0.43;
-			foam += shallows * smoothstep(0.66, 0.94, breaker) * 0.62;
-		}
+	float body_variation = clamp(0.78 + 0.13 * state.x + 0.09 * state.y, 0.86, 1.16);
+	vec3 water = (deep.rgb * body_variation + air_color.rgb * 0.032) * (1.0 - reflection);
+	if (bed.y > 0.0) {
+		float immersion = max(0.3, -bed.x) / max(0.40, angle);
+		vec3 bottom = scatter_color.rgb * exp(-vec3(0.26, 0.091, 0.079) * immersion);
+		water += bottom * ((0.75 - 0.42 * reflection) * bed.y);
 	}
-	ALBEDO = mix(water, vec3(0.49, 0.61, 0.62), clamp(foam, 0.0, 0.82));
-	ROUGHNESS = mix(sqrt(0.068 + unresolved), 0.59, clamp(foam, 0.0, 1.0));
+	foam = clamp(foam, 0.0, 0.92);
+	ALBEDO = mix(water, vec3(0.48, 0.60, 0.63), foam);
+	ROUGHNESS = mix(clamp(0.123 + 1.55 * sigma, 0.14, 0.63), 0.64, foam);
 	METALLIC = 0.0;
-	float broad_lobe = 1.0 - outer_resolved;
-	// Resolved highlights still come from the sky probe and sun. The table recovers the broad unresolved lobe.
-	EMISSION = air_color.rgb * reflection * broad_lobe * distant_reflection * (1.0 - 0.75 * clamp(foam, 0.0, 1.0));
-	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.42);
+	float broad_lobe = smoothstep(0.045, 0.21, sigma);
+	EMISSION = air_color.rgb * reflection * (0.14 + 0.47 * broad_lobe) * distant_reflection * (1.0 - 0.75 * foam);
+	SPECULAR = 0.353 * (1.0 - foam * 0.55) * (1.0 - broad_lobe * 0.18);
 	FOG = aerial_transport(INV_VIEW_MATRIX[3].xyz, vec3(uv.x - world_offset.x, water_point.y, uv.y - world_offset.y));
 }

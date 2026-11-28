@@ -694,8 +694,8 @@ func follow(p: Vector3, velocity: Vector3, dt := 1.0 / 90.0) -> Vector3:
 	return delta
 
 func _update_shallows(at: Vector3) -> void:
-	const PROBE_SIZE := 64
-	const PROBE_STEP := 48.0
+	const PROBE_SIZE := 96
+	const PROBE_STEP := 32.0
 	const COVERAGE := PROBE_SIZE * PROBE_STEP
 	if coast_job and not coast_job.is_alive():
 		var image: Image = coast_job.wait_to_finish()

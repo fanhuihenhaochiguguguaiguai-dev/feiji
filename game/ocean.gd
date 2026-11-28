@@ -2,8 +2,12 @@ extends MeshInstance3D
 
 const SURFACE = preload("res://shaders/sea.gdshader")
 const CLIPMAP = preload("res://addons/ocean_waves/clipmap_low.obj")
-const NOISE = preload("res://assets/surface/water.png")
+const OCEAN_FIELDS = preload("res://assets/environment/ocean-fields.png")
 const WATER_RESPONSE = preload("res://assets/environment/water-response.png")
+# Mean squared X/Z slopes measured from the two unscaled 128² cascades.
+# The shader follows the configured amplitude and hands unresolved variance to the reflection.
+const CALM_SLOPE_VARIANCE := Vector4(0.0505, 0.0354, 0.0571, 0.0527)
+const WINDY_SLOPE_VARIANCE := Vector4(0.0593, 0.0429, 0.0640, 0.0582)
 
 var material := ShaderMaterial.new()
 var fft: WaveGenerator
@@ -31,7 +35,8 @@ func setup(theatre: Dictionary, camera: Camera3D, use_spectrum := true) -> void:
 	var hue: Array = theatre.sea
 	mesh = CLIPMAP
 	material.shader = SURFACE
-	material.set_shader_parameter("shore_noise", NOISE)
+	material.set_shader_parameter("ocean_fields", OCEAN_FIELDS)
+	material.set_shader_parameter("slope_variance", WINDY_SLOPE_VARIANCE if windy else CALM_SLOPE_VARIANCE)
 	material.set_shader_parameter("water_response", WATER_RESPONSE)
 	material.set_shader_parameter("deep", Color(hue[0] * 0.76, hue[1] * 0.79, hue[2] * 0.79))
 	material_override = material
@@ -88,7 +93,7 @@ func set_shallows(tile: Image, corner: Vector2, size_m: float) -> void:
 	else:
 		shallows = ImageTexture.create_from_image(tile)
 		material.set_shader_parameter("coast_depth", shallows)
-	material.set_shader_parameter("coast_area", Vector4(corner.x, corner.y, 1.0 / size_m, 1.0))
+	material.set_shader_parameter("coast_area", Vector4(corner.x, corner.y, 1.0 / size_m, 1.0 / tile.get_width()))
 
 func track(chase: Vector3, offset: Vector2, velocity: Vector3, wake_active: bool) -> void:
 	var snapped := (Vector2(chase.x, chase.z) / 8.0).floor() * 8.0
