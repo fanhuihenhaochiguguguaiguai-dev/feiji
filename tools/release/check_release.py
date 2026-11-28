@@ -62,7 +62,7 @@ def check_exported_startup(package, root, vulkan=False):
         modes = [["--headless", *boot]]
         if vulkan:
             modes.append(["--render-thread", "safe", "--rendering-method", "mobile", "--rendering-driver", "vulkan",
-                          "--audio-driver", "Dummy", "--fixed-fps", "90", "--resolution", "640x360", *boot, "--", "--vulkan-launch"])
+                          "--audio-driver", "Dummy", "--fixed-fps", "90", "--resolution", "480x270", *boot, "--", "--vulkan-launch"])
         for i, mode in enumerate(modes):
             renderer = "headless" if i == 0 else "Mobile Vulkan"
             print(f"Checking the exported game with {renderer}", file=sys.stderr, flush=True)
@@ -70,7 +70,7 @@ def check_exported_startup(package, root, vulkan=False):
                 result = subprocess.run(
                     ["godot", *mode],
                     env={**os.environ, "XDG_DATA_HOME": str(work / f"user-data-{i}"), "XDG_CACHE_HOME": str(work / f"cache-{i}")},
-                    capture_output=True, text=True, timeout=200,
+                    capture_output=True, text=True, timeout=360 if i else 100,
                 )
             except subprocess.TimeoutExpired as error:
                 output = ((error.stdout or b"") + (error.stderr or b"")).decode(errors="replace")

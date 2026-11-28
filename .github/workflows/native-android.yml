@@ -154,8 +154,13 @@ jobs:
           export VK_ICD_FILENAMES="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
           export LP_NUM_THREADS=4
           test -n "$VK_ICD_FILENAMES"
-          xvfb-run -a -e /dev/stderr -s '-screen 0 960x480x24 -nolisten tcp -extension MIT-SHM' \
-            python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" --vulkan-startup-test > dist/build-comparison.json
+          check_log="$RUNNER_TEMP/export-check.log"
+          if ! xvfb-run -a -s '-screen 0 960x480x24 -nolisten tcp -extension MIT-SHM' \
+            python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" --vulkan-startup-test > dist/build-comparison.json 2>"$check_log"; then
+            cat "$check_log"
+            exit 1
+          fi
+          cat "$check_log" dist/build-comparison.json
       - uses: actions/upload-artifact@v4
         if: env.CUSTOM_RELEASE == 'true'
         with:

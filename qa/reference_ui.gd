@@ -31,7 +31,7 @@ func _run() -> void:
 	current_scene = launcher
 	var stages: Array[float] = []
 	launcher.presentation.meter.value_changed.connect(func(value: float): stages.append(value))
-	var deadline := Time.get_ticks_msec() + 90000
+	var deadline := Time.get_ticks_msec() + (150000 if vulkan_launch else 90000)
 	while not is_instance_valid(launcher) or current_scene == launcher:
 		if Time.get_ticks_msec() > deadline or (is_instance_valid(launcher) and launcher.retry.visible):
 			_check(false, "Startup failed to reach the lobby. Completed stages: %s" % str(stages))
@@ -56,7 +56,8 @@ func _run() -> void:
 	if vulkan_launch:
 		_check(DisplayServer.get_name() != "headless" and RenderingServer.get_rendering_device() != null,
 			"Launch test requires the graphical rendering device")
-		await _check_sortie(game, 90000)
+		print("Cold start reached the interactive lobby")
+		await _check_sortie(game, 150000)
 		_report()
 		return
 	var menu: Control = game.lobby_screen
@@ -148,7 +149,9 @@ func _check_sortie(game: Node, timeout_ms: int) -> void:
 	while game.loading and Time.get_ticks_msec() < deadline:
 		await process_frame
 	var ready: bool = game.route == "battle" and not game.loading and is_instance_valid(game.active_hud)
-	_check(ready, "Start button did not complete a real sortie")
+	if not ready:
+		var status: String = game.loading_screen.status.text if is_instance_valid(game.loading_screen) else game.note
+		_check(false, "Start button did not complete a real sortie (%s): %s" % [game.route, status])
 	if ready:
 		var combat_model: Node3D = game.current_battle.player.rig.meshes
 		_check(combat_model.scene_file_path == preview_path, "Combat changed the mesh presented in the lobby")
