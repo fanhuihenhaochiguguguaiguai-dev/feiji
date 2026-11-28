@@ -1,7 +1,7 @@
 """Derive the J-20 game rig from the shared studio GLB and its existing game rig.
 
-The previous J-20 supplies its cockpit, gear tracks, deployment nodes and
-collision contract. The studio source supplies the exterior and moving panels.
+The previous J-20 supplies the gear tracks, deployment nodes and collision
+contract. The studio source supplies the visible shell and cockpit.
 """
 import argparse
 from collections import defaultdict
@@ -15,7 +15,7 @@ from bake_j20_breakup import bake, write_model
 
 GEAR = ("Main landing gear", "Main gear", "Main tyre", "Trailing gear", "Nose gear", "Nose wheel", "Wheel hub")
 DETAIL = ("Flush ", "Low-observable ", "Canted tail leading", "Recessed intake", "Shared physical",
-          "Landing bay perimeter", "Nozzle petals")
+          "Landing bay perimeter", "Nozzle petals", "Canopy curved filament", "Cockpit detail")
 
 
 def transfer_materials(target, source):
@@ -49,13 +49,13 @@ def transfer_materials(target, source):
 
 
 def append_mesh(target, source, nodes, materials, scale, name, local=False):
-    groups = defaultdict(lambda: ([], [], [], []))
+    groups = defaultdict(lambda: ([], [], [], [], []))
     for node in nodes:
         if "rotation" in node or "matrix" in node or "scale" in node:
             raise ValueError(f"{node['name']} should be baked in airframe coordinates")
         origin = (0, 0, 0) if local else node.get("translation", (0, 0, 0))
         for component in source.meshes[node["mesh"]]["primitives"]:
-            pos, normal, uv, indices = groups[materials[component["material"]]]
+            pos, normal, uv, colors, indices = groups[materials[component["material"]]]
             attr = component["attributes"]
             offset = len(pos)
             points = source.read(attr["POSITION"])
@@ -65,12 +65,19 @@ def append_mesh(target, source, nodes, materials, scale, name, local=False):
                 length = max(1e-8, sqrt(sum(v*v for v in vector)))
                 normal.append(tuple(v / length for v in vector))
             uv.extend(source.read(attr["TEXCOORD_0"]) if "TEXCOORD_0" in attr else [(0, 0)] * len(points))
+            if "COLOR_0" in attr or colors:
+                if not colors:
+                    colors.extend([(1, 1, 1, 1)] * offset)
+                colors.extend(source.read(attr["COLOR_0"]) if "COLOR_0" in attr else [(1, 1, 1, 1)] * len(points))
             indices.extend((i+offset,) for i, in source.read(component["indices"]))
     primitives = []
-    for material, (pos, normal, uv, indices) in groups.items():
-        primitives.append({"material": material, "attributes": {
-            "POSITION": target.append(pos, "VEC3"), "NORMAL": target.append(normal, "VEC3"),
-            "TEXCOORD_0": target.append(uv, "VEC2")}, "indices": target.append(indices, "SCALAR")})
+    for material, (pos, normal, uv, colors, indices) in groups.items():
+        attributes = {"POSITION": target.append(pos, "VEC3"), "NORMAL": target.append(normal, "VEC3"),
+                      "TEXCOORD_0": target.append(uv, "VEC2")}
+        if colors:
+            attributes["COLOR_0"] = target.append(colors, "VEC4")
+        primitives.append({"material": material, "attributes": attributes,
+                           "indices": target.append(indices, "SCALAR")})
     index = len(target.meshes)
     target.meshes.append({"name": name, "primitives": primitives})
     return index
@@ -117,6 +124,14 @@ def derive(sample, inherited, output):
         name = level["name"]
         if name == "Breakup":
             dst.scene.remove(i)
+        if name == "Cockpit" and skin_version >= 6:
+            fittings = [n for n in hull if n["name"].startswith(("Cockpit ", "Canopy "))]
+            level["children"] = [len(dst.nodes)]
+            # Keep the camera anchor but express the same cabin in its eye space.
+            design_eye = (0.0, .649, -4.08)
+            dst.nodes.append({"name": "Reference pilot cabin",
+                              "mesh": append_mesh(dst, src, fittings, materials, scale, "Reference pilot cabin"),
+                              "translation": [-coordinate * factor for coordinate, factor in zip(design_eye, scale)]})
         if name not in ("Exterior", "Combat", "LOD"):
             continue
         keep = [j for j in level["children"] if dst.nodes[j]["name"].startswith(("Gear_", "Bay_"))]
