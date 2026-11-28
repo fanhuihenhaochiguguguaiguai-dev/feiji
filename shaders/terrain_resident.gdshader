@@ -12,7 +12,7 @@ void vertex() {
 }
 
 void fragment() {
-	if (covered_by_detail(ground_at)) { discard; }
+	if (covered_by_detail(ground_at, 0.0)) { discard; }
 	vec3 point = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	// Preserve the surveyed baked color and shadow while transferring
 	// the scan's shorter-scale variation into the resident surface.

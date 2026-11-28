@@ -14,6 +14,7 @@ const UPLOAD_BUDGET := 2
 const RADIUS := 2
 const RESIDENT_MIN := Vector2i(-20, -24)
 const RESIDENT_SIDE := 48
+const RESIDENT_EDGES := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
 const RESIDENT_SHADER = preload("res://shaders/terrain_resident.gdshader")
 const COAST_SHADER = preload("res://shaders/terrain_coastal.gdshader")
 const COAST_ROCK := Color("#b5aea3")
@@ -614,7 +615,14 @@ func _sync_resident_ground() -> void:
 	for tile: Vector2i in current:
 		var index := tile - RESIDENT_MIN
 		if index.x >= 0 and index.y >= 0 and index.x < RESIDENT_SIDE and index.y < RESIDENT_SIDE:
-			residency.set_pixelv(index, Color.RED)
+			var mask := 128
+			# The high bit means loaded. Low bits describe the exposed edges
+			# where the coastal mesh supplies an overlap below the detail.
+			if seed_value == 413:
+				for side in RESIDENT_EDGES.size():
+					if not current.has(tile + RESIDENT_EDGES[side]):
+						mask |= 1 << side
+			residency.set_pixelv(index, Color(float(mask) / 255.0, 0, 0))
 	detailed_regions.update(residency)
 
 func _activate(coord: Vector2i, data: Dictionary) -> void:

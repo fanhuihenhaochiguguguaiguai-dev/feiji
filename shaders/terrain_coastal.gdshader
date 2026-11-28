@@ -22,7 +22,7 @@ vec2 lattice_uv(vec2 at, float width) {
 }
 
 void fragment() {
-	if (covered_by_detail(ground_at)) { discard; }
+	if (covered_by_detail(ground_at, 144.0)) { discard; }
 	vec3 point = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec3 geometric = normalize(mat3(INV_VIEW_MATRIX) * NORMAL);
 	vec2 survey = (ground_at - survey_origin) / survey_span;
