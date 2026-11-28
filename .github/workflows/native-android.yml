@@ -147,7 +147,15 @@ jobs:
           sed -i "/^\[preset.0.options\]$/a custom_template/release=\"$template\"" export_presets.cfg
           godot --headless --export-release 'Android ARM64' dist/skyblade-v18.3-arm64.apk
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/skyblade-v18.3-arm64.apk > dist/signature.txt
-          python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" --startup-test > dist/build-comparison.json
+          if ! command -v Xvfb || ! command -v xauth || ! compgen -G '/usr/share/vulkan/icd.d/lvp_icd*.json' > /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends xvfb xauth mesa-vulkan-drivers
+          fi
+          export VK_ICD_FILENAMES="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+          export LP_NUM_THREADS=4
+          test -n "$VK_ICD_FILENAMES"
+          xvfb-run -a -s '-screen 0 960x480x24 -nolisten tcp -extension MIT-SHM' \
+            python3 tools/release/check_release.py "$stock" dist/skyblade-v18.3-arm64.apk "$template" --vulkan-startup-test > dist/build-comparison.json
       - uses: actions/upload-artifact@v4
         if: env.CUSTOM_RELEASE == 'true'
         with:

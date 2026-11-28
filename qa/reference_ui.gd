@@ -15,7 +15,8 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if not args.is_empty() and DisplayServer.get_name() != "headless":
+	var vulkan_launch := "--vulkan-launch" in args
+	if not vulkan_launch and not args.is_empty() and DisplayServer.get_name() != "headless":
 		screenshots = args[0]
 		DirAccess.make_dir_recursive_absolute(screenshots)
 		var boot := Loading.new()
@@ -52,6 +53,12 @@ func _run() -> void:
 	_check(game.preview_camera.get_viewport() == root, "Carrier is not using the whole gameplay viewport")
 	var specimen: Node3D = game.showcase_aircraft.get_child(0)
 	_check(specimen.scene_file_path == game.catalogue.mesh_path(game.preview_id), "Preview must instantiate the gameplay aircraft")
+	if vulkan_launch:
+		_check(DisplayServer.get_name() != "headless" and RenderingServer.get_rendering_device() != null,
+			"Launch test requires the graphical rendering device")
+		await _check_sortie(game, 90000)
+		_report()
+		return
 	var menu: Control = game.lobby_screen
 	await _capture("03_lobby")
 	if "--orbit" in args and not screenshots.is_empty():
@@ -128,21 +135,28 @@ func _run() -> void:
 		_report()
 		return
 	game._open("lobby")
+	await _check_sortie(game, 30000)
+	_report()
+
+func _check_sortie(game: Node, timeout_ms: int) -> void:
 	var preview_path: String = game.showcase_aircraft.get_child(0).scene_file_path
 	game.lobby_screen.actions.start.pressed.emit()
 	var in_flight: Control = game.loading_screen
 	root.size_changed.emit()
 	_check(in_flight == game.loading_screen and in_flight.is_inside_tree(), "Resizing replaced the battle loading screen")
-	deadline = Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + timeout_ms
 	while game.loading and Time.get_ticks_msec() < deadline:
 		await process_frame
-	_check(game.route == "battle" and not game.loading and is_instance_valid(game.active_hud), "Start button did not complete a real sortie")
-	if game.route == "battle":
+	var ready: bool = game.route == "battle" and not game.loading and is_instance_valid(game.active_hud)
+	_check(ready, "Start button did not complete a real sortie")
+	if ready:
 		var combat_model: Node3D = game.current_battle.player.rig.meshes
 		_check(combat_model.scene_file_path == preview_path, "Combat changed the mesh presented in the lobby")
+		_check(game.current_battle.ready_for_play and not game.current_battle.paused, "Flight did not become playable")
+		for i in 4:
+			await process_frame
 		game._abort_battle()
 	_check(is_instance_valid(game.lobby_screen), "Returning from a sortie did not restore the carrier")
-	_report()
 
 func _ordered(values: Array[float]) -> Array[float]:
 	var copy := values.duplicate()

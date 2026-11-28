@@ -524,11 +524,7 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	await get_tree().process_frame
 	var prepared: Dictionary = await _prepare_sortie(mode, operation, runway)
 	if prepared.is_empty():
-		loading = false
-		loading_screen = null
-		_open("lobby")
-		note = "战机或战区加载失败，请重试"
-		_render_menu()
+		_sortie_load_failed("战机或战区加载失败，请重试")
 		return
 	loading_screen.set_status("正在装配战场")
 	await get_tree().process_frame
@@ -541,6 +537,10 @@ func _enter(mode: String, operation: Dictionary, runway: bool) -> void:
 	add_child(current_battle)
 	current_battle.finished.connect(_battle_finished, CONNECT_DEFERRED)
 	current_battle.setup(catalogue, profile, mode, operation, runway, prepared)
+	if not current_battle.ready_for_play:
+		_close_battle()
+		_sortie_load_failed("战场装配失败，请重试")
+		return
 	current_battle.paused = true
 	if DisplayServer.get_name() != "headless":
 		var camera := current_battle.camera
@@ -569,6 +569,13 @@ func _show_loading(title: String) -> void:
 	loading_screen = LoadingScreen.new()
 	view.add_child(loading_screen)
 	loading_screen.configure(preload("res://assets/loading/alpine.webp"), font, title)
+
+func _sortie_load_failed(message: String) -> void:
+	loading = false
+	loading_screen = null
+	_open("lobby")
+	note = message
+	_render_menu()
 
 func _prepare_sortie(mode: String, operation: Dictionary, runway: bool) -> Dictionary:
 	var start := Battle.start_position(mode, operation, runway)
