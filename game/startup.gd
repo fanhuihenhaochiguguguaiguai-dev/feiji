@@ -38,40 +38,49 @@ func _load_game() -> void:
 	# The geometry-only carrier has no nested image dependency on the GPU
 	# thread. Its separate material and aircraft resources are resolved later.
 	if ResourceLoader.load_threaded_request(STUDIO, "PackedScene") != OK:
-		_show_failure()
+		_show_failure("航母场景", STUDIO)
 		return
 	var progress: Array = []
 	var state := ResourceLoader.load_threaded_get_status(STUDIO, progress)
 	while state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-		presentation.meter.value = maxf(presentation.meter.value, float(progress[0]))
+		if not progress.is_empty():
+			presentation.meter.value = maxf(presentation.meter.value, float(progress[0]))
 		await get_tree().process_frame
 		state = ResourceLoader.load_threaded_get_status(STUDIO, progress)
-	if state != ResourceLoader.THREAD_LOAD_LOADED:
-		_show_failure()
+	var geometry: PackedScene
+	if state == ResourceLoader.THREAD_LOAD_LOADED:
+		geometry = ResourceLoader.load_threaded_get(STUDIO) as PackedScene
+	if not geometry or not geometry.can_instantiate():
+		_show_failure("航母场景", STUDIO)
 		return
-	var geometry := ResourceLoader.load_threaded_get(STUDIO) as PackedScene
 	presentation.meter.value = 1.0
 	await get_tree().process_frame
 	# Resolve the scripted scene and the selected aircraft on the main thread.
 	var game_scene := load(MAIN) as PackedScene
-	if not game_scene:
-		_show_failure()
+	if not game_scene or not game_scene.can_instantiate():
+		_show_failure("游戏场景", MAIN)
 		return
 	presentation.meter.value = 2.0
 	await get_tree().process_frame
 	var game := game_scene.instantiate()
-	if not game.has_method("_open"):
-		game.free()
-		_show_failure()
+	if not game or not game.has_method("_open"):
+		if game:
+			game.free()
+		_show_failure("游戏场景", MAIN)
 		return
 	game.catalogue = catalogue
 	game.profile = profile
 	get_tree().root.add_child(game)
+	if not is_instance_valid(game.get("lobby_screen")):
+		game.queue_free()
+		_show_failure("大厅", MAIN)
+		return
 	geometry = null
 	presentation.meter.value = 3.0
 	get_tree().current_scene = game
 	queue_free()
 
-func _show_failure() -> void:
-	presentation.set_status("加载失败，请重试")
+func _show_failure(stage: String, path: String) -> void:
+	push_error("Startup could not open %s: %s" % [stage, path])
+	presentation.set_status("%s加载失败，请重试" % stage)
 	retry.show()
